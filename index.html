@@ -7,6 +7,15 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <script>
+  (function () {
+    const PW = "VerySecret";
+    const entered = prompt("Passwort:");
+    if (entered !== PW) {
+      document.documentElement.innerHTML = "";
+    }
+  })();
+</script>
     <div class="container">
         <header>
             <h1>📧 HTML Template QA Tool</h1>
