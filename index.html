@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Template QA Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📧 HTML Template QA Tool</h1>
+            <p>Automatische Prüfung und Optimierung von E-Mail-Templates</p>
+        </header>
+
+        <main>
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <h2>1. Template hochladen</h2>
+                <div class="upload-box">
+                    <input type="file" id="fileInput" accept=".html,.htm" />
+                    <label for="fileInput" class="upload-label">
+                        <span class="upload-icon">📁</span>
+                        <span>HTML-Datei auswählen</span>
+                    </label>
+                    <div id="fileName" class="file-name"></div>
+                </div>
+            </section>
+
+            <!-- Configuration Section -->
+            <section class="config-section">
+                <h2>2. Konfiguration</h2>
+                
+                <div class="form-group">
+                    <label for="checklistType">Checklist-Typ:</label>
+                    <select id="checklistType">
+                        <option value="auto">Auto erkennen</option>
+                        <option value="standard">Standard</option>
+                        <option value="dpl">DPL</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="preheaderText">Preheader-Text (optional):</label>
+                    <input type="text" id="preheaderText" placeholder="z.B. Ihre monatliche Übersicht ist da!" />
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="removeFonts" checked />
+                    <label for="removeFonts">Externe Fonts entfernen (Google Fonts, @import, @font-face)</label>
+                </div>
+
+                <button id="processBtn" class="btn-primary" disabled>
+                    <span class="btn-icon">⚙️</span>
+                    Template verarbeiten
+                </button>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="results-section" style="display: none;">
+                <h2>3. Ergebnisse</h2>
+                
+                <div id="statusBadge" class="status-badge"></div>
+                
+                <div class="download-grid">
+                    <button id="downloadOptimized" class="btn-download">
+                        <span class="btn-icon">📄</span>
+                        optimized.html
+                    </button>
+                    <button id="downloadReport" class="btn-download">
+                        <span class="btn-icon">📋</span>
+                        report.txt
+                    </button>
+                    <button id="downloadUnresolved" class="btn-download">
+                        <span class="btn-icon">⚠️</span>
+                        unresolved.txt
+                    </button>
+                </div>
+
+                <div id="reportPreview" class="report-preview"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>© 2026 HTML Template QA Tool | Clientseitige Verarbeitung - Keine Daten werden hochgeladen</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
