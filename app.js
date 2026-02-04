@@ -275,22 +275,44 @@ class TemplateProcessor {
         if (hasConditionalComments) {
             this.addCheck(id, 'PASS', 'Outlook Conditional Comments vorhanden');
         } else {
-            // Füge MSO-Wrapper ein (nach body, umschließt Content)
-            const bodyMatch = this.html.match(/<body[^>]*>/i);
-            if (bodyMatch) {
-                const bodyEndPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
-                const bodyClosePos = this.html.lastIndexOf('</body>');
-
-                if (bodyClosePos > bodyEndPos) {
-                    const content = this.html.slice(bodyEndPos, bodyClosePos);
-                    const wrappedContent = `\n<!--[if mso | IE]><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#6B140F;"><tr><td><![endif]-->\n${content}\n<!--[if mso | IE]></td></tr></table><![endif]-->\n`;
-                    this.html = this.html.slice(0, bodyEndPos) + wrappedContent + this.html.slice(bodyClosePos);
-                    this.addCheck(id, 'FIXED', 'Outlook Conditional Comments eingefügt');
+            // Füge MSO-Wrapper um den roten Hintergrund-Div ein
+            // MSO-Wrapper muss Header, Content UND Footer umschließen
+            
+            // Finde den roten Hintergrund-Div
+            const redDivMatch = this.html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
+            
+            if (redDivMatch) {
+                const redDivStart = this.html.indexOf(redDivMatch[0]);
+                
+                // Finde das schließende </div> des roten Divs
+                const afterRedDiv = this.html.slice(redDivStart);
+                let depth = 0;
+                let redDivEnd = -1;
+                
+                for (let i = 0; i < afterRedDiv.length; i++) {
+                    if (afterRedDiv.substr(i, 4) === '<div') {
+                        depth++;
+                    } else if (afterRedDiv.substr(i, 6) === '</div>') {
+                        depth--;
+                        if (depth === 0) {
+                            redDivEnd = redDivStart + i + 6;
+                            break;
+                        }
+                    }
+                }
+                
+                if (redDivEnd > 0) {
+                    // Füge MSO-Wrapper VOR dem roten Div und NACH dem roten Div ein
+                    const msoOpen = '\n<!--[if mso]>\n<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center" bgcolor="#6B140F" style="background-color: #6B140F;">\n<tr>\n<td style="padding: 0;">\n<![endif]-->\n';
+                    const msoClose = '\n<!--[if mso]>\n</td>\n</tr>\n</table>\n<![endif]-->\n';
+                    
+                    this.html = this.html.slice(0, redDivStart) + msoOpen + this.html.slice(redDivStart, redDivEnd) + msoClose + this.html.slice(redDivEnd);
+                    this.addCheck(id, 'FIXED', 'Outlook Conditional Comments um roten Div eingefügt');
                 } else {
-                    this.addCheck(id, 'FAIL', 'Body-Struktur nicht gefunden');
+                    this.addCheck(id, 'FAIL', 'Schließendes </div> des roten Divs nicht gefunden');
                 }
             } else {
-                this.addCheck(id, 'FAIL', 'Body-Tag nicht gefunden');
+                this.addCheck(id, 'FAIL', 'Roter Hintergrund-Div (#6B140F) nicht gefunden');
             }
         }
     }
