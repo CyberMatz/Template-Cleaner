@@ -251,6 +251,18 @@ class TemplateProcessor {
             insertPos += preheaderMatch[0].length;
         }
 
+        // DPL: Header INNERHALB des roten Hintergrund-Divs einfügen
+        if (this.checklistType === 'dpl') {
+            // Suche nach dem roten Hintergrund-Div (#6B140F)
+            const afterPreheader = this.html.slice(insertPos);
+            const redBgDivMatch = afterPreheader.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
+            
+            if (redBgDivMatch) {
+                // Header nach dem öffnenden roten Div einfügen
+                insertPos += afterPreheader.indexOf(redBgDivMatch[0]) + redBgDivMatch[0].length;
+            }
+        }
+
         const headerWrapper = '\n<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center"><tr><td><center>%header%</center></td></tr></table>\n';
         this.html = this.html.slice(0, insertPos) + headerWrapper + this.html.slice(insertPos);
     }
@@ -303,14 +315,58 @@ class TemplateProcessor {
             this.addCheck(id, 'FIXED', `Footer-Platzhalter reduziert (${footerCount} → 1)`);
         } else {
             // Kein Footer - einfügen
-            const bodyCloseMatch = this.html.match(/<\/body>/i);
-            if (bodyCloseMatch) {
-                const insertPos = this.html.lastIndexOf(bodyCloseMatch[0]);
+            let insertPos;
+            
+            // DPL: Footer INNERHALB des roten Hintergrund-Divs einfügen
+            if (this.checklistType === 'dpl') {
+                // Suche nach dem schließenden Div des roten Hintergrunds
+                // Der rote Div enthält den weißen Content-Div, Footer kommt nach Content aber vor </div> des roten Divs
+                
+                // Strategie: Finde den weißen Content-Div und dessen schließendes </div>
+                // Footer kommt nach diesem </div> aber vor dem nächsten </div> (roter Div)
+                const whiteDivMatch = this.html.match(/<div[^>]*background-color:\s*#fafdfe[^>]*>/i);
+                
+                if (whiteDivMatch) {
+                    const whiteDivStart = this.html.indexOf(whiteDivMatch[0]);
+                    const afterWhiteDiv = this.html.slice(whiteDivStart);
+                    
+                    // Finde das schließende </div> des weißen Divs
+                    // Einfache Heuristik: Zähle öffnende und schließende Divs
+                    let depth = 0;
+                    let whiteDivEnd = -1;
+                    
+                    for (let i = 0; i < afterWhiteDiv.length; i++) {
+                        if (afterWhiteDiv.substr(i, 4) === '<div') {
+                            depth++;
+                        } else if (afterWhiteDiv.substr(i, 6) === '</div>') {
+                            depth--;
+                            if (depth === 0) {
+                                whiteDivEnd = whiteDivStart + i + 6;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (whiteDivEnd > 0) {
+                        insertPos = whiteDivEnd;
+                    }
+                }
+            }
+            
+            // Fallback: Vor </body> einfügen
+            if (!insertPos) {
+                const bodyCloseMatch = this.html.match(/<\/body>/i);
+                if (bodyCloseMatch) {
+                    insertPos = this.html.lastIndexOf(bodyCloseMatch[0]);
+                }
+            }
+            
+            if (insertPos) {
                 const footerWrapper = '\n<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center"><tr><td><center>%footer%</center></td></tr></table>\n';
                 this.html = this.html.slice(0, insertPos) + footerWrapper + this.html.slice(insertPos);
                 this.addCheck(id, 'FIXED', 'Footer-Platzhalter eingefügt');
             } else {
-                this.addCheck(id, 'FAIL', 'Body-Close-Tag nicht gefunden');
+                this.addCheck(id, 'FAIL', 'Einfügeposition für Footer nicht gefunden');
             }
         }
     }
