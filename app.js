@@ -56,8 +56,39 @@ class TemplateProcessor {
         // P09: Öffnerpixel (Read-only)
         this.checkOpeningPixel();
 
+        // P06: Anrede-Ersetzung
+        this.checkAnredeReplacement();
+
+        // P06: Footer Mobile Visibility (nur Standard)
+        if (this.checklistType === 'standard') {
+            this.checkFooterMobileVisibility();
+        }
+
+        // P10: Tracking URLs (Read-only)
+        this.checkTrackingUrls();
+
+        // P11: Mobile Responsiveness
+        this.checkMobileResponsiveness();
+
+        // P11: Viewport Meta-Tag
+        this.checkViewportMetaTag();
+
         // P12: Externe Fonts (wenn Checkbox aktiv)
         this.checkExternalFonts();
+
+        // P11: Background Color (nur DPL)
+        if (this.checklistType === 'dpl') {
+            this.checkBackgroundColor();
+        }
+
+        // P13: Link-Text Validierung
+        this.checkLinkText();
+
+        // P14: CTA Button Fallback
+        this.checkCTAButtonFallback();
+
+        // P15: Inline Styles Check
+        this.checkInlineStyles();
     }
 
     // P01: DOCTYPE Check
@@ -316,30 +347,36 @@ class TemplateProcessor {
         }
     }
 
-    // P08/P09: Image Alt-Attribute
+    // P08/P09: Image Alt-Attribute (Erweitert)
     checkImageAltAttributes() {
         const id = this.checklistType === 'dpl' ? 'P09_IMAGE_ALT' : 'P08_IMAGE_ALT';
         const imgRegex = /<img[^>]*>/gi;
         const images = this.html.match(imgRegex) || [];
         let fixed = 0;
+        let emptyAlt = 0;
 
         images.forEach(img => {
             if (!img.includes('alt=')) {
-                // Alt-Attribut fehlt - hinzufügen
-                const newImg = img.replace(/<img/, '<img alt=""');
+                // Alt-Attribut fehlt - hinzufügen mit generischem Text
+                const newImg = img.replace(/<img/, '<img alt="Image"');
                 this.html = this.html.replace(img, newImg);
                 fixed++;
+            } else if (/alt=""/.test(img) || /alt=''/.test(img)) {
+                // Leeres Alt-Attribut (funktioniert, aber nicht optimal)
+                emptyAlt++;
             }
         });
 
         if (fixed > 0) {
-            this.addCheck(id, 'FIXED', `Alt-Attribute ergänzt (${fixed} Bilder)`);
+            this.addCheck(id, 'FIXED', `Alt-Attribute ergänzt (${fixed} Bilder mit alt="Image")`);
+        } else if (emptyAlt > 0) {
+            this.addCheck(id, 'WARN', `${emptyAlt} Bilder mit leerem Alt-Attribut (funktioniert, aber nicht optimal)`);
         } else {
             this.addCheck(id, 'PASS', 'Alt-Attribute korrekt');
         }
     }
 
-    // P09: Öffnerpixel (Read-only)
+    // P09: Öffnerpixel (Read-only, erweitert)
     checkOpeningPixel() {
         const id = 'P09_OPENING_PIXEL';
         
@@ -347,23 +384,222 @@ class TemplateProcessor {
         const pixelPatterns = [
             /<img[^>]*src="[^"]*track[^"]*"[^>]*>/i,
             /<img[^>]*src="[^"]*pixel[^"]*"[^>]*>/i,
+            /<img[^>]*src="[^"]*view-tag[^"]*"[^>]*>/i,
             /<img[^>]*width="1"[^>]*height="1"[^>]*>/i,
-            /<img[^>]*height="1"[^>]*width="1"[^>]*>/i
+            /<img[^>]*height="1"[^>]*width="1"[^>]*>/i,
+            /<img[^>]*src="data:image\/gif;base64[^"]*"[^>]*width="1"[^>]*>/i
         ];
 
         let pixelFound = false;
+        let pixelElement = null;
+        
         for (const pattern of pixelPatterns) {
-            if (pattern.test(this.html)) {
+            const match = this.html.match(pattern);
+            if (match) {
                 pixelFound = true;
+                pixelElement = match[0];
                 break;
             }
         }
 
         if (pixelFound) {
-            this.addCheck(id, 'PASS', 'Öffnerpixel vorhanden');
+            // Prüfe ob Pixel versteckt ist (display:none oder width/height=1)
+            const isHidden = /display:\s*none/i.test(pixelElement) || 
+                           (/width="1"/.test(pixelElement) && /height="1"/.test(pixelElement));
+            
+            if (isHidden) {
+                this.addCheck(id, 'PASS', 'Öffnerpixel vorhanden und korrekt versteckt');
+            } else {
+                this.addCheck(id, 'WARN', 'Öffnerpixel vorhanden, aber möglicherweise sichtbar (sollte hidden sein)');
+            }
         } else {
             // Read-only - kein FAIL, nur WARN
-            this.addCheck(id, 'WARN', 'Öffnerpixel nicht gefunden (keine automatische Einfügung)');
+            this.addCheck(id, 'WARN', 'Öffnerpixel nicht gefunden (optional, keine automatische Einfügung)');
+        }
+    }
+
+    // P06: Anrede-Ersetzung
+    checkAnredeReplacement() {
+        const id = 'P06_ANREDE';
+        
+        // Suche nach Anrede-Platzhaltern
+        const anredePatterns = [
+            /§persönliche§\s*§anrede§/gi,
+            /§anrede§/gi
+        ];
+
+        let found = false;
+        let replaced = false;
+
+        anredePatterns.forEach(pattern => {
+            if (pattern.test(this.html)) {
+                found = true;
+            }
+        });
+
+        if (!found) {
+            this.addCheck(id, 'PASS', 'Keine Anrede-Platzhalter gefunden');
+            return;
+        }
+
+        // Prüfe auf Sonderfälle (fremdsprachige Begrüßungen)
+        const sonderfall = /(?:¡Buenos días|Buongiorno|Bonjour|Ciao|Hello|Hola)\s+§/i.test(this.html);
+
+        if (sonderfall) {
+            // Sonderfall: Begrüßung behalten, nur Platzhalter ersetzen
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, '%vorname% %nachname%!');
+            this.html = this.html.replace(/§anrede§/gi, '%vorname%!');
+            this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (Sonderfall: Fremdsprachige Begrüßung)');
+            return;
+        }
+
+        // Standardfall: Prüfe DU/SIE-Form anhand des Textes
+        const duForm = /(\bdu\b|\bdein|\bdir\b|\bdich\b)/i.test(this.html);
+        const sieForm = /(\bSie\b|\bIhr\b|\bIhnen\b)/i.test(this.html);
+
+        if (duForm) {
+            // DU-Form
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, 'Hallo %vorname%');
+            this.html = this.html.replace(/§anrede§/gi, 'Hallo %vorname%');
+            this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (DU-Form: "Hallo %vorname%")');
+        } else if (sieForm) {
+            // SIE-Form
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, '%briefanredeGeehrte%');
+            this.html = this.html.replace(/§anrede§/gi, '%briefanredeGeehrte%');
+            this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (SIE-Form: "%briefanredeGeehrte%")');
+        } else {
+            // Nicht eindeutig - Default SIE-Form
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, '%briefanredeGeehrte%');
+            this.html = this.html.replace(/§anrede§/gi, '%briefanredeGeehrte%');
+            this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (Default SIE-Form)');
+        }
+    }
+
+    // P06: Footer Mobile Visibility Check (nur Standard)
+    checkFooterMobileVisibility() {
+        const id = 'P06_FOOTER_MOBILE';
+        
+        // Suche nach Media Queries die Footer verstecken
+        const hideFooterRegex = /@media[^{]*\{[^}]*\.footer[^}]*display:\s*none[^}]*\}/gi;
+        const hideFooterMatches = this.html.match(hideFooterRegex);
+
+        if (hideFooterMatches && hideFooterMatches.length > 0) {
+            // KRITISCH: Footer wird versteckt!
+            hideFooterMatches.forEach(match => {
+                // Ersetze display:none mit sichtbaren Styles
+                const fixed = match.replace(/display:\s*none\s*!important;?/gi, 'font-size: 12px !important; padding: 10px !important;');
+                this.html = this.html.replace(match, fixed);
+            });
+            this.addCheck(id, 'FIXED', 'Footer Mobile Visibility korrigiert (display:none entfernt - KRITISCH!)');
+            return;
+        }
+
+        // Prüfe ob Mobile-Optimierung vorhanden
+        const hasFooterMobileStyles = /@media[^{]*\{[^}]*\.footer[^}]*font-size/i.test(this.html);
+
+        if (!hasFooterMobileStyles) {
+            // Keine Mobile-Optimierung - hinzufügen
+            const headCloseMatch = this.html.match(/<\/head>/i);
+            if (headCloseMatch) {
+                const insertPos = this.html.indexOf(headCloseMatch[0]);
+                const mobileStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    .footer-table { width: 100% !important; }\n    .footer-table td { font-size: 11px !important; padding: 15px !important; }\n}\n</style>\n`;
+                this.html = this.html.slice(0, insertPos) + mobileStyles + this.html.slice(insertPos);
+                this.addCheck(id, 'FIXED', 'Footer Mobile-Optimierung hinzugefügt');
+            } else {
+                this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Optimierung nicht hinzugefügt');
+            }
+        } else {
+            this.addCheck(id, 'PASS', 'Footer Mobile Visibility korrekt');
+        }
+    }
+
+    // P10: Tracking URLs (Read-only)
+    checkTrackingUrls() {
+        const id = 'P10_TRACKING_URLS';
+        
+        // Suche nach typischen Tracking-URL-Mustern
+        const trackingPatterns = [
+            /href="[^"]*track[^"]*"/gi,
+            /href="[^"]*click[^"]*"/gi,
+            /href="[^"]*redirect[^"]*"/gi
+        ];
+
+        let trackingFound = false;
+        trackingPatterns.forEach(pattern => {
+            if (pattern.test(this.html)) {
+                trackingFound = true;
+            }
+        });
+
+        if (trackingFound) {
+            this.addCheck(id, 'PASS', 'Tracking-URLs vorhanden (Read-only)');
+        } else {
+            this.addCheck(id, 'WARN', 'Keine Tracking-URLs gefunden (Read-only, keine automatische Einfügung)');
+        }
+    }
+
+    // P11: Mobile Responsiveness Check
+    checkMobileResponsiveness() {
+        const id = 'P11_MOBILE_RESPONSIVE';
+        
+        // Prüfe auf Media Queries
+        const hasMediaQueries = /@media[^{]*\{/i.test(this.html);
+        
+        if (!hasMediaQueries) {
+            // Keine Media Queries - Basis-Responsive Styles hinzufügen
+            const headCloseMatch = this.html.match(/<\/head>/i);
+            if (headCloseMatch) {
+                const insertPos = this.html.indexOf(headCloseMatch[0]);
+                const responsiveStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    table[class="container"] { width: 100% !important; }\n    td[class="mobile-padding"] { padding: 10px !important; }\n    img { max-width: 100% !important; height: auto !important; }\n}\n</style>\n`;
+                this.html = this.html.slice(0, insertPos) + responsiveStyles + this.html.slice(insertPos);
+                this.addCheck(id, 'FIXED', 'Basis Mobile-Responsive Styles hinzugefügt');
+            } else {
+                this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Responsive Styles nicht hinzugefügt');
+            }
+        } else {
+            // Media Queries vorhanden - prüfe auf Mobile-optimierte Font-Sizes
+            const hasMobileFontSizes = /@media[^{]*\{[^}]*font-size/i.test(this.html);
+            
+            if (hasMobileFontSizes) {
+                this.addCheck(id, 'PASS', 'Mobile Responsiveness korrekt (Media Queries mit Font-Sizes)');
+            } else {
+                this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber keine Mobile-optimierten Font-Sizes');
+            }
+        }
+    }
+
+    // P11: Viewport Meta-Tag Check
+    checkViewportMetaTag() {
+        const id = 'P11_VIEWPORT';
+        
+        // Prüfe auf Viewport Meta-Tag
+        const hasViewport = /<meta[^>]*name="viewport"[^>]*>/i.test(this.html);
+        
+        if (hasViewport) {
+            // Prüfe ob korrekte Werte gesetzt sind
+            const viewportMatch = this.html.match(/<meta[^>]*name="viewport"[^>]*content="([^"]*)"[^>]*>/i);
+            if (viewportMatch) {
+                const content = viewportMatch[1];
+                const hasWidth = /width=device-width/i.test(content);
+                const hasInitialScale = /initial-scale=1/i.test(content);
+                
+                if (hasWidth && hasInitialScale) {
+                    this.addCheck(id, 'PASS', 'Viewport Meta-Tag korrekt');
+                } else {
+                    this.addCheck(id, 'WARN', 'Viewport Meta-Tag vorhanden, aber möglicherweise unvollständig');
+                }
+            }
+        } else {
+            // Viewport Meta-Tag fehlt - hinzufügen
+            const headMatch = this.html.match(/<head[^>]*>/i);
+            if (headMatch) {
+                const insertPos = this.html.indexOf(headMatch[0]) + headMatch[0].length;
+                const viewportTag = '\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+                this.html = this.html.slice(0, insertPos) + viewportTag + this.html.slice(insertPos);
+                this.addCheck(id, 'FIXED', 'Viewport Meta-Tag hinzugefügt');
+            } else {
+                this.addCheck(id, 'FAIL', 'Head-Tag nicht gefunden, Viewport Meta-Tag nicht hinzugefügt');
+            }
         }
     }
 
@@ -406,6 +642,138 @@ class TemplateProcessor {
             this.addCheck(id, 'FIXED', `Externe Fonts entfernt (${removed} removed)`);
         } else {
             this.addCheck(id, 'PASS', 'Keine externen Fonts gefunden');
+        }
+    }
+
+    // P11: Background Color Check (DPL)
+    checkBackgroundColor() {
+        const id = 'P11_BACKGROUND_COLOR';
+        const dplColor = '#6B140F';
+        
+        // Suche nach background-color und bgcolor
+        const bgColorRegex = /background-color:\s*#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})/gi;
+        const bgAttrRegex = /bgcolor="#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})"/gi;
+        
+        let wrongColors = [];
+        
+        // Prüfe CSS background-color
+        let match;
+        while ((match = bgColorRegex.exec(this.html)) !== null) {
+            const color = '#' + match[1].toUpperCase();
+            if (color !== dplColor.toUpperCase()) {
+                wrongColors.push(color);
+            }
+        }
+        
+        // Prüfe HTML bgcolor Attribute
+        while ((match = bgAttrRegex.exec(this.html)) !== null) {
+            const color = '#' + match[1].toUpperCase();
+            if (color !== dplColor.toUpperCase()) {
+                wrongColors.push(color);
+            }
+        }
+        
+        if (wrongColors.length > 0) {
+            const uniqueColors = [...new Set(wrongColors)];
+            this.addCheck(id, 'WARN', `DPL-Hintergrundfarbe sollte ${dplColor} sein, gefunden: ${uniqueColors.join(', ')}`);
+        } else {
+            this.addCheck(id, 'PASS', `DPL-Hintergrundfarbe korrekt (${dplColor})`);
+        }
+    }
+
+    // P13: Link-Text Validierung
+    checkLinkText() {
+        const id = 'P13_LINK_TEXT';
+        
+        // Generische Phrasen die vermieden werden sollten
+        const genericPhrases = [
+            /\bhier\b/i,
+            /\bklicken\s+Sie\s+hier\b/i,
+            /\bmehr\b/i,
+            /\bweiter\b/i,
+            /\blink\b/i,
+            /\bclick\s+here\b/i
+        ];
+        
+        // Suche nach Links
+        const linkRegex = /<a[^>]*>([^<]+)<\/a>/gi;
+        const links = [];
+        let match;
+        
+        while ((match = linkRegex.exec(this.html)) !== null) {
+            const linkText = match[1].trim();
+            
+            // Prüfe ob generische Phrase
+            for (const phrase of genericPhrases) {
+                if (phrase.test(linkText)) {
+                    links.push(linkText);
+                    break;
+                }
+            }
+        }
+        
+        if (links.length > 0) {
+            this.addCheck(id, 'WARN', `${links.length} Links mit generischen Phrasen gefunden (z.B. "${links[0]}" - besser: aussagekräftiger Text)`);
+        } else {
+            this.addCheck(id, 'PASS', 'Link-Texte aussagekräftig');
+        }
+    }
+
+    // P14: CTA Button Fallback Check
+    checkCTAButtonFallback() {
+        const id = 'P14_CTA_FALLBACK';
+        
+        // Suche nach VML-Buttons (Outlook)
+        const vmlButtonRegex = /<!--\[if\s+mso\]>[^<]*<v:roundrect[^>]*>/gi;
+        const vmlButtons = this.html.match(vmlButtonRegex);
+        
+        if (!vmlButtons || vmlButtons.length === 0) {
+            this.addCheck(id, 'PASS', 'Keine VML-Buttons gefunden (oder bereits mit Fallback)');
+            return;
+        }
+        
+        // Prüfe ob HTML-Fallback vorhanden
+        // Einfache Heuristik: Nach jedem VML-Button sollte ein <a> Tag folgen
+        const vmlCount = vmlButtons.length;
+        const fallbackPattern = /<!--\[if\s+mso\]>[^<]*<v:roundrect[^>]*>[\s\S]*?<!\[endif\]-->[\s\S]*?<a[^>]*>/gi;
+        const fallbackMatches = this.html.match(fallbackPattern);
+        const fallbackCount = fallbackMatches ? fallbackMatches.length : 0;
+        
+        if (fallbackCount < vmlCount) {
+            this.addCheck(id, 'WARN', `${vmlCount} VML-Buttons gefunden, aber nur ${fallbackCount} mit HTML-Fallback (Outlook-Kompatibilität prüfen!)`);
+        } else {
+            this.addCheck(id, 'PASS', `CTA-Buttons mit Outlook-Fallback (${vmlCount} VML-Buttons)`);
+        }
+    }
+
+    // P15: Inline Styles Check
+    checkInlineStyles() {
+        const id = 'P15_INLINE_STYLES';
+        
+        // Prüfe ob wichtige Styles inline sind (nicht nur in <style> Tags)
+        const hasStyleTag = /<style[^>]*>[\s\S]*?<\/style>/i.test(this.html);
+        
+        if (!hasStyleTag) {
+            this.addCheck(id, 'PASS', 'Keine <style> Tags gefunden (alle Styles inline)');
+            return;
+        }
+        
+        // Prüfe ob kritische Styles in <style> Tags sind
+        const styleTagContent = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (styleTagContent) {
+            const styles = styleTagContent[1];
+            
+            // Kritische Styles die inline sein sollten (außer Media Queries)
+            const hasCriticalStyles = /(?:width|height|padding|margin|background|color|font-size):/i.test(styles);
+            const hasMediaQueries = /@media/i.test(styles);
+            
+            if (hasCriticalStyles && !hasMediaQueries) {
+                this.addCheck(id, 'WARN', 'Wichtige Styles in <style> Tags gefunden - sollten inline sein für bessere E-Mail-Client-Kompatibilität');
+            } else if (hasMediaQueries) {
+                this.addCheck(id, 'PASS', 'Styles in <style> Tags sind hauptsächlich Media Queries (korrekt)');
+            } else {
+                this.addCheck(id, 'PASS', 'Inline Styles korrekt');
+            }
         }
     }
 
