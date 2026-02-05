@@ -1151,7 +1151,6 @@ document.addEventListener('DOMContentLoaded', () => {
         div.textContent = text;
         return div.innerHTML;
     }
-});
 
     // ===== TAG-REVIEW FEATURE =====
     const showTagReviewBtn = document.getElementById('showTagReviewBtn');
@@ -1168,6 +1167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const changeSnippet = document.getElementById('changeSnippet');
     const snippetBefore = document.getElementById('snippetBefore');
     const snippetAfter = document.getElementById('snippetAfter');
+    const tagReviewHint = document.getElementById('tagReviewHint');
 
     // State
     let currentReviewHtml = '';
@@ -1180,24 +1180,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tag-Review öffnen
     showTagReviewBtn.addEventListener('click', () => {
-        if (processingResult) {
-            // Reset State
-            currentReviewHtml = processingResult.optimizedHtml;
-            tagReviewHistory = [];
-            manualActionLog = [];
-            
-            // Analysiere Tags
-            const problems = analyzeUnclosedTags(currentReviewHtml);
-            
-            // Zeige Probleme
-            displayProblems(problems);
-            
-            // Update Preview
-            updatePreview();
-            
-            // Öffne Modal
-            tagReviewModal.style.display = 'flex';
+        if (!processingResult) {
+            // Zeige Hinweis wenn noch nicht verarbeitet
+            if (tagReviewHint) {
+                tagReviewHint.style.display = 'block';
+                setTimeout(() => {
+                    tagReviewHint.style.display = 'none';
+                }, 3000);
+            }
+            return;
         }
+
+        // Reset State
+        currentReviewHtml = processingResult.optimizedHtml;
+        tagReviewHistory = [];
+        manualActionLog = [];
+        
+        // Analysiere Tags
+        const problems = analyzeUnclosedTags(currentReviewHtml);
+        
+        // Zeige Probleme
+        displayProblems(problems);
+        
+        // Update Preview
+        updatePreview();
+        
+        // Öffne Modal
+        tagReviewModal.style.display = 'flex';
     });
 
     // Modal schließen
@@ -1450,5 +1459,6 @@ document.addEventListener('DOMContentLoaded', () => {
             webPreviewContainer.innerHTML = '<div class="preview-error">⚠️ Web-Rendering fehlgeschlagen. Code-Preview wird angezeigt.</div>';
         }
     }
+});
 
 
