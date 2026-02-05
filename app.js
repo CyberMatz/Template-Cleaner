@@ -1006,6 +1006,10 @@ document.addEventListener('DOMContentLoaded', () => {
             showDiffBtn.disabled = false;
             showDiffBtn.title = 'Änderungen zwischen Original und Optimiert anzeigen';
 
+            // Tag-Review Button aktivieren
+            showTagReviewBtn.disabled = false;
+            showTagReviewBtn.title = 'HTML-Tags manuell überprüfen und schließen';
+
             // Scroll zu Ergebnissen
             resultsSection.scrollIntoView({ behavior: 'smooth' });
 
@@ -1148,3 +1152,303 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 });
+
+    // ===== TAG-REVIEW FEATURE =====
+    const showTagReviewBtn = document.getElementById('showTagReviewBtn');
+    const tagReviewModal = document.getElementById('tagReviewModal');
+    const closeTagReviewModal = document.getElementById('closeTagReviewModal');
+    const tagProblemsList = document.getElementById('tagProblemsList');
+    const undoLastAction = document.getElementById('undoLastAction');
+    const webPreviewFrame = document.getElementById('webPreviewFrame');
+    const codePreviewContent = document.getElementById('codePreviewContent');
+    const showWebPreview = document.getElementById('showWebPreview');
+    const showCodePreview = document.getElementById('showCodePreview');
+    const webPreviewContainer = document.getElementById('webPreviewContainer');
+    const codePreviewContainer = document.getElementById('codePreviewContainer');
+    const changeSnippet = document.getElementById('changeSnippet');
+    const snippetBefore = document.getElementById('snippetBefore');
+    const snippetAfter = document.getElementById('snippetAfter');
+
+    // State
+    let currentReviewHtml = '';
+    let tagReviewHistory = [];
+    let manualActionLog = [];
+
+    // Button initial deaktivieren
+    showTagReviewBtn.disabled = true;
+    showTagReviewBtn.title = 'Erst Template verarbeiten';
+
+    // Tag-Review öffnen
+    showTagReviewBtn.addEventListener('click', () => {
+        if (processingResult) {
+            // Reset State
+            currentReviewHtml = processingResult.optimizedHtml;
+            tagReviewHistory = [];
+            manualActionLog = [];
+            
+            // Analysiere Tags
+            const problems = analyzeUnclosedTags(currentReviewHtml);
+            
+            // Zeige Probleme
+            displayProblems(problems);
+            
+            // Update Preview
+            updatePreview();
+            
+            // Öffne Modal
+            tagReviewModal.style.display = 'flex';
+        }
+    });
+
+    // Modal schließen
+    closeTagReviewModal.addEventListener('click', () => {
+        tagReviewModal.style.display = 'none';
+    });
+
+    tagReviewModal.addEventListener('click', (e) => {
+        if (e.target === tagReviewModal) {
+            tagReviewModal.style.display = 'none';
+        }
+    });
+
+    // Preview-Tabs
+    showWebPreview.addEventListener('click', () => {
+        showWebPreview.classList.add('active');
+        showCodePreview.classList.remove('active');
+        webPreviewContainer.style.display = 'block';
+        codePreviewContainer.style.display = 'none';
+    });
+
+    showCodePreview.addEventListener('click', () => {
+        showCodePreview.classList.add('active');
+        showWebPreview.classList.remove('active');
+        codePreviewContainer.style.display = 'block';
+        webPreviewContainer.style.display = 'none';
+    });
+
+    // Undo
+    undoLastAction.addEventListener('click', () => {
+        if (tagReviewHistory.length > 0) {
+            // Letzten State wiederherstellen
+            currentReviewHtml = tagReviewHistory.pop();
+            
+            // Letzten Log-Eintrag entfernen
+            manualActionLog.pop();
+            
+            // Neu analysieren
+            const problems = analyzeUnclosedTags(currentReviewHtml);
+            displayProblems(problems);
+            
+            // Preview aktualisieren
+            updatePreview();
+            
+            // Snippet verstecken
+            changeSnippet.style.display = 'none';
+            
+            // Undo-Button deaktivieren wenn keine History mehr
+            undoLastAction.disabled = tagReviewHistory.length === 0;
+        }
+    });
+
+    // Tag-Analyse Funktion
+    function analyzeUnclosedTags(html) {
+        const problems = [];
+        const tagTypes = ['a', 'table', 'tr', 'td', 'div'];
+        
+        tagTypes.forEach(tagType => {
+            const openRegex = new RegExp(`<${tagType}[^>]*>`, 'gi');
+            const closeRegex = new RegExp(`</${tagType}>`, 'gi');
+            
+            const openMatches = html.match(openRegex) || [];
+            const closeMatches = html.match(closeRegex) || [];
+            
+            const openCount = openMatches.length;
+            const closeCount = closeMatches.length;
+            
+            if (openCount > closeCount) {
+                const unclosedCount = openCount - closeCount;
+                
+                // Finde Position des ersten nicht geschlossenen Tags
+                let tempHtml = html;
+                let depth = 0;
+                let position = -1;
+                let lineNumber = 1;
+                
+                for (let i = 0; i < tempHtml.length; i++) {
+                    if (tempHtml[i] === '\n') lineNumber++;
+                    
+                    // Check for opening tag
+                    const remainingHtml = tempHtml.substring(i);
+                    const openMatch = remainingHtml.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
+                    if (openMatch) {
+                        depth++;
+                        if (position === -1) position = i;
+                        i += openMatch[0].length - 1;
+                        continue;
+                    }
+                    
+                    // Check for closing tag
+                    const closeMatch = remainingHtml.match(new RegExp(`^</${tagType}>`, 'i'));
+                    if (closeMatch) {
+                        depth--;
+                        i += closeMatch[0].length - 1;
+                    }
+                }
+                
+                // Extrahiere Code-Snippet
+                const lines = html.split('\n');
+                const snippetStart = Math.max(0, lineNumber - 5);
+                const snippetEnd = Math.min(lines.length, lineNumber + 5);
+                const snippet = lines.slice(snippetStart, snippetEnd).join('\n');
+                
+                problems.push({
+                    tagType: tagType,
+                    unclosedCount: unclosedCount,
+                    lineNumber: lineNumber,
+                    snippet: snippet,
+                    position: position
+                });
+            }
+        });
+        
+        return problems;
+    }
+
+    // Probleme anzeigen
+    function displayProblems(problems) {
+        if (problems.length === 0) {
+            tagProblemsList.innerHTML = '<div class="no-problems">✅ Keine nicht geschlossenen Tags gefunden!</div>';
+            return;
+        }
+        
+        let html = '';
+        problems.forEach((problem, index) => {
+            html += `
+                <div class="problem-item">
+                    <div class="problem-header">
+                        <span class="problem-tag">&lt;${problem.tagType}&gt;</span>
+                        <span class="problem-status">nicht geschlossen</span>
+                    </div>
+                    <div class="problem-details">
+                        <strong>Position:</strong> Zeile ${problem.lineNumber}<br>
+                        <strong>Anzahl:</strong> ${problem.unclosedCount} Tag(s) nicht geschlossen<br>
+                        <strong>Klartext:</strong> Dieses &lt;${problem.tagType}&gt;-Tag ist geöffnet, aber nicht geschlossen.
+                    </div>
+                    <div class="problem-snippet">
+                        <pre>${escapeHtml(problem.snippet)}</pre>
+                    </div>
+                    <div class="problem-actions">
+                        <button class="btn-close-tag" data-tag="${problem.tagType}" data-index="${index}">
+                            Tag schließen
+                        </button>
+                        <button class="btn-ignore-tag" data-index="${index}">
+                            Ignorieren
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        tagProblemsList.innerHTML = html;
+        
+        // Event-Listener für Buttons
+        document.querySelectorAll('.btn-close-tag').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tagType = e.target.getAttribute('data-tag');
+                closeTag(tagType);
+            });
+        });
+        
+        document.querySelectorAll('.btn-ignore-tag').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.getAttribute('data-index'));
+                // Einfach das Problem aus der Liste entfernen (visuell)
+                e.target.closest('.problem-item').style.opacity = '0.3';
+                e.target.closest('.problem-item').style.pointerEvents = 'none';
+            });
+        });
+    }
+
+    // Tag schließen
+    function closeTag(tagType) {
+        // Speichere aktuellen State in History
+        tagReviewHistory.push(currentReviewHtml);
+        
+        // Speichere Vorher-Snippet
+        const beforeSnippet = currentReviewHtml.substring(Math.max(0, currentReviewHtml.length - 200));
+        
+        // Finde letzte Position und füge schließendes Tag ein
+        const openRegex = new RegExp(`<${tagType}[^>]*>`, 'gi');
+        const closeRegex = new RegExp(`</${tagType}>`, 'gi');
+        
+        let lastOpenPos = -1;
+        let match;
+        let depth = 0;
+        
+        // Durchlaufe HTML und finde nicht geschlossenes Tag
+        const tempHtml = currentReviewHtml;
+        for (let i = 0; i < tempHtml.length; i++) {
+            const remainingHtml = tempHtml.substring(i);
+            
+            const openMatch = remainingHtml.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
+            if (openMatch) {
+                depth++;
+                lastOpenPos = i + openMatch[0].length;
+                i += openMatch[0].length - 1;
+                continue;
+            }
+            
+            const closeMatch = remainingHtml.match(new RegExp(`^</${tagType}>`, 'i'));
+            if (closeMatch) {
+                depth--;
+                i += closeMatch[0].length - 1;
+            }
+        }
+        
+        // Füge schließendes Tag ein
+        if (lastOpenPos !== -1 && depth > 0) {
+            currentReviewHtml = currentReviewHtml.substring(0, lastOpenPos) + 
+                               `</${tagType}>` + 
+                               currentReviewHtml.substring(lastOpenPos);
+            
+            // Log
+            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_MANUAL_TAG_CLOSE - <${tagType}> Tag geschlossen (User Action)`;
+            manualActionLog.push(logEntry);
+            
+            // Nachher-Snippet
+            const afterSnippet = currentReviewHtml.substring(Math.max(0, currentReviewHtml.length - 200));
+            
+            // Zeige Snippet
+            snippetBefore.textContent = beforeSnippet;
+            snippetAfter.textContent = afterSnippet;
+            changeSnippet.style.display = 'block';
+            
+            // Neu analysieren
+            const problems = analyzeUnclosedTags(currentReviewHtml);
+            displayProblems(problems);
+            
+            // Preview aktualisieren
+            updatePreview();
+            
+            // Undo-Button aktivieren
+            undoLastAction.disabled = false;
+        }
+    }
+
+    // Preview aktualisieren
+    function updatePreview() {
+        try {
+            // Web-Preview (iframe mit sandbox)
+            webPreviewFrame.srcdoc = currentReviewHtml;
+            
+            // Code-Preview
+            codePreviewContent.textContent = currentReviewHtml;
+        } catch (error) {
+            // Fallback auf Code-Preview bei Fehler
+            console.error('Preview rendering failed:', error);
+            showCodePreview.click();
+            webPreviewContainer.innerHTML = '<div class="preview-error">⚠️ Web-Rendering fehlgeschlagen. Code-Preview wird angezeigt.</div>';
+        }
+    }
+
+

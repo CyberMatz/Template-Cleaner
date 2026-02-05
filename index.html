@@ -88,6 +88,10 @@
                         <span class="btn-icon">📊</span>
                         Änderungen anzeigen (Diff)
                     </button>
+                    <button id="showTagReviewBtn" class="btn-tag-review">
+                        <span class="btn-icon">🔍</span>
+                        HTML-Tag-Review
+                    </button>
                 </div>
 
                 <div id="reportPreview" class="report-preview"></div>
@@ -117,6 +121,58 @@
                 <div class="diff-pane">
                     <h3>✅ Optimiert</h3>
                     <pre id="diffOptimized" class="diff-code"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tag-Review Modal -->
+    <div id="tagReviewModal" class="tag-review-modal" style="display: none;">
+        <div class="tag-review-modal-content">
+            <div class="tag-review-modal-header">
+                <h2>🔍 HTML-Tag-Review</h2>
+                <button id="closeTagReviewModal" class="close-modal">×</button>
+            </div>
+            <div class="tag-review-info">
+                ℹ️ Dieser Modus zeigt nicht geschlossene Tags. Sie entscheiden manuell, ob diese geschlossen werden.
+            </div>
+            <div class="tag-review-container">
+                <div class="tag-review-problems">
+                    <h3>🚨 Gefundene Probleme</h3>
+                    <div id="tagProblemsList" class="problems-list">
+                        <!-- Probleme werden hier dynamisch eingefügt -->
+                    </div>
+                    <button id="undoLastAction" class="btn-undo" disabled>
+                        <span class="btn-icon">↩️</span>
+                        Letzte Änderung rückgängig machen
+                    </button>
+                </div>
+                <div class="tag-review-preview">
+                    <h3>👁️ Vorschau</h3>
+                    <div class="preview-disclaimer">
+                        ⚠️ Web-Preview (nicht identisch mit Gmail/Outlook)
+                    </div>
+                    <div class="preview-tabs">
+                        <button id="showWebPreview" class="preview-tab active">Web-Rendering</button>
+                        <button id="showCodePreview" class="preview-tab">Code-Snippet</button>
+                    </div>
+                    <div id="webPreviewContainer" class="preview-container">
+                        <iframe id="webPreviewFrame" sandbox="allow-same-origin" class="web-preview-frame"></iframe>
+                    </div>
+                    <div id="codePreviewContainer" class="preview-container" style="display: none;">
+                        <pre id="codePreviewContent" class="code-preview-content"></pre>
+                    </div>
+                    <div id="changeSnippet" class="change-snippet" style="display: none;">
+                        <h4>Letzte Änderung:</h4>
+                        <div class="snippet-before">
+                            <strong>Vorher:</strong>
+                            <pre id="snippetBefore"></pre>
+                        </div>
+                        <div class="snippet-after">
+                            <strong>Nachher:</strong>
+                            <pre id="snippetAfter"></pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
