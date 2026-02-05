@@ -316,3 +316,215 @@ footer {
         grid-template-columns: 1fr;
     }
 }
+
+/* Diff Modal */
+.diff-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.diff-modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 95%;
+    max-width: 1400px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.diff-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+    border-bottom: 2px solid #e0e0e0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px 12px 0 0;
+}
+
+.diff-modal-header h2 {
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.close-modal {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 2rem;
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s ease;
+}
+
+.close-modal:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.diff-info {
+    padding: 15px 30px;
+    background: #e3f2fd;
+    border-bottom: 1px solid #bbdefb;
+    color: #1565c0;
+    font-size: 0.95rem;
+}
+
+.diff-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.diff-pane {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e0e0e0;
+    overflow: hidden;
+}
+
+.diff-pane:last-child {
+    border-right: none;
+}
+
+.diff-pane h3 {
+    padding: 15px 20px;
+    margin: 0;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 1rem;
+    color: #555;
+}
+
+.diff-code {
+    flex: 1;
+    overflow: auto;
+    padding: 10px;
+    margin: 0;
+    font-family: 'Courier New', Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #fafafa;
+    white-space: pre;
+    tab-size: 4;
+}
+
+/* Diff Line Styles */
+.diff-line-unchanged {
+    display: block;
+    background: transparent;
+}
+
+.diff-line-removed {
+    display: block;
+    background: #ffebee;
+    color: #c62828;
+}
+
+.diff-line-added {
+    display: block;
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.diff-line-changed {
+    display: block;
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.diff-line-empty {
+    display: block;
+    background: #f5f5f5;
+    color: #999;
+}
+
+.line-num {
+    display: inline-block;
+    width: 50px;
+    text-align: right;
+    padding-right: 10px;
+    margin-right: 10px;
+    color: #999;
+    border-right: 1px solid #ddd;
+    user-select: none;
+}
+
+/* Diff Button */
+.btn-diff {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-diff:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.btn-diff:active {
+    transform: translateY(0);
+}
+
+.btn-diff:disabled {
+    background: linear-gradient(135deg, #ccc 0%, #999 100%);
+    cursor: not-allowed;
+    opacity: 0.6;
+    box-shadow: none;
+}
+
+.btn-diff:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .diff-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .diff-pane {
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .diff-pane:last-child {
+        border-bottom: none;
+    }
+    
+    .diff-modal-content {
+        width: 98%;
+        max-height: 95vh;
+    }
+}

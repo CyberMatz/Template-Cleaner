@@ -921,6 +921,7 @@ class TemplateProcessor {
         }
 
         return {
+            originalHtml: this.originalHtml,
             optimizedHtml: this.html,
             report: report,
             unresolved: unresolved,
@@ -1001,6 +1002,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // Report Preview
             reportPreview.textContent = processingResult.report;
 
+            // Diff-Button aktivieren
+            showDiffBtn.disabled = false;
+            showDiffBtn.title = 'Änderungen zwischen Original und Optimiert anzeigen';
+
             // Scroll zu Ergebnissen
             resultsSection.scrollIntoView({ behavior: 'smooth' });
 
@@ -1058,5 +1063,88 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    // Diff-Ansicht
+    const showDiffBtn = document.getElementById('showDiffBtn');
+    const diffModal = document.getElementById('diffModal');
+    const closeDiffModal = document.getElementById('closeDiffModal');
+    const diffOriginal = document.getElementById('diffOriginal');
+    const diffOptimized = document.getElementById('diffOptimized');
+
+    // Button initial deaktivieren
+    showDiffBtn.disabled = true;
+    showDiffBtn.title = 'Erst Template verarbeiten';
+
+    showDiffBtn.addEventListener('click', () => {
+        if (processingResult && uploadedFile) {
+            // Generiere Diff-Ansicht
+            const originalLines = processingResult.originalHtml.split('\n');
+            const optimizedLines = processingResult.optimizedHtml.split('\n');
+            
+            // Einfacher Line-by-Line Diff
+            const diff = generateLineDiff(originalLines, optimizedLines);
+            
+            // Zeige Diff im Modal
+            diffOriginal.innerHTML = diff.original;
+            diffOptimized.innerHTML = diff.optimized;
+            
+            // Öffne Modal
+            diffModal.style.display = 'flex';
+        }
+    });
+
+    closeDiffModal.addEventListener('click', () => {
+        diffModal.style.display = 'none';
+    });
+
+    // Schließe Modal bei Klick außerhalb
+    diffModal.addEventListener('click', (e) => {
+        if (e.target === diffModal) {
+            diffModal.style.display = 'none';
+        }
+    });
+
+    // Einfache Diff-Funktion (Line-by-Line)
+    function generateLineDiff(originalLines, optimizedLines) {
+        const maxLines = Math.max(originalLines.length, optimizedLines.length);
+        let originalHtml = '';
+        let optimizedHtml = '';
+        
+        for (let i = 0; i < maxLines; i++) {
+            const origLine = originalLines[i] || '';
+            const optLine = optimizedLines[i] || '';
+            const lineNum = (i + 1).toString().padStart(4, ' ');
+            
+            if (origLine === optLine) {
+                // Unverändert
+                originalHtml += `<span class="diff-line-unchanged"><span class="line-num">${lineNum}</span>${escapeHtml(origLine)}\n</span>`;
+                optimizedHtml += `<span class="diff-line-unchanged"><span class="line-num">${lineNum}</span>${escapeHtml(optLine)}\n</span>`;
+            } else {
+                // Verändert
+                if (origLine && !optLine) {
+                    // Zeile entfernt
+                    originalHtml += `<span class="diff-line-removed"><span class="line-num">${lineNum}</span>${escapeHtml(origLine)}\n</span>`;
+                    optimizedHtml += `<span class="diff-line-empty"><span class="line-num">${lineNum}</span>\n</span>`;
+                } else if (!origLine && optLine) {
+                    // Zeile hinzugefügt
+                    originalHtml += `<span class="diff-line-empty"><span class="line-num">${lineNum}</span>\n</span>`;
+                    optimizedHtml += `<span class="diff-line-added"><span class="line-num">${lineNum}</span>${escapeHtml(optLine)}\n</span>`;
+                } else {
+                    // Zeile geändert
+                    originalHtml += `<span class="diff-line-changed"><span class="line-num">${lineNum}</span>${escapeHtml(origLine)}\n</span>`;
+                    optimizedHtml += `<span class="diff-line-changed"><span class="line-num">${lineNum}</span>${escapeHtml(optLine)}\n</span>`;
+                }
+            }
+        }
+        
+        return { original: originalHtml, optimized: optimizedHtml };
+    }
+
+    // HTML escapen für sichere Anzeige
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 });

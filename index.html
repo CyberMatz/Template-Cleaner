@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <script>
+<script>
   (function () {
     const PW = "VerySecret";
     const entered = prompt("Passwort:");
@@ -16,7 +16,6 @@
     }
   })();
 </script>
-
     <div class="container">
         <header>
             <h1>📧 HTML Template QA Tool</h1>
@@ -85,6 +84,10 @@
                         <span class="btn-icon">⚠️</span>
                         unresolved.txt
                     </button>
+                    <button id="showDiffBtn" class="btn-diff">
+                        <span class="btn-icon">📊</span>
+                        Änderungen anzeigen (Diff)
+                    </button>
                 </div>
 
                 <div id="reportPreview" class="report-preview"></div>
@@ -94,6 +97,29 @@
         <footer>
             <p>© 2026 HTML Template QA Tool | Clientseitige Verarbeitung - Keine Daten werden hochgeladen</p>
         </footer>
+    </div>
+
+    <!-- Diff Modal -->
+    <div id="diffModal" class="diff-modal" style="display: none;">
+        <div class="diff-modal-content">
+            <div class="diff-modal-header">
+                <h2>📊 Änderungen zwischen Original und Optimiert</h2>
+                <button id="closeDiffModal" class="close-modal">×</button>
+            </div>
+            <div class="diff-info">
+                ℹ️ Diese Ansicht zeigt nur Änderungen. Es werden keine Anpassungen vorgenommen.
+            </div>
+            <div class="diff-container">
+                <div class="diff-pane">
+                    <h3>📄 Original</h3>
+                    <pre id="diffOriginal" class="diff-code"></pre>
+                </div>
+                <div class="diff-pane">
+                    <h3>✅ Optimiert</h3>
+                    <pre id="diffOptimized" class="diff-code"></pre>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
