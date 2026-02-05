@@ -270,9 +270,10 @@ class TemplateProcessor {
     // DPL: P05 - Outlook Conditional Comments
     checkOutlookConditionalComments() {
         const id = 'P05_OUTLOOK_CONDITIONAL';
-        const hasConditionalComments = this.html.includes('<!--[if mso');
+        // Prüfe ob der SPEZIFISCHE Haupt-MSO-Wrapper (mit bgcolor="#6B140F") existiert
+        const hasMainMSOWrapper = this.html.includes('bgcolor="#6B140F"') && this.html.includes('<!--[if mso]>');
 
-        if (hasConditionalComments) {
+        if (hasMainMSOWrapper) {
             this.addCheck(id, 'PASS', 'Outlook Conditional Comments vorhanden');
         } else {
             // Füge MSO-Wrapper um den roten Hintergrund-Div ein
