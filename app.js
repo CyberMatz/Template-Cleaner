@@ -291,9 +291,12 @@ class TemplateProcessor {
                 let redDivEnd = -1;
                 
                 for (let i = 0; i < afterRedDiv.length; i++) {
-                    if (afterRedDiv.substr(i, 4) === '<div') {
+                    // Prüfe auf öffnende <div Tags (mit beliebigen Attributen)
+                    if (afterRedDiv.substr(i, 4) === '<div' && (afterRedDiv[i+4] === ' ' || afterRedDiv[i+4] === '>')) {
                         depth++;
-                    } else if (afterRedDiv.substr(i, 6) === '</div>') {
+                    } 
+                    // Prüfe auf schließende </div> Tags
+                    else if (afterRedDiv.substr(i, 6) === '</div>') {
                         depth--;
                         if (depth === 0) {
                             redDivEnd = redDivStart + i + 6;
@@ -359,9 +362,12 @@ class TemplateProcessor {
                     let whiteDivEnd = -1;
                     
                     for (let i = 0; i < afterWhiteDiv.length; i++) {
-                        if (afterWhiteDiv.substr(i, 4) === '<div') {
+                        // Prüfe auf öffnende <div Tags (mit beliebigen Attributen)
+                        if (afterWhiteDiv.substr(i, 4) === '<div' && (afterWhiteDiv[i+4] === ' ' || afterWhiteDiv[i+4] === '>')) {
                             depth++;
-                        } else if (afterWhiteDiv.substr(i, 6) === '</div>') {
+                        } 
+                        // Prüfe auf schließende </div> Tags
+                        else if (afterWhiteDiv.substr(i, 6) === '</div>') {
                             depth--;
                             if (depth === 0) {
                                 whiteDivEnd = whiteDivStart + i + 6;
@@ -1008,20 +1014,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Download-Buttons
     downloadOptimized.addEventListener('click', () => {
-        if (processingResult) {
-            downloadFile(processingResult.optimizedHtml, 'optimized.html', 'text/html');
+        if (processingResult && uploadedFile) {
+            // Originalnamen verwenden und "_optimized" anhängen
+            const originalName = uploadedFile.name;
+            const nameParts = originalName.split('.');
+            const extension = nameParts.pop();
+            const baseName = nameParts.join('.');
+            const newName = `${baseName}_optimized.${extension}`;
+            downloadFile(processingResult.optimizedHtml, newName, 'text/html');
         }
     });
 
     downloadReport.addEventListener('click', () => {
-        if (processingResult) {
-            downloadFile(processingResult.report, 'report.txt', 'text/plain');
+        if (processingResult && uploadedFile) {
+            // Originalnamen verwenden und "_report" anhängen
+            const originalName = uploadedFile.name;
+            const nameParts = originalName.split('.');
+            const baseName = nameParts.join('.');
+            const newName = `${baseName}_report.txt`;
+            downloadFile(processingResult.report, newName, 'text/plain');
         }
     });
 
     downloadUnresolved.addEventListener('click', () => {
-        if (processingResult) {
-            downloadFile(processingResult.unresolved, 'unresolved.txt', 'text/plain');
+        if (processingResult && uploadedFile) {
+            // Originalnamen verwenden und "_unresolved" anhängen
+            const originalName = uploadedFile.name;
+            const nameParts = originalName.split('.');
+            const baseName = nameParts.join('.');
+            const newName = `${baseName}_unresolved.txt`;
+            downloadFile(processingResult.unresolved, newName, 'text/plain');
         }
     });
 
