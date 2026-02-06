@@ -405,6 +405,11 @@ class TemplateProcessor {
         const id = this.checklistType === 'dpl' ? 'P08_TAG_BALANCING' : 'P07_TAG_BALANCING';
         const tags = ['table', 'tr', 'td', 'a', 'div'];
         let fixed = false;
+        
+        // Auto-Fixes Array initialisieren (falls noch nicht vorhanden)
+        if (!this.autoFixes) {
+            this.autoFixes = [];
+        }
 
         tags.forEach(tag => {
             const openRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
@@ -418,7 +423,31 @@ class TemplateProcessor {
                     // Fehlende Closing-Tags
                     const diff = openCount - closeCount;
                     for (let i = 0; i < diff; i++) {
-                        this.html += `</${tag}>`;
+                        const insertPosition = this.html.length;
+                        const inserted = `</${tag}>`;
+                        
+                        // Context speichern (50 chars vor und nach)
+                        const beforeCtx = this.html.substring(Math.max(0, insertPosition - 50), insertPosition);
+                        const afterCtx = '';  // Am Ende gibt es kein afterCtx
+                        
+                        // Snippet für Anzeige (200 chars vor)
+                        const snippetBefore = this.html.substring(Math.max(0, insertPosition - 200), insertPosition);
+                        
+                        // Auto-Fix Event speichern
+                        this.autoFixes.push({
+                            id: `AF${(this.autoFixes.length + 1).toString().padStart(2, '0')}`,
+                            type: 'AUTO_TAG_CLOSE',
+                            tag: tag,
+                            inserted: inserted,
+                            beforeCtx: beforeCtx,
+                            afterCtx: afterCtx,
+                            insertPosition: insertPosition,
+                            snippetBefore: snippetBefore,
+                            snippetAfter: inserted
+                        });
+                        
+                        // Tag einfügen
+                        this.html += inserted;
                     }
                     fixed = true;
                 }
@@ -925,7 +954,8 @@ class TemplateProcessor {
             optimizedHtml: this.html,
             report: report,
             unresolved: unresolved,
-            status: status
+            status: status,
+            autoFixes: this.autoFixes || []  // Auto-Fixes mitgeben
         };
     }
 
@@ -1044,6 +1074,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Report mit MANUAL_ACTIONS erweitern
             let reportContent = processingResult.report;
+            
+            // Prüfe ob autoFixes existiert
+            if (processingResult.autoFixes && processingResult.autoFixes.length > 0) {
+                reportContent += `\n\nAUTO_FIXES_COUNT=${processingResult.autoFixes.length}\n`;
+                reportContent += `AUTO_FIXES:\n`;
+                processingResult.autoFixes.forEach(fix => {
+                    reportContent += `${fix.id}_${fix.type} - tag=<${fix.tag}> inserted=${fix.inserted} bei Position ${fix.insertPosition}\n`;
+                });
+            }
             
             // Prüfe ob manualActionLog existiert (nur wenn Tag-Review verwendet wurde)
             if (typeof manualActionLog !== 'undefined' && manualActionLog.length > 0) {
@@ -1217,6 +1256,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Zeige Probleme
         displayProblems(problems);
         
+        // Zeige Auto-Fixes
+        displayAutoFixes(processingResult.autoFixes || []);
+        
         // Update Preview
         updatePreview();
         
@@ -1233,6 +1275,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === tagReviewModal) {
             tagReviewModal.style.display = 'none';
         }
+    });
+    
+    // Änderungen übernehmen Button
+    const commitReviewChangesBtn = document.getElementById('commitReviewChanges');
+    commitReviewChangesBtn.addEventListener('click', () => {
+        // Übernehme currentReviewHtml in processingResult
+        processingResult.optimizedHtml = currentReviewHtml;
+        
+        // Zeige Bestätigung
+        const hint = document.getElementById('reviewHint');
+        hint.textContent = '✅ Übernommen. Downloads nutzen jetzt den neuen Stand.';
+        hint.style.display = 'block';
+        hint.style.backgroundColor = '#e8f5e9';
+        hint.style.color = '#2e7d32';
+        
+        setTimeout(() => {
+            hint.style.display = 'none';
+        }, 3000);
+        
+        // Button deaktivieren bis zur nächsten Änderung
+        commitReviewChangesBtn.disabled = true;
     });
 
     // Preview-Tabs
@@ -1391,6 +1454,130 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+    
+    // Auto-Fixes anzeigen
+    function displayAutoFixes(autoFixes) {
+        const autoFixesList = document.getElementById('autoFixesList');
+        
+        if (!autoFixes || autoFixes.length === 0) {
+            autoFixesList.innerHTML = '<div class="no-problems">✅ Keine automatischen Tag-Schließungen durchgeführt.</div>';
+            return;
+        }
+        
+        let html = '';
+        autoFixes.forEach((autoFix, index) => {
+            html += `
+                <div class="problem-item autofix-item" data-autofix-id="${autoFix.id}">
+                    <div class="problem-header">
+                        <span class="problem-tag">${autoFix.inserted}</span>
+                        <span class="problem-status" style="background: #4caf50;">Auto-Closing eingefügt</span>
+                    </div>
+                    <div class="problem-details">
+                        <strong>ID:</strong> ${autoFix.id}<br>
+                        <strong>Tag-Typ:</strong> &lt;${autoFix.tag}&gt;<br>
+                        <strong>Eingefügt:</strong> ${escapeHtml(autoFix.inserted)}<br>
+                        <strong>Position:</strong> ${autoFix.insertPosition}
+                    </div>
+                    <div class="problem-snippet">
+                        <strong>Snippet (vor Einfügung):</strong>
+                        <pre>${escapeHtml(autoFix.snippetBefore)}${escapeHtml(autoFix.inserted)}</pre>
+                    </div>
+                    <div class="problem-actions">
+                        <button class="btn-undo-autofix" data-autofix-index="${index}">
+                            ↩️ Undo diesen Fix
+                        </button>
+                        <button class="btn-accept-autofix" data-autofix-index="${index}">
+                            ✅ Behalten
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        autoFixesList.innerHTML = html;
+        
+        // Event-Listener für Buttons
+        document.querySelectorAll('.btn-undo-autofix').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.getAttribute('data-autofix-index'));
+                undoAutoFix(autoFixes[index], e.target.closest('.autofix-item'));
+            });
+        });
+        
+        document.querySelectorAll('.btn-accept-autofix').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.getAttribute('data-autofix-index'));
+                acceptAutoFix(e.target.closest('.autofix-item'));
+            });
+        });
+    }
+
+    // Undo Auto-Fix (Context-basiert)
+    function undoAutoFix(autoFix, autoFixElement) {
+        // Suche nach beforeCtx + inserted + afterCtx
+        const searchPattern = autoFix.beforeCtx + autoFix.inserted + autoFix.afterCtx;
+        const index = currentReviewHtml.indexOf(searchPattern);
+        
+        if (index === -1) {
+            // Nicht gefunden
+            alert('⚠️ Undo nicht eindeutig möglich - Pattern nicht gefunden');
+            return;
+        }
+        
+        // Prüfe ob mehrfach vorhanden
+        const lastIndex = currentReviewHtml.lastIndexOf(searchPattern);
+        if (index !== lastIndex) {
+            // Mehrfach gefunden
+            alert('⚠️ Undo nicht eindeutig möglich - Pattern mehrfach vorhanden');
+            return;
+        }
+        
+        // Eindeutig gefunden → inserted entfernen
+        const before = currentReviewHtml.substring(0, index + autoFix.beforeCtx.length);
+        const after = currentReviewHtml.substring(index + autoFix.beforeCtx.length + autoFix.inserted.length);
+        currentReviewHtml = before + after;
+        
+        // Log
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${autoFix.id} rückgängig gemacht (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // Update UI
+        autoFixElement.style.opacity = '0.3';
+        autoFixElement.style.backgroundColor = '#ffebee';
+        autoFixElement.querySelector('.btn-undo-autofix').disabled = true;
+        autoFixElement.querySelector('.btn-accept-autofix').disabled = true;
+        
+        // Markierung hinzufügen
+        const undoneLabel = document.createElement('span');
+        undoneLabel.textContent = '↩️ Rückgängig gemacht';
+        undoneLabel.style.color = '#f44336';
+        undoneLabel.style.fontWeight = 'bold';
+        undoneLabel.style.marginLeft = '10px';
+        autoFixElement.querySelector('.problem-header').appendChild(undoneLabel);
+        
+        // Update Preview
+        updatePreview();
+        
+        // Update Aktions-Counter
+        updateActionCounter();
+    }
+    
+    // Auto-Fix akzeptieren (UI-State only)
+    function acceptAutoFix(autoFixElement) {
+        // Nur UI-State ändern, keine HTML-Änderung
+        autoFixElement.style.opacity = '0.6';
+        autoFixElement.style.backgroundColor = '#e8f5e9';  // Grüner Hintergrund
+        autoFixElement.querySelector('.btn-undo-autofix').disabled = true;
+        autoFixElement.querySelector('.btn-accept-autofix').disabled = true;
+        
+        // Markierung hinzufügen
+        const acceptedLabel = document.createElement('span');
+        acceptedLabel.textContent = '✅ Akzeptiert';
+        acceptedLabel.style.color = '#4caf50';
+        acceptedLabel.style.fontWeight = 'bold';
+        acceptedLabel.style.marginLeft = '10px';
+        autoFixElement.querySelector('.problem-header').appendChild(acceptedLabel);
+    }
 
     // Tag schließen (mit exakten Boundary-Regeln)
     function closeTag(tagType, problemIndex) {
@@ -1526,6 +1713,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const counterElement = document.getElementById('manualActionsCounter');
         if (counterElement) {
             counterElement.textContent = `Manuelle Aktionen: ${manualActionLog.length}`;
+        }
+        
+        // Commit-Button aktivieren wenn mindestens 1 Aktion
+        const commitButton = document.getElementById('commitReviewChanges');
+        if (commitButton) {
+            commitButton.disabled = manualActionLog.length === 0;
         }
     }
 

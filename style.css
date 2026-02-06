@@ -547,9 +547,8 @@ footer {
 .tag-review-modal-content {
     background: white;
     border-radius: 12px;
-    width: 95%;
-    max-width: 1600px;
-    max-height: 90vh;
+    width: min(90vw, 1400px);  /* 90vw, max 1400px */
+    height: 85vh;              /* 85vh */
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -589,10 +588,11 @@ footer {
 }
 
 .tag-review-problems {
+    width: 40%;  /* 40% Breite */
     display: flex;
     flex-direction: column;
     border-right: 2px solid #e0e0e0;
-    overflow-y: auto;
+    overflow-y: auto;  /* scrollable */
     padding: 20px;
     background: #fafafa;
 }
@@ -737,9 +737,10 @@ footer {
 }
 
 .tag-review-preview {
+    width: 60%;  /* 60% Breite */
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;  /* scrollable */
     background: white;
     padding: 20px;
 }
@@ -797,6 +798,7 @@ footer {
 
 .web-preview-frame {
     width: 100%;
+    min-height: 500px;  /* Mindestens 500px Höhe */
     height: 100%;
     border: none;
     background: white;
@@ -950,4 +952,41 @@ footer {
     color: #1976d2;
     font-weight: 600;
     border-radius: 4px;
+}
+
+/* Commit Button */
+.btn-commit {
+    margin-top: 15px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #4caf50, #66bb6a);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+}
+
+.btn-commit:hover:not(:disabled) {
+    background: linear-gradient(135deg, #66bb6a, #81c784);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.btn-commit:disabled {
+    background: #e0e0e0;
+    color: #9e9e9e;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.btn-commit .btn-icon {
+    font-size: 18px;
 }
