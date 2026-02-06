@@ -1041,7 +1041,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameParts = originalName.split('.');
             const baseName = nameParts.join('.');
             const newName = `${baseName}_report.txt`;
-            downloadFile(processingResult.report, newName, 'text/plain');
+            
+            // Report mit MANUAL_ACTIONS erweitern
+            let reportContent = processingResult.report;
+            
+            // Prüfe ob manualActionLog existiert (nur wenn Tag-Review verwendet wurde)
+            if (typeof manualActionLog !== 'undefined' && manualActionLog.length > 0) {
+                reportContent += `\n\nMANUAL_ACTIONS_COUNT=${manualActionLog.length}\n`;
+                reportContent += `MANUAL_ACTIONS:\n`;
+                manualActionLog.forEach(action => {
+                    reportContent += `${action}\n`;
+                });
+            } else if (typeof manualActionLog !== 'undefined') {
+                reportContent += `\n\nMANUAL_ACTIONS_COUNT=0\n`;
+            }
+            
+            downloadFile(reportContent, newName, 'text/plain');
         }
     });
 
@@ -1371,38 +1386,36 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.btn-ignore-tag').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const index = parseInt(e.target.getAttribute('data-index'));
-                // Einfach das Problem aus der Liste entfernen (visuell)
-                e.target.closest('.problem-item').style.opacity = '0.3';
-                e.target.closest('.problem-item').style.pointerEvents = 'none';
+                const tagType = e.target.closest('.problem-item').querySelector('.problem-tag').textContent.replace(/[<>]/g, '');
+                ignoreTag(index, tagType, e.target.closest('.problem-item'));
             });
         });
     }
 
-    // Tag schließen
-    function closeTag(tagType) {
-        // Speichere aktuellen State in History
-        tagReviewHistory.push(currentReviewHtml);
+    // Tag schließen (mit exakten Boundary-Regeln)
+    function closeTag(tagType, problemIndex) {
+        // Boundary-Regeln je nach Tag-Typ
+        const boundaries = {
+            'a': ['</td>', '</tr>', '</table>', '</div>', '</body>'],
+            'td': ['</tr>', '</table>', '</body>'],
+            'tr': ['</table>', '</body>'],
+            'table': ['</body>', '</html>'],
+            'div': ['</body>', '</html>']
+        };
         
-        // Speichere Vorher-Snippet
-        const beforeSnippet = currentReviewHtml.substring(Math.max(0, currentReviewHtml.length - 200));
+        const tagBoundaries = boundaries[tagType] || ['</body>'];
         
-        // Finde letzte Position und füge schließendes Tag ein
-        const openRegex = new RegExp(`<${tagType}[^>]*>`, 'gi');
-        const closeRegex = new RegExp(`</${tagType}>`, 'gi');
-        
+        // Finde Position des letzten offenen Tags
         let lastOpenPos = -1;
-        let match;
         let depth = 0;
         
-        // Durchlaufe HTML und finde nicht geschlossenes Tag
-        const tempHtml = currentReviewHtml;
-        for (let i = 0; i < tempHtml.length; i++) {
-            const remainingHtml = tempHtml.substring(i);
+        for (let i = 0; i < currentReviewHtml.length; i++) {
+            const remainingHtml = currentReviewHtml.substring(i);
             
             const openMatch = remainingHtml.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
             if (openMatch) {
                 depth++;
-                lastOpenPos = i + openMatch[0].length;
+                if (depth > 0) lastOpenPos = i + openMatch[0].length;
                 i += openMatch[0].length - 1;
                 continue;
             }
@@ -1414,33 +1427,105 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Füge schließendes Tag ein
-        if (lastOpenPos !== -1 && depth > 0) {
-            currentReviewHtml = currentReviewHtml.substring(0, lastOpenPos) + 
-                               `</${tagType}>` + 
-                               currentReviewHtml.substring(lastOpenPos);
-            
-            // Log
-            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_MANUAL_TAG_CLOSE - <${tagType}> Tag geschlossen (User Action)`;
-            manualActionLog.push(logEntry);
-            
-            // Nachher-Snippet
-            const afterSnippet = currentReviewHtml.substring(Math.max(0, currentReviewHtml.length - 200));
-            
-            // Zeige Snippet
-            snippetBefore.textContent = beforeSnippet;
-            snippetAfter.textContent = afterSnippet;
-            changeSnippet.style.display = 'block';
-            
-            // Neu analysieren
-            const problems = analyzeUnclosedTags(currentReviewHtml);
-            displayProblems(problems);
-            
-            // Preview aktualisieren
-            updatePreview();
-            
-            // Undo-Button aktivieren
-            undoLastAction.disabled = false;
+        if (lastOpenPos === -1 || depth <= 0) {
+            alert('⚠️ Kein offenes Tag gefunden.');
+            return;
+        }
+        
+        // Suche ab lastOpenPos die erste Boundary
+        const searchHtml = currentReviewHtml.substring(lastOpenPos);
+        let boundaryPos = -1;
+        let foundBoundary = null;
+        
+        for (const boundary of tagBoundaries) {
+            const pos = searchHtml.indexOf(boundary);
+            if (pos !== -1 && (boundaryPos === -1 || pos < boundaryPos)) {
+                boundaryPos = pos;
+                foundBoundary = boundary;
+            }
+        }
+        
+        if (boundaryPos === -1) {
+            // Kein sicherer Einfügepunkt gefunden
+            alert(`⚠️ Kein sicherer Einfügepunkt gefunden für <${tagType}>. Bitte "Ignorieren" wählen.`);
+            return;
+        }
+        
+        // Prüfe ob bereits ein Closing-Tag zwischen lastOpenPos und Boundary existiert
+        const betweenHtml = searchHtml.substring(0, boundaryPos);
+        const existingClose = betweenHtml.match(new RegExp(`</${tagType}>`, 'i'));
+        
+        if (existingClose) {
+            // Nicht eindeutig
+            alert(`⚠️ Nicht eindeutig: Es existiert bereits ein </${tagType}> zwischen dem offenen Tag und der Boundary. Bitte "Ignorieren" wählen.`);
+            return;
+        }
+        
+        // Speichere aktuellen State in History (für Undo)
+        tagReviewHistory.push(currentReviewHtml);
+        
+        // Berechne absolute Einfügeposition (direkt VOR der Boundary)
+        const insertPos = lastOpenPos + boundaryPos;
+        
+        // Speichere Vorher-Snippet (±10 Zeilen um Einfügestelle)
+        const lines = currentReviewHtml.split('\n');
+        let currentLine = currentReviewHtml.substring(0, insertPos).split('\n').length;
+        const snippetStart = Math.max(0, currentLine - 10);
+        const snippetEnd = Math.min(lines.length, currentLine + 10);
+        const beforeSnippet = lines.slice(snippetStart, snippetEnd).join('\n');
+        
+        // Füge Closing-Tag ein
+        currentReviewHtml = currentReviewHtml.substring(0, insertPos) + 
+                           `</${tagType}>` + 
+                           currentReviewHtml.substring(insertPos);
+        
+        // Log
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_MANUAL_TAG_CLOSE - <${tagType}> Tag geschlossen (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // Nachher-Snippet (±10 Zeilen um Einfügestelle)
+        const linesAfter = currentReviewHtml.split('\n');
+        const afterSnippet = linesAfter.slice(snippetStart, snippetEnd + 1).join('\n');
+        
+        // Zeige Snippet
+        snippetBefore.textContent = beforeSnippet;
+        snippetAfter.textContent = afterSnippet;
+        changeSnippet.style.display = 'block';
+        
+        // Neu analysieren
+        const problems = analyzeUnclosedTags(currentReviewHtml);
+        displayProblems(problems);
+        
+        // Preview aktualisieren
+        updatePreview();
+        
+        // Undo-Button aktivieren
+        undoLastAction.disabled = false;
+        
+        // Update Aktions-Counter
+        updateActionCounter();
+    }
+
+    // Tag ignorieren
+    function ignoreTag(index, tagType, problemElement) {
+        // Keine HTML-Änderung, nur visuell
+        problemElement.style.opacity = '0.3';
+        problemElement.style.pointerEvents = 'none';
+        problemElement.style.textDecoration = 'line-through';
+        
+        // Log
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_TAG_IGNORED - <${tagType}> ignoriert (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // Update Aktions-Counter
+        updateActionCounter();
+    }
+    
+    // Aktions-Counter aktualisieren
+    function updateActionCounter() {
+        const counterElement = document.getElementById('manualActionsCounter');
+        if (counterElement) {
+            counterElement.textContent = `Manuelle Aktionen: ${manualActionLog.length}`;
         }
     }
 
@@ -1450,8 +1535,34 @@ document.addEventListener('DOMContentLoaded', () => {
             // Web-Preview (iframe mit sandbox)
             webPreviewFrame.srcdoc = currentReviewHtml;
             
-            // Code-Preview
-            codePreviewContent.textContent = currentReviewHtml;
+            // Code-Preview: NICHT den kompletten HTML anzeigen
+            // Nur ein Hinweis, dass kompletter HTML per Button verfügbar ist
+            codePreviewContent.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">' +
+                '<p>📝 Code-Snippets werden nach jeder Aktion angezeigt.</p>' +
+                '<button id="showFullHtmlBtn" style="margin-top: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
+                '📄 Kompletten HTML anzeigen' +
+                '</button>' +
+                '</div>';
+            
+            // Event-Listener für "Kompletten HTML anzeigen" Button
+            const showFullHtmlBtn = document.getElementById('showFullHtmlBtn');
+            if (showFullHtmlBtn) {
+                showFullHtmlBtn.addEventListener('click', () => {
+                    codePreviewContent.innerHTML = '<pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 600px; overflow-y: auto; padding: 15px; background: #f5f5f5; border-radius: 4px;">' +
+                        escapeHtml(currentReviewHtml) +
+                        '</pre>' +
+                        '<button id="hideFullHtmlBtn" style="margin-top: 10px; padding: 10px 20px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
+                        '✖️ Schließen' +
+                        '</button>';
+                    
+                    const hideFullHtmlBtn = document.getElementById('hideFullHtmlBtn');
+                    if (hideFullHtmlBtn) {
+                        hideFullHtmlBtn.addEventListener('click', () => {
+                            updatePreview();
+                        });
+                    }
+                });
+            }
         } catch (error) {
             // Fallback auf Code-Preview bei Fehler
             console.error('Preview rendering failed:', error);

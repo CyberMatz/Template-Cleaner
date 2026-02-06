@@ -940,3 +940,14 @@ footer {
         transform: translateY(0);
     }
 }
+
+/* Manual Actions Counter */
+.manual-actions-counter {
+    margin-bottom: 15px;
+    padding: 10px 15px;
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    color: #1976d2;
+    font-weight: 600;
+    border-radius: 4px;
+}
