@@ -1228,3 +1228,24 @@ footer {
     padding: 14px 24px;
     font-size: 1rem;
 }
+
+/* Jump-to-location Highlight */
+.code-preview-content {
+    position: relative;
+}
+
+/* Highlight für >>> INSERT HERE <<< im Code-Snippet */
+#codePreviewContent {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Optional: Styling für die Marker-Zeile */
+.insert-marker {
+    background: #fff3e0;
+    color: #e65100;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-left: 4px solid #ff9800;
+    display: block;
+}

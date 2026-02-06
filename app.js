@@ -1524,18 +1524,25 @@ document.addEventListener('DOMContentLoaded', () => {
         autoFixesList.innerHTML = html;
         
         // Event-Listener für Item-Klick (Fokus)
-        document.querySelectorAll('.autofix-item').forEach(item => {
+        document.querySelectorAll('.autofix-item').forEach((item, index) => {
             item.addEventListener('click', (e) => {
                 // Entferne active von allen Items
                 document.querySelectorAll('.problem-item, .autofix-item').forEach(i => i.classList.remove('active'));
                 // Setze active auf geklicktes Item
                 item.classList.add('active');
-                // Zeige Snippet im Code-Preview
-                const snippet = item.getAttribute('data-snippet');
-                if (snippet) {
-                    const codePreviewContent = document.getElementById('codePreviewContent');
-                    if (codePreviewContent) {
-                        codePreviewContent.textContent = snippet;
+                
+                // Jump to location (wenn insertPosition verfügbar)
+                const autoFix = autoFixes[index];
+                if (autoFix && autoFix.insertPosition !== undefined) {
+                    jumpToLocation(autoFix.insertPosition, autoFix.snippetBefore + autoFix.inserted);
+                } else {
+                    // Fallback: Zeige Snippet im Code-Preview
+                    const snippet = item.getAttribute('data-snippet');
+                    if (snippet) {
+                        const codePreviewContent = document.getElementById('codePreviewContent');
+                        if (codePreviewContent) {
+                            codePreviewContent.textContent = snippet;
+                        }
                     }
                 }
             });
@@ -1579,6 +1586,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Speichere aktuellen State in History (für globalen Undo)
+        tagReviewHistory.push({
+            html: currentReviewHtml,
+            action: `AUTO_FIX_UNDONE - ${autoFix.id}`,
+            element: autoFixElement.cloneNode(true)
+        });
+        
         // Eindeutig gefunden → inserted entfernen
         const before = currentReviewHtml.substring(0, index + autoFix.beforeCtx.length);
         const after = currentReviewHtml.substring(index + autoFix.beforeCtx.length + autoFix.inserted.length);
@@ -1588,7 +1602,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${autoFix.id} rückgängig gemacht (User Action)`;
         manualActionLog.push(logEntry);
         
-        // Update UI
+        // Update UI (nur dieses Element!)
         autoFixElement.style.opacity = '0.3';
         autoFixElement.style.backgroundColor = '#ffebee';
         autoFixElement.querySelector('.btn-undo-autofix').disabled = true;
@@ -1607,11 +1621,29 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update Aktions-Counter
         updateActionCounter();
+        
+        // Aktiviere globalen Undo-Button
+        const undoButton = document.getElementById('undoLastAction');
+        if (undoButton) {
+            undoButton.disabled = false;
+        }
     }
     
     // Auto-Fix akzeptieren (UI-State only)
     function acceptAutoFix(autoFixElement) {
-        // Nur UI-State ändern, keine HTML-Änderung
+        // Speichere aktuellen State in History (für globalen Undo)
+        tagReviewHistory.push({
+            html: currentReviewHtml,
+            action: 'AUTO_FIX_ACCEPTED',
+            element: autoFixElement.cloneNode(true)
+        });
+        
+        // Log
+        const autoFixId = autoFixElement.getAttribute('data-autofix-id');
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_ACCEPTED - ${autoFixId} akzeptiert (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // Nur UI-State ändern (nur dieses Element!)
         autoFixElement.style.opacity = '0.6';
         autoFixElement.style.backgroundColor = '#e8f5e9';  // Grüner Hintergrund
         autoFixElement.querySelector('.btn-undo-autofix').disabled = true;
@@ -1624,6 +1656,15 @@ document.addEventListener('DOMContentLoaded', () => {
         acceptedLabel.style.fontWeight = 'bold';
         acceptedLabel.style.marginLeft = '10px';
         autoFixElement.querySelector('.problem-header').appendChild(acceptedLabel);
+        
+        // Update Aktions-Counter
+        updateActionCounter();
+        
+        // Aktiviere globalen Undo-Button
+        const undoButton = document.getElementById('undoLastAction');
+        if (undoButton) {
+            undoButton.disabled = false;
+        }
     }
 
     // Tag schließen (mit exakten Boundary-Regeln)
@@ -1769,6 +1810,87 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Jump to location in preview
+    function jumpToLocation(insertPosition, snippet) {
+        // 1. Wechsel automatisch zu Code-Snippet Tab
+        const codeTab = document.getElementById('showCodePreview');
+        const webTab = document.getElementById('showWebPreview');
+        const codePreviewContainer = document.getElementById('codePreviewContainer');
+        const webPreviewContainer = document.getElementById('webPreviewContainer');
+        const codePreviewContent = document.getElementById('codePreviewContent');
+        
+        if (codeTab && webTab && codePreviewContainer && webPreviewContainer && codePreviewContent) {
+            // Aktiviere Code-Tab
+            codeTab.classList.add('active');
+            webTab.classList.remove('active');
+            codePreviewContainer.style.display = 'block';
+            webPreviewContainer.style.display = 'none';
+            
+            // 2. Extrahiere Ausschnitt um insertPosition (±400 Zeichen)
+            const contextLength = 400;
+            const startPos = Math.max(0, insertPosition - contextLength);
+            const endPos = Math.min(currentReviewHtml.length, insertPosition + contextLength);
+            const beforeInsert = currentReviewHtml.substring(startPos, insertPosition);
+            const afterInsert = currentReviewHtml.substring(insertPosition, endPos);
+            
+            // 3. Markiere Einfügestelle mit >>> INSERT HERE <<<
+            const highlightedSnippet = 
+                beforeInsert + 
+                '\n>>> INSERT HERE <<<\n' + 
+                afterInsert;
+            
+            // 4. Zeige im Code-Preview
+            codePreviewContent.textContent = highlightedSnippet;
+            
+            // 5. Scrolle zu >>> INSERT HERE <<<
+            setTimeout(() => {
+                const lines = highlightedSnippet.split('\n');
+                const insertLineIndex = lines.findIndex(line => line.includes('>>> INSERT HERE <<<'));
+                if (insertLineIndex !== -1) {
+                    // Scrolle zu dieser Zeile (ca. 1.5em pro Zeile)
+                    const lineHeight = 1.5 * 12; // 12px font-size
+                    codePreviewContent.scrollTop = insertLineIndex * lineHeight - 100; // -100px offset
+                }
+            }, 50);
+            
+            // 6. Iframe-Scroll mit temporärem Marker (nur transient!)
+            try {
+                // Erstelle temporären Marker (nur für iframe, nie im Download!)
+                const markerId = '__manus_temp_marker__';
+                const htmlWithMarker = 
+                    currentReviewHtml.substring(0, insertPosition) + 
+                    `<span id="${markerId}" style="background: yellow; padding: 2px;"></span>` + 
+                    currentReviewHtml.substring(insertPosition);
+                
+                // Rendere iframe mit Marker
+                webPreviewFrame.srcdoc = htmlWithMarker;
+                
+                // Scrolle zu Marker nach Render
+                webPreviewFrame.onload = () => {
+                    try {
+                        const iframeDoc = webPreviewFrame.contentDocument || webPreviewFrame.contentWindow.document;
+                        const marker = iframeDoc.getElementById(markerId);
+                        if (marker) {
+                            marker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            
+                            // Entferne Marker nach 2 Sekunden und rendere ohne Marker
+                            setTimeout(() => {
+                                webPreviewFrame.srcdoc = currentReviewHtml;
+                                webPreviewFrame.onload = null; // Cleanup
+                            }, 2000);
+                        }
+                    } catch (err) {
+                        // Sandbox-Fehler ignorieren
+                        console.warn('Iframe scroll failed:', err);
+                    }
+                };
+            } catch (err) {
+                // Fallback: Nur Code-Snippet zeigen
+                console.warn('Iframe marker failed:', err);
+            }
+        }
+    }
+    
     // Preview aktualisieren
     function updatePreview() {
         try {
