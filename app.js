@@ -1253,6 +1253,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Analysiere Tags
         const problems = analyzeUnclosedTags(currentReviewHtml);
         
+        // Update Badges
+        const problemsCountBadge = document.getElementById('problemsCountBadge');
+        const autoFixesCountBadge = document.getElementById('autoFixesCountBadge');
+        if (problemsCountBadge) problemsCountBadge.textContent = problems.length;
+        if (autoFixesCountBadge) autoFixesCountBadge.textContent = (processingResult.autoFixes || []).length;
+        
         // Zeige Probleme
         displayProblems(problems);
         
@@ -1411,7 +1417,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let html = '';
         problems.forEach((problem, index) => {
             html += `
-                <div class="problem-item">
+                <div class="problem-item" data-problem-index="${index}" data-snippet="${escapeHtml(problem.snippet)}">
                     <div class="problem-header">
                         <span class="problem-tag">&lt;${problem.tagType}&gt;</span>
                         <span class="problem-status">nicht geschlossen</span>
@@ -1438,9 +1444,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         tagProblemsList.innerHTML = html;
         
+        // Event-Listener für Item-Klick (Fokus)
+        document.querySelectorAll('.problem-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                // Entferne active von allen Items
+                document.querySelectorAll('.problem-item, .autofix-item').forEach(i => i.classList.remove('active'));
+                // Setze active auf geklicktes Item
+                item.classList.add('active');
+                // Zeige Snippet im Code-Preview
+                const snippet = item.getAttribute('data-snippet');
+                if (snippet) {
+                    const codePreviewContent = document.getElementById('codePreviewContent');
+                    if (codePreviewContent) {
+                        codePreviewContent.textContent = snippet;
+                    }
+                }
+            });
+        });
+        
         // Event-Listener für Buttons
         document.querySelectorAll('.btn-close-tag').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                e.stopPropagation();  // Verhindere Item-Klick
                 const tagType = e.target.getAttribute('data-tag');
                 closeTag(tagType);
             });
@@ -1448,6 +1473,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.querySelectorAll('.btn-ignore-tag').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                e.stopPropagation();  // Verhindere Item-Klick
                 const index = parseInt(e.target.getAttribute('data-index'));
                 const tagType = e.target.closest('.problem-item').querySelector('.problem-tag').textContent.replace(/[<>]/g, '');
                 ignoreTag(index, tagType, e.target.closest('.problem-item'));
@@ -1466,8 +1492,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let html = '';
         autoFixes.forEach((autoFix, index) => {
+            const snippetText = autoFix.snippetBefore + autoFix.inserted;
             html += `
-                <div class="problem-item autofix-item" data-autofix-id="${autoFix.id}">
+                <div class="problem-item autofix-item" data-autofix-id="${autoFix.id}" data-snippet="${escapeHtml(snippetText)}">
                     <div class="problem-header">
                         <span class="problem-tag">${autoFix.inserted}</span>
                         <span class="problem-status" style="background: #4caf50;">Auto-Closing eingefügt</span>
@@ -1496,9 +1523,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         autoFixesList.innerHTML = html;
         
+        // Event-Listener für Item-Klick (Fokus)
+        document.querySelectorAll('.autofix-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                // Entferne active von allen Items
+                document.querySelectorAll('.problem-item, .autofix-item').forEach(i => i.classList.remove('active'));
+                // Setze active auf geklicktes Item
+                item.classList.add('active');
+                // Zeige Snippet im Code-Preview
+                const snippet = item.getAttribute('data-snippet');
+                if (snippet) {
+                    const codePreviewContent = document.getElementById('codePreviewContent');
+                    if (codePreviewContent) {
+                        codePreviewContent.textContent = snippet;
+                    }
+                }
+            });
+        });
+        
         // Event-Listener für Buttons
         document.querySelectorAll('.btn-undo-autofix').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                e.stopPropagation();  // Verhindere Item-Klick
                 const index = parseInt(e.target.getAttribute('data-autofix-index'));
                 undoAutoFix(autoFixes[index], e.target.closest('.autofix-item'));
             });
@@ -1506,6 +1552,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.querySelectorAll('.btn-accept-autofix').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                e.stopPropagation();  // Verhindere Item-Klick
                 const index = parseInt(e.target.getAttribute('data-autofix-index'));
                 acceptAutoFix(e.target.closest('.autofix-item'));
             });

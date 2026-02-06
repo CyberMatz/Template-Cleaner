@@ -547,8 +547,8 @@ footer {
 .tag-review-modal-content {
     background: white;
     border-radius: 12px;
-    width: min(90vw, 1400px);  /* 90vw, max 1400px */
-    height: 85vh;              /* 85vh */
+    width: min(95vw, 1600px);  /* 95vw, max 1600px */
+    height: 92vh;              /* 92vh */
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -580,7 +580,7 @@ footer {
 
 .tag-review-container {
     display: grid;
-    grid-template-columns: 1fr 1.5fr;
+    grid-template-columns: 38% 62%;  /* 38% links, 62% rechts */
     gap: 0;
     overflow: hidden;
     flex: 1;
@@ -588,12 +588,11 @@ footer {
 }
 
 .tag-review-problems {
-    width: 40%;  /* 40% Breite */
     display: flex;
     flex-direction: column;
     border-right: 2px solid #e0e0e0;
     overflow-y: auto;  /* scrollable */
-    padding: 20px;
+    padding: 0;  /* Padding wird in Sektionen gesetzt */
     background: #fafafa;
 }
 
@@ -737,12 +736,11 @@ footer {
 }
 
 .tag-review-preview {
-    width: 60%;  /* 60% Breite */
     display: flex;
     flex-direction: column;
     overflow-y: auto;  /* scrollable */
     background: white;
-    padding: 20px;
+    padding: 0;  /* Padding wird in Sektionen gesetzt */
 }
 
 .tag-review-preview h3 {
@@ -798,7 +796,7 @@ footer {
 
 .web-preview-frame {
     width: 100%;
-    min-height: 500px;  /* Mindestens 500px Höhe */
+    min-height: 700px;  /* Mindestens 700px Höhe */
     height: 100%;
     border: none;
     background: white;
@@ -989,4 +987,244 @@ footer {
 
 .btn-commit .btn-icon {
     font-size: 18px;
+}
+
+/* Sticky Header in linker Spalte */
+.problems-header {
+    position: sticky;
+    top: 0;
+    background: white;
+    border-bottom: 2px solid #e0e0e0;
+    padding: 20px;
+    z-index: 10;
+}
+
+.problems-header-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.problems-header-item h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #333;
+}
+
+.count-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    min-width: 30px;
+    text-align: center;
+}
+
+.problems-header .manual-actions-counter {
+    margin: 15px 0 0 0;
+    padding: 10px 15px;
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    color: #1976d2;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+/* Scrollable Content in linker Spalte */
+.problems-content {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0 20px 20px 20px;
+}
+
+.problems-section {
+    margin-bottom: 30px;
+}
+
+.section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #555;
+    margin: 0 0 15px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+/* Karten-Layout für Items */
+.problem-item {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 15px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.problem-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.25);
+    transform: translateY(-2px);
+}
+
+.problem-item.active {
+    border-color: #667eea;
+    background: #f0f2ff;
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.35);
+}
+
+.problem-tag {
+    font-family: 'Courier New', monospace;
+    background: #f44336;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.problem-details {
+    margin: 12px 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: #555;
+}
+
+.problem-snippet {
+    background: #f5f5f5;
+    border-left: 4px solid #ff9800;
+    padding: 12px;
+    margin: 12px 0;
+    overflow-x: auto;
+    border-radius: 4px;
+}
+
+.problem-snippet pre {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+}
+
+.problem-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.btn-close-tag,
+.btn-ignore-tag,
+.btn-keep-fix,
+.btn-undo-fix {
+    flex: 1;
+    border: none;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-close-tag {
+    background: #4caf50;
+    color: white;
+}
+
+.btn-close-tag:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(76, 175, 80, 0.3);
+}
+
+.btn-ignore-tag {
+    background: #9e9e9e;
+    color: white;
+}
+
+.btn-ignore-tag:hover {
+    background: #757575;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(158, 158, 158, 0.3);
+}
+
+.btn-keep-fix {
+    background: #4caf50;
+    color: white;
+}
+
+.btn-keep-fix:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(76, 175, 80, 0.3);
+}
+
+.btn-undo-fix {
+    background: #ff9800;
+    color: white;
+}
+
+.btn-undo-fix:hover {
+    background: #f57c00;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(255, 152, 0, 0.3);
+}
+
+/* Sticky Header in rechter Spalte */
+.preview-header {
+    position: sticky;
+    top: 0;
+    background: white;
+    border-bottom: 2px solid #e0e0e0;
+    padding: 20px;
+    z-index: 10;
+}
+
+.preview-header h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.preview-header .preview-disclaimer {
+    margin: 0;
+}
+
+/* Preview Content */
+.preview-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* Footer-Leiste */
+.tag-review-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 16px 30px;
+    border-top: 2px solid #e0e0e0;
+    background: #fafafa;
+}
+
+.tag-review-footer .btn-undo {
+    flex: 1;
+    max-width: 400px;
+    margin: 0;
+    padding: 14px 24px;
+    font-size: 1rem;
+}
+
+.tag-review-footer .btn-commit {
+    flex: 1;
+    max-width: 400px;
+    margin: 0;
+    padding: 14px 24px;
+    font-size: 1rem;
 }
