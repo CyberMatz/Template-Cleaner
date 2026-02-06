@@ -1268,6 +1268,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updatePreview();
         
+        // Debug: Prüfe Button-Status
+        console.log('[DEBUG] Modal wird geöffnet');
+        console.log('[DEBUG] undoLastAction Button:', undoLastAction);
+        console.log('[DEBUG] undoLastAction.disabled:', undoLastAction ? undoLastAction.disabled : 'NULL');
+        console.log('[DEBUG] commitReviewChanges Button:', document.getElementById('commitReviewChanges'));
+        console.log('[DEBUG] commitReviewChanges.disabled:', document.getElementById('commitReviewChanges') ? document.getElementById('commitReviewChanges').disabled : 'NULL');
+        
         // Öffne Modal
         tagReviewModal.style.display = 'flex';
     });
@@ -1285,24 +1292,39 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Änderungen übernehmen Button
     const commitReviewChangesBtn = document.getElementById('commitReviewChanges');
-    commitReviewChangesBtn.addEventListener('click', () => {
-        // Übernehme currentReviewHtml in processingResult
-        processingResult.optimizedHtml = currentReviewHtml;
-        
-        // Zeige Bestätigung
-        const hint = document.getElementById('reviewHint');
-        hint.textContent = '✅ Übernommen. Downloads nutzen jetzt den neuen Stand.';
-        hint.style.display = 'block';
-        hint.style.backgroundColor = '#e8f5e9';
-        hint.style.color = '#2e7d32';
-        
-        setTimeout(() => {
-            hint.style.display = 'none';
-        }, 3000);
-        
-        // Button deaktivieren bis zur nächsten Änderung
-        commitReviewChangesBtn.disabled = true;
-    });
+    if (commitReviewChangesBtn) {
+        console.log('[DEBUG] commitReviewChanges Button gefunden, Event-Listener wird gebunden');
+        commitReviewChangesBtn.addEventListener('click', () => {
+            console.log('[DEBUG] commitReviewChanges Button geklickt!');
+            console.log('[DEBUG] processingResult:', processingResult);
+            console.log('[DEBUG] currentReviewHtml Länge:', currentReviewHtml ? currentReviewHtml.length : 'NULL');
+            
+            // Übernehme currentReviewHtml in processingResult
+            processingResult.optimizedHtml = currentReviewHtml;
+            
+            // Zeige Bestätigung
+            const hint = document.getElementById('reviewHint');
+            if (hint) {
+                hint.textContent = '✅ Übernommen. Downloads nutzen jetzt den neuen Stand.';
+                hint.style.display = 'block';
+                hint.style.backgroundColor = '#e8f5e9';
+                hint.style.color = '#2e7d32';
+                
+                setTimeout(() => {
+                    hint.style.display = 'none';
+                }, 3000);
+            } else {
+                console.warn('[DEBUG] reviewHint Element nicht gefunden');
+                alert('✅ Übernommen. Downloads nutzen jetzt den neuen Stand.');
+            }
+            
+            // Button deaktivieren bis zur nächsten Änderung
+            commitReviewChangesBtn.disabled = true;
+            console.log('[DEBUG] commitReviewChanges Button deaktiviert');
+        });
+    } else {
+        console.error('[DEBUG] commitReviewChanges Button NICHT gefunden!');
+    }
 
     // Preview-Tabs
     showWebPreview.addEventListener('click', () => {
@@ -1320,28 +1342,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Undo
-    undoLastAction.addEventListener('click', () => {
-        if (tagReviewHistory.length > 0) {
-            // Letzten State wiederherstellen
-            currentReviewHtml = tagReviewHistory.pop();
+    if (undoLastAction) {
+        console.log('[DEBUG] undoLastAction Button gefunden, Event-Listener wird gebunden');
+        undoLastAction.addEventListener('click', () => {
+            console.log('[DEBUG] undoLastAction Button geklickt!');
+            console.log('[DEBUG] tagReviewHistory.length:', tagReviewHistory.length);
             
-            // Letzten Log-Eintrag entfernen
-            manualActionLog.pop();
-            
-            // Neu analysieren
-            const problems = analyzeUnclosedTags(currentReviewHtml);
-            displayProblems(problems);
-            
-            // Preview aktualisieren
-            updatePreview();
-            
-            // Snippet verstecken
-            changeSnippet.style.display = 'none';
-            
-            // Undo-Button deaktivieren wenn keine History mehr
-            undoLastAction.disabled = tagReviewHistory.length === 0;
-        }
-    });
+            if (tagReviewHistory.length > 0) {
+                // Letzten State wiederherstellen
+                const previousState = tagReviewHistory.pop();
+                console.log('[DEBUG] Wiederhergestellter State:', previousState);
+                
+                // Wenn State ein Objekt mit html ist, extrahiere html
+                if (previousState && typeof previousState === 'object' && previousState.html) {
+                    currentReviewHtml = previousState.html;
+                } else {
+                    currentReviewHtml = previousState;
+                }
+                
+                // Letzten Log-Eintrag entfernen
+                manualActionLog.pop();
+                
+                // Neu analysieren
+                const problems = analyzeUnclosedTags(currentReviewHtml);
+                displayProblems(problems);
+                
+                // Preview aktualisieren
+                updatePreview();
+                
+                // Snippet verstecken
+                const changeSnippet = document.getElementById('changeSnippet');
+                if (changeSnippet) {
+                    changeSnippet.style.display = 'none';
+                }
+                
+                // Update Aktions-Counter
+                updateActionCounter();
+                
+                // Undo-Button deaktivieren wenn keine History mehr
+                undoLastAction.disabled = tagReviewHistory.length === 0;
+                console.log('[DEBUG] Undo abgeschlossen, History.length:', tagReviewHistory.length);
+            } else {
+                console.warn('[DEBUG] Keine History vorhanden!');
+            }
+        });
+    } else {
+        console.error('[DEBUG] undoLastAction Button NICHT gefunden!');
+    }
 
     // Tag-Analyse Funktion
     function analyzeUnclosedTags(html) {
@@ -1810,6 +1857,79 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // HTML Beautifier (nur für Anzeige, ändert NICHT currentReviewHtml)
+    function formatHtmlForDisplay(htmlString) {
+        if (!htmlString) return '';
+        
+        // Konstanten
+        const INDENT = '  '; // 2 Spaces
+        const selfClosingTags = ['br', 'hr', 'img', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source', 'track', 'wbr'];
+        const inlineTags = ['a', 'span', 'strong', 'b', 'i', 'em', 'u', 'small', 'code'];
+        
+        let formatted = '';
+        let indentLevel = 0;
+        let inTag = false;
+        let currentTag = '';
+        let tagContent = '';
+        let lastWasClosingTag = false;
+        
+        for (let i = 0; i < htmlString.length; i++) {
+            const char = htmlString[i];
+            
+            if (char === '<') {
+                // Tag beginnt
+                inTag = true;
+                currentTag = '';
+                tagContent = char;
+            } else if (char === '>' && inTag) {
+                // Tag endet
+                tagContent += char;
+                inTag = false;
+                
+                // Extrahiere Tag-Name
+                const tagMatch = tagContent.match(/<\/?([a-zA-Z0-9]+)/);
+                const tagName = tagMatch ? tagMatch[1].toLowerCase() : '';
+                const isClosingTag = tagContent.startsWith('</');
+                const isSelfClosing = selfClosingTags.includes(tagName) || tagContent.endsWith('/>');
+                const isInline = inlineTags.includes(tagName);
+                
+                // Einrückung anpassen
+                if (isClosingTag) {
+                    indentLevel = Math.max(0, indentLevel - 1);
+                }
+                
+                // Neue Zeile vor Tag (außer inline oder nach closing tag)
+                if (!isInline && (formatted.length > 0 && !lastWasClosingTag)) {
+                    formatted += '\n' + INDENT.repeat(indentLevel);
+                } else if (isClosingTag && !isInline) {
+                    formatted += '\n' + INDENT.repeat(indentLevel);
+                }
+                
+                formatted += tagContent;
+                
+                // Einrückung erhöhen für nächstes Element
+                if (!isClosingTag && !isSelfClosing && !isInline) {
+                    indentLevel++;
+                }
+                
+                lastWasClosingTag = isClosingTag;
+                tagContent = '';
+            } else if (inTag) {
+                // Innerhalb eines Tags
+                tagContent += char;
+            } else {
+                // Text-Inhalt (außerhalb von Tags)
+                const trimmed = char.trim();
+                if (trimmed) {
+                    formatted += char;
+                    lastWasClosingTag = false;
+                }
+            }
+        }
+        
+        return formatted.trim();
+    }
+    
     // Jump to location in preview
     function jumpToLocation(insertPosition, snippet) {
         // 1. Wechsel automatisch zu Code-Snippet Tab
@@ -1833,13 +1953,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const beforeInsert = currentReviewHtml.substring(startPos, insertPosition);
             const afterInsert = currentReviewHtml.substring(insertPosition, endPos);
             
-            // 3. Markiere Einfügestelle mit >>> INSERT HERE <<<
-            const highlightedSnippet = 
-                beforeInsert + 
-                '\n>>> INSERT HERE <<<\n' + 
-                afterInsert;
+            // 3. Formatiere Ausschnitt für bessere Lesbarkeit
+            const snippetToFormat = beforeInsert + afterInsert;
+            const formattedSnippet = formatHtmlForDisplay(snippetToFormat);
             
-            // 4. Zeige im Code-Preview
+            // 4. Markiere Einfügestelle mit >>> INSERT HERE <<<
+            // Finde die Position im formatierten Snippet
+            const formattedBeforeLength = formatHtmlForDisplay(beforeInsert).length;
+            const highlightedSnippet = 
+                formattedSnippet.substring(0, formattedBeforeLength) + 
+                '\n>>> INSERT HERE <<<\n' + 
+                formattedSnippet.substring(formattedBeforeLength);
+            
+            // 5. Zeige im Code-Preview
             codePreviewContent.textContent = highlightedSnippet;
             
             // 5. Scrolle zu >>> INSERT HERE <<<
@@ -1910,19 +2036,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const showFullHtmlBtn = document.getElementById('showFullHtmlBtn');
             if (showFullHtmlBtn) {
                 showFullHtmlBtn.addEventListener('click', () => {
-                    codePreviewContent.innerHTML = '<pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 600px; overflow-y: auto; padding: 15px; background: #f5f5f5; border-radius: 4px;">' +
-                        escapeHtml(currentReviewHtml) +
-                        '</pre>' +
-                        '<button id="hideFullHtmlBtn" style="margin-top: 10px; padding: 10px 20px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
-                        '✖️ Schließen' +
-                        '</button>';
+                    // Default: Formatiert anzeigen
+                    let isFormatted = true;
                     
-                    const hideFullHtmlBtn = document.getElementById('hideFullHtmlBtn');
-                    if (hideFullHtmlBtn) {
-                        hideFullHtmlBtn.addEventListener('click', () => {
-                            updatePreview();
-                        });
+                    function renderHtml() {
+                        const htmlToShow = isFormatted ? formatHtmlForDisplay(currentReviewHtml) : currentReviewHtml;
+                        const toggleLabel = isFormatted ? '📝 Original anzeigen' : '✨ Formatiert anzeigen';
+                        
+                        codePreviewContent.innerHTML = 
+                            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">' +
+                            '<button id="toggleFormatBtn" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
+                            toggleLabel +
+                            '</button>' +
+                            '<button id="hideFullHtmlBtn" style="padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
+                            '✖️ Schließen' +
+                            '</button>' +
+                            '</div>' +
+                            '<pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 600px; overflow-y: auto; padding: 15px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 12px; line-height: 1.5;">' +
+                            escapeHtml(htmlToShow) +
+                            '</pre>';
+                        
+                        // Toggle-Button Event-Listener
+                        const toggleFormatBtn = document.getElementById('toggleFormatBtn');
+                        if (toggleFormatBtn) {
+                            toggleFormatBtn.addEventListener('click', () => {
+                                isFormatted = !isFormatted;
+                                renderHtml();
+                            });
+                        }
+                        
+                        // Schließen-Button Event-Listener
+                        const hideFullHtmlBtn = document.getElementById('hideFullHtmlBtn');
+                        if (hideFullHtmlBtn) {
+                            hideFullHtmlBtn.addEventListener('click', () => {
+                                updatePreview();
+                            });
+                        }
                     }
+                    
+                    renderHtml();
                 });
             }
         } catch (error) {
