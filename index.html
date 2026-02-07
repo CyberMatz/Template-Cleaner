@@ -92,6 +92,10 @@
                         <span class="btn-icon">🔍</span>
                         HTML-Tag-Review
                     </button>
+                    <button id="showAssetReviewBtn" class="btn-asset-review">
+                        <span class="btn-icon">🖼️</span>
+                        Asset und Tracking Review
+                    </button>
                 </div>
 
                 <div id="tagReviewHint" class="tag-review-hint" style="display: none;">
@@ -217,6 +221,102 @@
                     Letzte Änderung rückgängig machen
                 </button>
                 <button id="commitReviewChanges" class="btn-commit" disabled>
+                    <span class="btn-icon">✅</span>
+                    Änderungen übernehmen
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset-Review Modal -->
+    <div id="assetReviewModal" class="tag-review-modal" style="display: none;">
+        <div class="tag-review-modal-content">
+            <div class="tag-review-modal-header">
+                <h2>🖼️ Asset und Tracking Review</h2>
+                <button id="closeAssetReviewModal" class="close-modal">×</button>
+            </div>
+            <div class="tag-review-info">
+                ℹ️ Phase C: Manuelle Überprüfung und kontrolliertes Ersetzen von Assets und Tracking-Elementen.
+            </div>
+            <div class="tag-review-container">
+                <div class="tag-review-problems">
+                    <!-- Sticky Header -->
+                    <div class="problems-header">
+                        <div class="problems-header-item">
+                            <h3>📝 Asset und Tracking Review</h3>
+                        </div>
+                        <div id="assetActionsCounter" class="manual-actions-counter">
+                            Manuelle Aktionen: 0
+                        </div>
+                    </div>
+                    
+                    <!-- Scrollable Content -->
+                    <div class="problems-content">
+                        <!-- Preheader Section -->
+                        <div class="problems-section">
+                            <h4 class="section-title">📨 Preheader</h4>
+                            <div id="preheaderInfo" class="asset-info">
+                                <!-- Preheader Info wird hier dynamisch eingefügt -->
+                            </div>
+                        </div>
+                        
+                        <!-- Bilder Section -->
+                        <div class="problems-section">
+                            <h4 class="section-title">🖼️ Bilder</h4>
+                            <div id="imagesList" class="problems-list">
+                                <!-- Bilder werden hier dynamisch eingefügt -->
+                            </div>
+                        </div>
+                        
+                        <!-- Links Section -->
+                        <div class="problems-section">
+                            <h4 class="section-title">🔗 Links</h4>
+                            <div id="linksList" class="problems-list">
+                                <!-- Links werden hier dynamisch eingefügt -->
+                            </div>
+                        </div>
+                        
+                        <!-- Öffnerpixel/Tracking Section -->
+                        <div class="problems-section">
+                            <h4 class="section-title">📡 Öffnerpixel/Tracking</h4>
+                            <div id="trackingInfo" class="asset-info">
+                                <!-- Tracking Info wird hier dynamisch eingefügt -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tag-review-preview">
+                    <!-- Sticky Header -->
+                    <div class="preview-header">
+                        <h3>👁️ Vorschau</h3>
+                        <div class="preview-disclaimer">
+                            ⚠️ Web-Preview (nicht identisch mit Gmail/Outlook)
+                        </div>
+                        <div class="preview-tabs">
+                            <button id="showAssetWebPreview" class="preview-tab active">Web-Rendering</button>
+                            <button id="showAssetCodePreview" class="preview-tab">Code-Snippet</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Preview Content -->
+                    <div class="preview-content">
+                        <div id="assetWebPreviewContainer" class="preview-container">
+                            <iframe id="assetWebPreviewFrame" sandbox="allow-same-origin" class="web-preview-frame"></iframe>
+                        </div>
+                        <div id="assetCodePreviewContainer" class="preview-container" style="display: none;">
+                            <pre id="assetCodePreviewContent" class="code-preview-content"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer-Leiste mit Aktionen -->
+            <div class="tag-review-footer">
+                <button id="assetUndoBtn" class="btn-undo" disabled>
+                    <span class="btn-icon">↩️</span>
+                    Letzte Änderung rückgängig machen
+                </button>
+                <button id="assetCommitBtn" class="btn-commit" disabled>
                     <span class="btn-icon">✅</span>
                     Änderungen übernehmen
                 </button>

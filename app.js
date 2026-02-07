@@ -990,6 +990,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let uploadedFile = null;
     let processingResult = null;
+    
+    // ===== PHASE C: ASSET REVIEW STATE =====
+    let assetReviewOriginalHtml = null;
+    let assetReviewStagedHtml = null;
+    let assetReviewHistory = [];
+    let assetReviewActionLog = [];
+    let assetReviewDirty = false;
 
     // Datei-Upload
     fileInput.addEventListener('change', (e) => {
@@ -1039,6 +1046,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // Tag-Review Button aktivieren
             showTagReviewBtn.disabled = false;
             showTagReviewBtn.title = 'HTML-Tags manuell überprüfen und schließen';
+            
+            // Asset-Review Button aktivieren
+            showAssetReviewBtn.disabled = false;
+            showAssetReviewBtn.title = 'Assets und Tracking manuell überprüfen';
 
             // Scroll zu Ergebnissen
             resultsSection.scrollIntoView({ behavior: 'smooth' });
@@ -2083,6 +2094,553 @@ document.addEventListener('DOMContentLoaded', () => {
             showCodePreview.click();
             webPreviewContainer.innerHTML = '<div class="preview-error">⚠️ Web-Rendering fehlgeschlagen. Code-Preview wird angezeigt.</div>';
         }
+    }
+    
+    // ===== PHASE C: ASSET REVIEW FEATURE =====
+    const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');
+    const assetReviewModal = document.getElementById('assetReviewModal');
+    const closeAssetReviewModal = document.getElementById('closeAssetReviewModal');
+    const assetUndoBtn = document.getElementById('assetUndoBtn');
+    const assetCommitBtn = document.getElementById('assetCommitBtn');
+    const assetWebPreviewFrame = document.getElementById('assetWebPreviewFrame');
+    const assetCodePreviewContent = document.getElementById('assetCodePreviewContent');
+    const showAssetWebPreview = document.getElementById('showAssetWebPreview');
+    const showAssetCodePreview = document.getElementById('showAssetCodePreview');
+    const assetWebPreviewContainer = document.getElementById('assetWebPreviewContainer');
+    const assetCodePreviewContainer = document.getElementById('assetCodePreviewContainer');
+    const assetActionsCounter = document.getElementById('assetActionsCounter');
+    
+    // Sections
+    const preheaderInfo = document.getElementById('preheaderInfo');
+    const imagesList = document.getElementById('imagesList');
+    const linksList = document.getElementById('linksList');
+    const trackingInfo = document.getElementById('trackingInfo');
+    
+    // Button initial deaktivieren
+    showAssetReviewBtn.disabled = true;
+    showAssetReviewBtn.title = 'Erst Template verarbeiten';
+    
+    // Asset-Review öffnen
+    showAssetReviewBtn.addEventListener('click', () => {
+        if (!processingResult) {
+            alert('⚠️ Bitte erst Template verarbeiten.');
+            return;
+        }
+        
+        // Reset State
+        assetReviewOriginalHtml = processingResult.optimizedHtml;
+        assetReviewStagedHtml = processingResult.optimizedHtml;
+        assetReviewHistory = [];
+        assetReviewActionLog = [];
+        assetReviewDirty = false;
+        
+        // Buttons zurücksetzen
+        assetUndoBtn.disabled = true;
+        assetCommitBtn.disabled = true;
+        
+        // Counter zurücksetzen
+        updateAssetActionsCounter();
+        
+        // Analysiere und zeige Assets
+        analyzeAndDisplayAssets();
+        
+        // Update Preview
+        updateAssetPreview();
+        
+        // Öffne Modal
+        assetReviewModal.style.display = 'flex';
+    });
+    
+    // Modal schließen
+    closeAssetReviewModal.addEventListener('click', () => {
+        // Warnung wenn uncommitted changes
+        if (assetReviewDirty) {
+            const confirm = window.confirm('⚠️ Es gibt nicht übernommene Änderungen. Wirklich schließen?');
+            if (!confirm) return;
+            
+            // Sauberes Verwerfen: Reset staged state
+            assetReviewStagedHtml = processingResult.optimizedHtml;
+            assetReviewHistory = [];
+            assetReviewActionLog = [];
+            assetReviewDirty = false;
+            
+            // Buttons zurücksetzen
+            assetUndoBtn.disabled = true;
+            assetCommitBtn.disabled = true;
+            
+            // Counter zurücksetzen
+            updateAssetActionsCounter();
+            
+            console.log('[ASSET] Staged changes discarded');
+        }
+        assetReviewModal.style.display = 'none';
+    });
+    
+    // Overlay-Klick zum Schließen
+    assetReviewModal.addEventListener('click', (e) => {
+        if (e.target === assetReviewModal) {
+            closeAssetReviewModal.click();
+        }
+    });
+    
+    // Preview-Tabs
+    showAssetWebPreview.addEventListener('click', () => {
+        showAssetWebPreview.classList.add('active');
+        showAssetCodePreview.classList.remove('active');
+        assetWebPreviewContainer.style.display = 'block';
+        assetCodePreviewContainer.style.display = 'none';
+    });
+    
+    showAssetCodePreview.addEventListener('click', () => {
+        showAssetCodePreview.classList.add('active');
+        showAssetWebPreview.classList.remove('active');
+        assetCodePreviewContainer.style.display = 'block';
+        assetWebPreviewContainer.style.display = 'none';
+    });
+    
+    // Update Aktions-Counter
+    function updateAssetActionsCounter() {
+        if (assetActionsCounter) {
+            assetActionsCounter.textContent = `Manuelle Aktionen: ${assetReviewActionLog.length}`;
+        }
+    }
+    
+    // Update Preview
+    function updateAssetPreview() {
+        try {
+            // Web-Preview (iframe mit sandbox)
+            assetWebPreviewFrame.srcdoc = assetReviewStagedHtml;
+            
+            // Code-Preview: Formatiert anzeigen
+            assetCodePreviewContent.textContent = formatHtmlForDisplay(assetReviewStagedHtml);
+        } catch (error) {
+            console.error('Asset Preview rendering failed:', error);
+            assetWebPreviewContainer.innerHTML = '<div class="preview-error">⚠️ Web-Rendering fehlgeschlagen.</div>';
+        }
+    }
+    
+    // Analysiere und zeige Assets
+    function analyzeAndDisplayAssets() {
+        // Preheader prüfen
+        displayPreheaderInfo();
+        
+        // Bilder auflisten
+        displayImages();
+        
+        // Links auflisten
+        displayLinks();
+        
+        // Tracking/Öffnerpixel anzeigen
+        displayTrackingInfo();
+    }
+    
+    // Preheader Info anzeigen (nur Check, keine Auto-Fixes)
+    function displayPreheaderInfo() {
+        // Zähle %preheader% Vorkommen
+        const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
+        
+        // Zähle Preheader Divs mit display:none
+        const preheaderDivRegex = /<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/gi;
+        const preheaderDivMatches = assetReviewStagedHtml.match(preheaderDivRegex) || [];
+        const preheaderDivCount = preheaderDivMatches.length;
+        
+        let statusText = '';
+        let statusClass = '';
+        
+        if (preheaderPlaceholderCount === 0 && preheaderDivCount === 0) {
+            statusText = '✅ Kein Preheader gefunden (optional, ok)';
+            statusClass = 'status-ok';
+        } else if (preheaderPlaceholderCount === 1 || preheaderDivCount === 1) {
+            statusText = `✅ Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
+            statusClass = 'status-ok';
+        } else {
+            statusText = `⚠️ Mehrere Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
+            statusClass = 'status-warn';
+        }
+        
+        preheaderInfo.innerHTML = `<div class="${statusClass}">${statusText}</div>`;
+    }
+    
+    // Bilder auflisten
+    function displayImages() {
+        const imgRegex = /<img[^>]*>/gi;
+        const imgMatches = assetReviewStagedHtml.match(imgRegex) || [];
+        
+        if (imgMatches.length === 0) {
+            imagesList.innerHTML = '<div class="no-items">ℹ️ Keine Bilder gefunden</div>';
+            return;
+        }
+        
+        let html = '';
+        imgMatches.forEach((imgTag, index) => {
+            const srcMatch = imgTag.match(/src=["']([^"']*)["']/i);
+            const src = srcMatch ? srcMatch[1] : '(kein src)';
+            
+            // Position im HTML finden
+            const position = assetReviewStagedHtml.indexOf(imgTag);
+            
+            // Snippet rund um das img Tag
+            const contextLength = 100;
+            const startPos = Math.max(0, position - contextLength);
+            const endPos = Math.min(assetReviewStagedHtml.length, position + imgTag.length + contextLength);
+            const snippet = assetReviewStagedHtml.substring(startPos, endPos);
+            
+            html += `
+                <div class="asset-item" data-index="${index}" data-position="${position}" data-type="img" data-value="${escapeHtml(src).replace(/"/g, '&quot;')}">
+                    <div class="asset-header">
+                        <strong>IMG ${index + 1}</strong>
+                        <button class="btn-replace" onclick="event.stopPropagation(); replaceImageSrc(${index}, ${position}, '${escapeHtml(src).replace(/'/g, "\\'")}')">Pfad ersetzen</button>
+                    </div>
+                    <div class="asset-src">🔗 ${escapeHtml(src)}</div>
+                    <div class="asset-snippet"><code>${escapeHtml(snippet)}</code></div>
+                </div>
+            `;
+        });
+        
+        imagesList.innerHTML = html;
+        
+        // Item-Klick-Handler hinzufügen
+        imagesList.querySelectorAll('.asset-item').forEach(item => {
+            item.addEventListener('click', handleAssetItemClick);
+        });
+    }
+    
+    // Links auflisten
+    function displayLinks() {
+        const linkRegex = /<a[^>]*href=["']([^"']*)["'][^>]*>/gi;
+        const linkMatches = [...assetReviewStagedHtml.matchAll(linkRegex)];
+        
+        if (linkMatches.length === 0) {
+            linksList.innerHTML = '<div class="no-items">ℹ️ Keine Links gefunden</div>';
+            return;
+        }
+        
+        let html = '';
+        linkMatches.forEach((match, index) => {
+            const href = match[1];
+            const fullTag = match[0];
+            const position = match.index;
+            
+            // Snippet rund um den Link
+            const contextLength = 100;
+            const startPos = Math.max(0, position - contextLength);
+            const endPos = Math.min(assetReviewStagedHtml.length, position + fullTag.length + contextLength);
+            const snippet = assetReviewStagedHtml.substring(startPos, endPos);
+            
+            html += `
+                <div class="asset-item" data-index="${index}" data-position="${position}" data-type="link" data-value="${escapeHtml(href).replace(/"/g, '&quot;')}">
+                    <div class="asset-header">
+                        <strong>LINK ${index + 1}</strong>
+                        <button class="btn-replace" onclick="event.stopPropagation(); replaceLinkHref(${index}, ${position}, '${escapeHtml(href).replace(/'/g, "\\'")}')">Link ersetzen</button>
+                    </div>
+                    <div class="asset-src">🔗 ${escapeHtml(href)}</div>
+                    <div class="asset-snippet"><code>${escapeHtml(snippet)}</code></div>
+                </div>
+            `;
+        });
+        
+        linksList.innerHTML = html;
+        
+        // Item-Klick-Handler hinzufügen
+        linksList.querySelectorAll('.asset-item').forEach(item => {
+            item.addEventListener('click', handleAssetItemClick);
+        });
+    }
+    
+    // Item-Klick-Handler: Jump-to-Fokus + Code-Snippet + Web-Preview Scroll
+    function handleAssetItemClick(event) {
+        // Verhindere Propagation wenn Button geklickt wurde
+        if (event.target.classList.contains('btn-replace')) return;
+        
+        const item = event.currentTarget;
+        const position = parseInt(item.dataset.position);
+        const type = item.dataset.type;
+        const value = item.dataset.value;
+        
+        console.log(`[ASSET] Item clicked: type=${type}, value=${value}, position=${position}`);
+        
+        // 1. Aktiviere Code-Tab
+        showAssetCodePreview.classList.add('active');
+        showAssetWebPreview.classList.remove('active');
+        assetCodePreviewContainer.style.display = 'block';
+        assetWebPreviewContainer.style.display = 'none';
+        
+        // 2. Erzeuge Snippet ±10 Zeilen rund um Position
+        const lines = assetReviewStagedHtml.split('\n');
+        let currentPos = 0;
+        let targetLine = -1;
+        
+        // Finde Zeile mit der Position
+        for (let i = 0; i < lines.length; i++) {
+            const lineLength = lines[i].length + 1; // +1 für \n
+            if (currentPos <= position && position < currentPos + lineLength) {
+                targetLine = i;
+                break;
+            }
+            currentPos += lineLength;
+        }
+        
+        if (targetLine === -1) {
+            console.warn('[ASSET] Target line not found');
+            return;
+        }
+        
+        // Snippet ±10 Zeilen
+        const startLine = Math.max(0, targetLine - 10);
+        const endLine = Math.min(lines.length, targetLine + 11);
+        const snippetLines = lines.slice(startLine, endLine);
+        
+        // Markiere die Zeile mit dem Wert
+        const highlightedSnippet = snippetLines.map((line, idx) => {
+            const lineNum = startLine + idx + 1;
+            const isTargetLine = (startLine + idx) === targetLine;
+            
+            // Wenn es die Zielzeile ist, markiere den Wert
+            if (isTargetLine && line.includes(value)) {
+                // Ersetze den Wert mit <span class="hit">...</span>
+                const escapedLine = escapeHtml(line);
+                const escapedValue = escapeHtml(value);
+                const highlightedLine = escapedLine.replace(
+                    new RegExp(escapedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                    `<span class="hit">${escapedValue}</span>`
+                );
+                return `<span class="line-num">${lineNum}</span>${highlightedLine}`;
+            } else {
+                return `<span class="line-num">${lineNum}</span>${escapeHtml(line)}`;
+            }
+        }).join('\n');
+        
+        // 3. Zeige Snippet im Code-Preview
+        assetCodePreviewContent.innerHTML = highlightedSnippet;
+        
+        // 4. Scroll im Code-Preview zur Mitte
+        const hitElement = assetCodePreviewContent.querySelector('.hit');
+        if (hitElement) {
+            hitElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+        
+        // 5. Web-Preview Scroll-to-Element (im Hintergrund)
+        scrollToAssetInWebPreview(type, value);
+    }
+    
+    // Web-Preview Scroll-to-Element
+    function scrollToAssetInWebPreview(type, value) {
+        try {
+            // Warte auf iframe load
+            if (!assetWebPreviewFrame.contentDocument) {
+                console.warn('[ASSET] iframe contentDocument not accessible');
+                return;
+            }
+            
+            let selector = '';
+            if (type === 'img') {
+                selector = `img[src="${value.replace(/"/g, '\\"')}"]`;
+            } else if (type === 'link') {
+                selector = `a[href="${value.replace(/"/g, '\\"')}"]`;
+            }
+            
+            if (!selector) return;
+            
+            const element = assetWebPreviewFrame.contentDocument.querySelector(selector);
+            if (element) {
+                element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                console.log(`[ASSET] Scrolled to ${type} in web preview`);
+            } else {
+                console.log(`[ASSET] Element not found in web preview: ${selector}`);
+            }
+        } catch (error) {
+            // Still und leise ignorieren
+            console.log(`[ASSET] Web preview scroll failed (expected): ${error.message}`);
+        }
+    }
+    
+    // Tracking/Öffnerpixel anzeigen (read-only)
+    function displayTrackingInfo() {
+        // Suche nach 1x1 Pixel img oder typischen Pixel-Mustern
+        const pixelRegex = /<img[^>]*(?:width=["']1["']|height=["']1["'])[^>]*>/gi;
+        const pixelMatches = assetReviewStagedHtml.match(pixelRegex) || [];
+        
+        if (pixelMatches.length === 0) {
+            trackingInfo.innerHTML = '<div class="status-info">ℹ️ Kein Öffnerpixel gefunden</div>';
+        } else {
+            let html = `<div class="status-ok">✅ ${pixelMatches.length} Öffnerpixel gefunden</div>`;
+            pixelMatches.forEach((pixel, index) => {
+                html += `<div class="asset-snippet"><strong>Pixel ${index + 1}:</strong><br><code>${escapeHtml(pixel)}</code></div>`;
+            });
+            trackingInfo.innerHTML = html;
+        }
+    }
+    
+    // Undo letzte Änderung
+    assetUndoBtn.addEventListener('click', () => {
+        if (assetReviewHistory.length === 0) {
+            console.warn('[ASSET] Keine History vorhanden');
+            return;
+        }
+        
+        // Letzten State wiederherstellen
+        assetReviewStagedHtml = assetReviewHistory.pop();
+        
+        // Letzten Log-Eintrag entfernen
+        assetReviewActionLog.pop();
+        
+        // Neu analysieren
+        analyzeAndDisplayAssets();
+        
+        // Preview aktualisieren
+        updateAssetPreview();
+        
+        // Counter aktualisieren
+        updateAssetActionsCounter();
+        
+        // Undo-Button deaktivieren wenn keine History mehr
+        assetUndoBtn.disabled = assetReviewHistory.length === 0;
+        
+        // Dirty-Flag prüfen
+        assetReviewDirty = assetReviewActionLog.length > 0;
+        assetCommitBtn.disabled = !assetReviewDirty;
+    });
+    
+    // Änderungen übernehmen (Commit)
+    assetCommitBtn.addEventListener('click', () => {
+        if (!assetReviewDirty) {
+            console.warn('[ASSET] Keine Änderungen zum Committen');
+            return;
+        }
+        
+        // Commit: processingResult.optimizedHtml aktualisieren
+        processingResult.optimizedHtml = assetReviewStagedHtml;
+        
+        // Erweitere Report mit Phase C Informationen
+        extendReportWithPhaseC();
+        
+        // Bestätigung
+        alert('✅ Änderungen übernommen. Downloads nutzen jetzt den neuen Stand.');
+        
+        // Reset dirty flag
+        assetReviewDirty = false;
+        assetCommitBtn.disabled = true;
+        
+        // Original aktualisieren
+        assetReviewOriginalHtml = assetReviewStagedHtml;
+    });
+    
+    // Globale Funktionen für Bild- und Link-Ersetzung (müssen global sein wegen onclick)
+    window.replaceImageSrc = function(index, position, oldSrc) {
+        const newSrc = prompt(`🖼️ Neuen Bildpfad eingeben:\n\nAktuell: ${oldSrc}`, oldSrc);
+        if (!newSrc || newSrc === oldSrc) return;
+        
+        const confirm = window.confirm(`⚠️ Wirklich ersetzen?\n\nAlt: ${oldSrc}\nNeu: ${newSrc}`);
+        if (!confirm) return;
+        
+        // Push aktuellen State in History
+        assetReviewHistory.push(assetReviewStagedHtml);
+        
+        // Finde das exakte img Tag an dieser Position
+        const imgRegex = /<img[^>]*>/gi;
+        const imgMatches = [...assetReviewStagedHtml.matchAll(imgRegex)];
+        
+        if (imgMatches[index]) {
+            const imgTag = imgMatches[index][0];
+            const imgPosition = imgMatches[index].index;
+            
+            // Ersetze src im img Tag
+            const newImgTag = imgTag.replace(/src=["'][^"']*["']/i, `src="${newSrc}"`);
+            
+            // Ersetze nur dieses eine Vorkommen
+            assetReviewStagedHtml = 
+                assetReviewStagedHtml.substring(0, imgPosition) + 
+                newImgTag + 
+                assetReviewStagedHtml.substring(imgPosition + imgTag.length);
+            
+            // Logging
+            const logEntry = `IMG_SRC_REPLACED old="${oldSrc}" new="${newSrc}" at=${position}`;
+            assetReviewActionLog.push(logEntry);
+            
+            // Update UI
+            assetReviewDirty = true;
+            assetUndoBtn.disabled = false;
+            assetCommitBtn.disabled = false;
+            updateAssetActionsCounter();
+            analyzeAndDisplayAssets();
+            updateAssetPreview();
+        }
+    };
+    
+    window.replaceLinkHref = function(index, position, oldHref) {
+        const newHref = prompt(`🔗 Neuen Link eingeben:\n\nAktuell: ${oldHref}`, oldHref);
+        if (!newHref || newHref === oldHref) return;
+        
+        const confirm = window.confirm(`⚠️ Wirklich ersetzen?\n\nAlt: ${oldHref}\nNeu: ${newHref}`);
+        if (!confirm) return;
+        
+        // Push aktuellen State in History
+        assetReviewHistory.push(assetReviewStagedHtml);
+        
+        // Finde das exakte a Tag an dieser Position
+        const linkRegex = /<a[^>]*href=["']([^"']*)["'][^>]*>/gi;
+        const linkMatches = [...assetReviewStagedHtml.matchAll(linkRegex)];
+        
+        if (linkMatches[index]) {
+            const linkTag = linkMatches[index][0];
+            const linkPosition = linkMatches[index].index;
+            
+            // Ersetze href im a Tag
+            const newLinkTag = linkTag.replace(/href=["'][^"']*["']/i, `href="${newHref}"`);
+            
+            // Ersetze nur dieses eine Vorkommen
+            assetReviewStagedHtml = 
+                assetReviewStagedHtml.substring(0, linkPosition) + 
+                newLinkTag + 
+                assetReviewStagedHtml.substring(linkPosition + linkTag.length);
+            
+            // Logging
+            const logEntry = `LINK_HREF_REPLACED old="${oldHref}" new="${newHref}" at=${position}`;
+            assetReviewActionLog.push(logEntry);
+            
+            // Update UI
+            assetReviewDirty = true;
+            assetUndoBtn.disabled = false;
+            assetCommitBtn.disabled = false;
+            updateAssetActionsCounter();
+            analyzeAndDisplayAssets();
+            updateAssetPreview();
+        }
+    };
+    
+    // Erweitere Report mit Phase C Informationen
+    function extendReportWithPhaseC() {
+        if (!processingResult) return;
+        
+        // Zähle Preheader
+        const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
+        const preheaderDivRegex = /<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/gi;
+        const preheaderDivCount = (assetReviewStagedHtml.match(preheaderDivRegex) || []).length;
+        const totalPreheader = preheaderPlaceholderCount + preheaderDivCount;
+        
+        let phaseCReport = '\n\n===== PHASE C: ASSET REVIEW =====\n';
+        
+        // Preheader Status
+        if (totalPreheader === 0 || totalPreheader === 1) {
+            phaseCReport += 'PHASEC_PREHEADER_OK\n';
+        } else {
+            phaseCReport += `PHASEC_PREHEADER_WARN=COUNT_GT_1 (${totalPreheader})\n`;
+        }
+        
+        // Aktionen
+        phaseCReport += `ASSET_REVIEW_ACTIONS_COUNT=${assetReviewActionLog.length}\n`;
+        if (assetReviewActionLog.length > 0) {
+            phaseCReport += 'ASSET_REVIEW_ACTIONS:\n';
+            assetReviewActionLog.forEach(action => {
+                phaseCReport += `  ${action}\n`;
+            });
+        }
+        
+        // Erweitere bestehenden Report
+        processingResult.report += phaseCReport;
+        
+        // Update Report Preview
+        reportPreview.textContent = processingResult.report;
     }
 });
 
