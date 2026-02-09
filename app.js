@@ -1003,12 +1003,39 @@ document.addEventListener('DOMContentLoaded', () => {
     let assetPixels = [];
 
     // Datei-Upload
+    const uploadHint = document.getElementById('uploadHint');
+    
     fileInput.addEventListener('change', (e) => {
+        console.log('[UPLOAD] File input change event fired');
         const file = e.target.files[0];
         if (file) {
+            console.log(`[UPLOAD] File selected: ${file.name}`);
             uploadedFile = file;
             fileName.textContent = `📄 ${file.name}`;
-            processBtn.disabled = false;
+            
+            // Button aktivieren
+            if (processBtn) {
+                processBtn.disabled = false;
+                console.log('[UPLOAD] processBtn enabled');
+            } else {
+                console.error('[UPLOAD] processBtn not found!');
+            }
+            
+            // Hinweistext ausblenden
+            if (uploadHint) {
+                uploadHint.style.display = 'none';
+                console.log('[UPLOAD] uploadHint hidden');
+            }
+        } else {
+            console.log('[UPLOAD] No file selected');
+            if (processBtn) {
+                processBtn.disabled = true;
+            }
+            
+            // Hinweistext einblenden
+            if (uploadHint) {
+                uploadHint.style.display = 'block';
+            }
         }
     });
 
