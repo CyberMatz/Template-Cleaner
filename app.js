@@ -997,6 +997,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let assetReviewHistory = [];
     let assetReviewActionLog = [];
     let assetReviewDirty = false;
+    
+    // Globale Arrays für Match-Daten (rawTag + position)
+    let assetImages = [];
+    let assetPixels = [];
 
     // Datei-Upload
     fileInput.addEventListener('change', (e) => {
@@ -2264,35 +2268,75 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bilder auflisten
     function displayImages() {
         const imgRegex = /<img[^>]*>/gi;
-        const imgMatches = assetReviewStagedHtml.match(imgRegex) || [];
+        const imgMatchesRaw = [...assetReviewStagedHtml.matchAll(imgRegex)];
         
-        if (imgMatches.length === 0) {
+        // Globales Array neu aufbauen
+        assetImages = imgMatchesRaw.map((match, index) => {
+            const rawTag = match[0];
+            const position = match.index;
+            const srcMatch = rawTag.match(/src=["']([^"']*)["']/i);
+            const src = srcMatch ? srcMatch[1] : '(kein src)';
+            return { index, position, rawTag, src };
+        });
+        
+        if (assetImages.length === 0) {
             imagesList.innerHTML = '<div class="no-items">ℹ️ Keine Bilder gefunden</div>';
             return;
         }
         
         let html = '';
-        imgMatches.forEach((imgTag, index) => {
-            const srcMatch = imgTag.match(/src=["']([^"']*)["']/i);
-            const src = srcMatch ? srcMatch[1] : '(kein src)';
-            
-            // Position im HTML finden
-            const position = assetReviewStagedHtml.indexOf(imgTag);
+        assetImages.forEach(({ index, position, rawTag, src }) => {
             
             // Snippet rund um das img Tag
             const contextLength = 100;
             const startPos = Math.max(0, position - contextLength);
-            const endPos = Math.min(assetReviewStagedHtml.length, position + imgTag.length + contextLength);
+            const endPos = Math.min(assetReviewStagedHtml.length, position + rawTag.length + contextLength);
             const snippet = assetReviewStagedHtml.substring(startPos, endPos);
+            
+            // Defensive Prüfung: Ist dieses Bild bereits verlinkt?
+            const beforeImg = assetReviewStagedHtml.substring(Math.max(0, position - 200), position);
+            const afterImg = assetReviewStagedHtml.substring(position + rawTag.length, Math.min(assetReviewStagedHtml.length, position + rawTag.length + 200));
+            const isLinked = /<a[^>]*>\s*$/i.test(beforeImg) && /^\s*<\/a>/i.test(afterImg);
+            
+            const linkButtonHtml = isLinked 
+                ? '<button class="btn-link-disabled" disabled title="Bild ist bereits verlinkt">➥ Link um Bild legen</button>'
+                : `<button class="btn-link" onclick="event.stopPropagation(); toggleImageLinkPanel(${index})"><span>➥</span> Link um Bild legen</button>`;
             
             html += `
                 <div class="asset-item" data-index="${index}" data-position="${position}" data-type="img" data-value="${escapeHtml(src).replace(/"/g, '&quot;')}">
                     <div class="asset-header">
                         <strong>IMG ${index + 1}</strong>
-                        <button class="btn-replace" onclick="event.stopPropagation(); replaceImageSrc(${index}, ${position}, '${escapeHtml(src).replace(/'/g, "\\'")}')">Pfad ersetzen</button>
+                        <div class="asset-buttons">
+                            <button class="btn-replace" onclick="event.stopPropagation(); replaceImageSrc(${index})">Pfad ersetzen</button>
+                            ${linkButtonHtml}
+                        </div>
                     </div>
                     <div class="asset-src">🔗 ${escapeHtml(src)}</div>
                     <div class="asset-snippet"><code>${escapeHtml(snippet)}</code></div>
+                    
+                    <!-- Inline Link-Panel (initial versteckt) -->
+                    <div class="image-link-panel" id="imageLinkPanel${index}" style="display: none;">
+                        <div class="edit-panel-warning">
+                            ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Verlinkung nur auf explizite Anweisung.
+                        </div>
+                        
+                        <div class="edit-panel-field">
+                            <label>Ziel-URL:</label>
+                            <input type="text" id="imageLinkUrl${index}" placeholder="https://example.com/ziel">
+                        </div>
+                        
+                        <div class="edit-panel-field">
+                            <label>
+                                <input type="checkbox" id="imageLinkPlaceholder${index}">
+                                Platzhalter zulassen
+                            </label>
+                        </div>
+                        
+                        <div class="edit-panel-actions">
+                            <button class="btn-cancel" onclick="toggleImageLinkPanel(${index})">Abbrechen</button>
+                            <button class="btn-stage" onclick="stageImageLinkWrap(${index})">Stagen</button>
+                        </div>
+                    </div>
                 </div>
             `;
         });
@@ -2454,20 +2498,614 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Tracking/Öffnerpixel anzeigen (read-only)
+    // Tracking/Öffnerpixel anzeigen (editierbar)
     function displayTrackingInfo() {
         // Suche nach 1x1 Pixel img oder typischen Pixel-Mustern
         const pixelRegex = /<img[^>]*(?:width=["']1["']|height=["']1["'])[^>]*>/gi;
-        const pixelMatches = assetReviewStagedHtml.match(pixelRegex) || [];
+        const pixelMatches = [...assetReviewStagedHtml.matchAll(pixelRegex)];
         
         if (pixelMatches.length === 0) {
-            trackingInfo.innerHTML = '<div class="status-info">ℹ️ Kein Öffnerpixel gefunden</div>';
+            trackingInfo.innerHTML = `
+                <div class="status-info">ℹ️ Kein Öffnerpixel gefunden</div>
+                <button class="btn-insert-pixel" onclick="togglePixelInsertPanel()">➥ Öffnerpixel einfügen</button>
+                
+                <!-- Inline Insert-Panel (initial versteckt) -->
+                <div class="pixel-insert-panel" id="pixelInsertPanel" style="display: none;">
+                    <div class="edit-panel-warning">
+                        ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Einfügung nur auf explizite Anweisung.
+                    </div>
+                    
+                    <div class="edit-panel-toggle">
+                        <label>
+                            <input type="radio" name="insertMode" value="url" checked>
+                            Pixel URL
+                        </label>
+                        <label>
+                            <input type="radio" name="insertMode" value="tag">
+                            Kompletter img-Tag
+                        </label>
+                    </div>
+                    
+                    <div class="edit-panel-field" id="insertUrlField">
+                        <label>Pixel URL:</label>
+                        <input type="text" id="insertPixelUrl" placeholder="https://example.com/pixel.gif">
+                    </div>
+                    
+                    <div class="edit-panel-field" id="insertTagField" style="display: none;">
+                        <label>Kompletter img-Tag:</label>
+                        <textarea id="insertPixelTag" rows="3" placeholder="<img src='...' width='1' height='1'>"></textarea>
+                    </div>
+                    
+                    <div class="edit-panel-actions">
+                        <button class="btn-cancel" onclick="togglePixelInsertPanel()">Abbrechen</button>
+                        <button class="btn-stage" onclick="stagePixelInsert()">Stagen</button>
+                    </div>
+                </div>
+            `;
+            
+            // Event-Listener für Insert-Mode Toggle
+            const urlRadio = document.querySelector('input[name="insertMode"][value="url"]');
+            const tagRadio = document.querySelector('input[name="insertMode"][value="tag"]');
+            const urlField = document.getElementById('insertUrlField');
+            const tagField = document.getElementById('insertTagField');
+            
+            if (urlRadio && tagRadio && urlField && tagField) {
+                urlRadio.addEventListener('change', () => {
+                    urlField.style.display = 'block';
+                    tagField.style.display = 'none';
+                });
+                tagRadio.addEventListener('change', () => {
+                    urlField.style.display = 'none';
+                    tagField.style.display = 'block';
+                });
+            }
         } else {
-            let html = `<div class="status-ok">✅ ${pixelMatches.length} Öffnerpixel gefunden</div>`;
-            pixelMatches.forEach((pixel, index) => {
-                html += `<div class="asset-snippet"><strong>Pixel ${index + 1}:</strong><br><code>${escapeHtml(pixel)}</code></div>`;
+            let html = `
+                <div class="status-ok">✅ ${pixelMatches.length} Öffnerpixel gefunden</div>
+                <button class="btn-insert-pixel" onclick="togglePixelInsertPanel()" style="margin-top: 10px;">➥ Öffnerpixel zusätzlich einfügen</button>
+                
+                <!-- Inline Insert-Panel (initial versteckt) -->
+                <div class="pixel-insert-panel" id="pixelInsertPanel" style="display: none;">
+                    <div class="edit-panel-warning">
+                        ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Einfügung nur auf explizite Anweisung.
+                    </div>
+                    
+                    <div class="edit-panel-toggle">
+                        <label>
+                            <input type="radio" name="insertModeFound" value="url" checked>
+                            Pixel URL
+                        </label>
+                        <label>
+                            <input type="radio" name="insertModeFound" value="tag">
+                            Kompletter img-Tag
+                        </label>
+                    </div>
+                    
+                    <div class="edit-panel-field" id="insertUrlFieldFound">
+                        <label>Pixel URL:</label>
+                        <input type="text" id="insertPixelUrlFound" placeholder="https://example.com/pixel.gif">
+                    </div>
+                    
+                    <div class="edit-panel-field" id="insertTagFieldFound" style="display: none;">
+                        <label>Kompletter img-Tag:</label>
+                        <textarea id="insertPixelTagFound" rows="3" placeholder="<img src='...' width='1' height='1'>"></textarea>
+                    </div>
+                    
+                    <div class="edit-panel-actions">
+                        <button class="btn-cancel" onclick="togglePixelInsertPanel()">Abbrechen</button>
+                        <button class="btn-stage" onclick="stagePixelInsert()">Stagen</button>
+                    </div>
+                </div>
+            `;
+            
+            // Globales Array neu aufbauen
+            assetPixels = pixelMatches.map((match, index) => {
+                const rawTag = match[0];
+                const position = match.index;
+                const srcMatch = rawTag.match(/src=["']([^"']*)["']/i);
+                const src = srcMatch ? srcMatch[1] : '(kein src)';
+                return { index, position, rawTag, src };
+            });
+            
+            // Pixel-Liste anzeigen
+            assetPixels.forEach(({ index, position, rawTag, src }) => {
+                html += `
+                    <div class="pixel-item" data-index="${index}" data-position="${position}">
+                        <div class="pixel-header">
+                            <strong>Pixel ${index + 1}</strong>
+                            <button class="btn-edit-pixel" onclick="togglePixelEditPanel(${index})"><span>✏️</span> Öffnerpixel bearbeiten</button>
+                        </div>
+                        <div class="pixel-snippet"><code>${escapeHtml(rawTag)}</code></div>
+                        
+                        <!-- Inline Edit-Panel (initial versteckt) -->
+                        <div class="pixel-edit-panel" id="pixelEditPanel${index}" style="display: none;">
+                            <div class="edit-panel-warning">
+                                ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Änderungen nur auf explizite Anweisung.
+                            </div>
+                            
+                            <div class="edit-panel-toggle">
+                                <label>
+                                    <input type="radio" name="editMode${index}" value="src" checked>
+                                    Nur src ersetzen
+                                </label>
+                                <label>
+                                    <input type="radio" name="editMode${index}" value="tag">
+                                    Ganzen img-Tag ersetzen
+                                </label>
+                            </div>
+                            
+                            <div class="edit-panel-field" id="srcField${index}">
+                                <label>Neuer img src Wert:</label>
+                                <input type="text" id="newSrc${index}" value="${escapeHtml(src).replace(/"/g, '&quot;')}" placeholder="https://example.com/pixel.gif">
+                            </div>
+                            
+                            <div class="edit-panel-field" id="tagField${index}" style="display: none;">
+                                <label>Kompletter img-Tag:</label>
+                                <textarea id="newTag${index}" rows="3" placeholder="<img src='...' width='1' height='1'>">${rawTag}</textarea>
+                            </div>
+                            
+                            <div class="edit-panel-actions">
+                                <button class="btn-cancel" onclick="togglePixelEditPanel(${index})">Abbrechen</button>
+                                <button class="btn-stage" onclick="stagePixelEdit(${index})">Stagen</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
             });
             trackingInfo.innerHTML = html;
+            
+            // Event-Listener für Edit-Mode Toggle
+            pixelMatches.forEach((match, index) => {
+                const srcRadio = document.querySelector(`input[name="editMode${index}"][value="src"]`);
+                const tagRadio = document.querySelector(`input[name="editMode${index}"][value="tag"]`);
+                const srcField = document.getElementById(`srcField${index}`);
+                const tagField = document.getElementById(`tagField${index}`);
+                
+                if (srcRadio && tagRadio && srcField && tagField) {
+                    srcRadio.addEventListener('change', () => {
+                        srcField.style.display = 'block';
+                        tagField.style.display = 'none';
+                    });
+                    tagRadio.addEventListener('change', () => {
+                        srcField.style.display = 'none';
+                        tagField.style.display = 'block';
+                    });
+                }
+            });
+            
+            // Event-Listener für Insert-Mode Toggle (wenn Pixel gefunden)
+            const urlRadioFound = document.querySelector('input[name="insertModeFound"][value="url"]');
+            const tagRadioFound = document.querySelector('input[name="insertModeFound"][value="tag"]');
+            const urlFieldFound = document.getElementById('insertUrlFieldFound');
+            const tagFieldFound = document.getElementById('insertTagFieldFound');
+            
+            if (urlRadioFound && tagRadioFound && urlFieldFound && tagFieldFound) {
+                urlRadioFound.addEventListener('change', () => {
+                    urlFieldFound.style.display = 'block';
+                    tagFieldFound.style.display = 'none';
+                });
+                tagRadioFound.addEventListener('change', () => {
+                    urlFieldFound.style.display = 'none';
+                    tagFieldFound.style.display = 'block';
+                });
+            }
+        }
+    }
+    
+    // Toggle Pixel Edit Panel
+    window.togglePixelEditPanel = function(index) {
+        const panel = document.getElementById(`pixelEditPanel${index}`);
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+    };
+    
+    // Toggle Pixel Insert Panel
+    window.togglePixelInsertPanel = function() {
+        const panel = document.getElementById('pixelInsertPanel');
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+    };
+    
+    // Stage Pixel Insert
+    window.stagePixelInsert = function() {
+        console.log('[ASSET] stagePixelInsert called');
+        
+        // Bestimme Insert-Mode
+        const urlRadio = document.querySelector('input[name="insertMode"][value="url"]') || document.querySelector('input[name="insertModeFound"][value="url"]');
+        const tagRadio = document.querySelector('input[name="insertMode"][value="tag"]') || document.querySelector('input[name="insertModeFound"][value="tag"]');
+        const insertMode = urlRadio && urlRadio.checked ? 'url' : 'tag';
+        
+        console.log(`[ASSET] Insert-Mode: ${insertMode}`);
+        
+        // Hole Wert
+        let pixelToInsert = '';
+        let actionType = '';
+        
+        if (insertMode === 'url') {
+            const urlInput = document.getElementById('insertPixelUrl') || document.getElementById('insertPixelUrlFound');
+            if (!urlInput) {
+                console.error('[ASSET] insertPixelUrl input not found');
+                return;
+            }
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('⚠️ Bitte eine Pixel-URL eingeben.');
+                return;
+            }
+            // Minimaler Pixel-Tag
+            pixelToInsert = `<img src="${url}" width="1" height="1" style="display:block" border="0" alt="" />`;
+            actionType = 'url';
+        } else {
+            const tagTextarea = document.getElementById('insertPixelTag') || document.getElementById('insertPixelTagFound');
+            if (!tagTextarea) {
+                console.error('[ASSET] insertPixelTag textarea not found');
+                return;
+            }
+            const tag = tagTextarea.value.trim();
+            if (!tag) {
+                alert('⚠️ Bitte einen img-Tag eingeben.');
+                return;
+            }
+            pixelToInsert = tag;
+            actionType = 'tag';
+        }
+        
+        // Sicherheitsabfrage
+        const confirmMsg = actionType === 'url' 
+            ? `Wirklich Öffnerpixel einfügen?\n\nPixel: ${pixelToInsert}`
+            : `Wirklich img-Tag einfügen?\n\nTag: ${pixelToInsert}`;
+        
+        if (!confirm(confirmMsg)) {
+            console.log('[ASSET] User cancelled pixel insert');
+            return;
+        }
+        
+        // Vor Änderung: History speichern
+        assetReviewHistory.push(assetReviewStagedHtml);
+        
+        // Finde Einfügepunkt: direkt nach <body> oder nach Preheader
+        const bodyMatch = assetReviewStagedHtml.match(/<body[^>]*>/i);
+        if (!bodyMatch) {
+            alert('⚠️ Kein <body> Tag gefunden. Einfügung nicht möglich.');
+            return;
+        }
+        
+        const bodyEndPos = bodyMatch.index + bodyMatch[0].length;
+        
+        // Prüfe ob direkt nach <body> ein Preheader-Block existiert
+        const afterBody = assetReviewStagedHtml.substring(bodyEndPos);
+        const preheaderRegex = /^\s*<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/i;
+        const preheaderMatch = afterBody.match(preheaderRegex);
+        
+        let insertPosition = bodyEndPos;
+        if (preheaderMatch) {
+            // Nach Preheader einfügen
+            insertPosition = bodyEndPos + preheaderMatch[0].length;
+            console.log('[ASSET] Preheader found, inserting after preheader');
+        } else {
+            console.log('[ASSET] No preheader found, inserting directly after <body>');
+        }
+        
+        // Einfügen
+        const before = assetReviewStagedHtml.substring(0, insertPosition);
+        const after = assetReviewStagedHtml.substring(insertPosition);
+        const newHtml = before + '\n' + pixelToInsert + '\n' + after;
+        
+        // Update staged HTML
+        assetReviewStagedHtml = newHtml;
+        assetReviewDirty = true;
+        
+        // Logging
+        if (actionType === 'url') {
+            assetReviewActionLog.push(`OPENING_PIXEL_INSERTED url="${pixelToInsert.match(/src=["']([^"']*)["']/i)?.[1]}" at=${insertPosition}`);
+            console.log(`[ASSET] Pixel inserted (URL mode)`);
+        } else {
+            assetReviewActionLog.push(`OPENING_PIXEL_TAG_INSERTED tag="${pixelToInsert}" at=${insertPosition}`);
+            console.log(`[ASSET] Pixel inserted (Tag mode)`);
+        }
+        
+        // Buttons aktivieren
+        assetUndoBtn.disabled = false;
+        assetCommitBtn.disabled = false;
+        
+        // Counter aktualisieren
+        updateAssetActionsCounter();
+        
+        // Previews aktualisieren
+        updateAssetPreview();
+        
+        // Panel schließen
+        togglePixelInsertPanel();
+        
+        // Neu analysieren
+        analyzeAndDisplayAssets();
+        
+        // Jump-to-Mechanik: Code-Snippet auf die Einfügestelle springen
+        jumpToPixelLocation(insertPosition, pixelToInsert, 'insert');
+    };
+    
+    // Toggle Image Link Panel
+    window.toggleImageLinkPanel = function(index) {
+        const panel = document.getElementById(`imageLinkPanel${index}`);
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+    };
+    
+    // Stage Image Link Wrap
+    window.stageImageLinkWrap = function(imageIndex) {
+        console.log(`[ASSET] stageImageLinkWrap called: imageIndex=${imageIndex}`);
+        
+        // Hole rawTag und position aus globalem Array
+        if (!assetImages[imageIndex]) {
+            console.error(`[ASSET] Image ${imageIndex} not found in assetImages`);
+            return;
+        }
+        const { position, rawTag: originalImgTag, src } = assetImages[imageIndex];
+        console.log(`[ASSET] position=${position}, rawTag length=${originalImgTag.length}`);
+        
+        // Hole Ziel-URL
+        const index = imageIndex;
+        const urlInput = document.getElementById(`imageLinkUrl${index}`);
+        if (!urlInput) {
+            console.error('[ASSET] imageLinkUrl input not found');
+            return;
+        }
+        const targetUrl = urlInput.value.trim();
+        if (!targetUrl) {
+            alert('⚠️ Bitte eine Ziel-URL eingeben.');
+            return;
+        }
+        
+        // Placeholder-Checkbox Validierung
+        const placeholderCheckbox = document.getElementById(`imageLinkPlaceholder${index}`);
+        const allowPlaceholder = placeholderCheckbox ? placeholderCheckbox.checked : false;
+        
+        if (!allowPlaceholder) {
+            // Prüfe ob URL Platzhalter enthält
+            if (targetUrl.includes('%') || targetUrl.includes('{{') || targetUrl.includes('}}')) {
+                alert('⚠️ Platzhalter deaktiviert. Die URL enthält Platzhalter (%, {{ oder }}).');
+                console.warn('[ASSET] Placeholder detected but not allowed:', targetUrl);
+                return;
+            }
+        }
+        
+        // Defensive Prüfung: Ist das Bild bereits verlinkt?
+        const beforeImg = assetReviewStagedHtml.substring(Math.max(0, position - 200), position);
+        const afterImg = assetReviewStagedHtml.substring(position + originalImgTag.length, Math.min(assetReviewStagedHtml.length, position + originalImgTag.length + 200));
+        const isLinked = /<a[^>]*>\s*$/i.test(beforeImg) && /^\s*<\/a>/i.test(afterImg);
+        
+        if (isLinked) {
+            alert('⚠️ Warnung: Bild ist möglicherweise bereits verlinkt. Änderung wird nicht durchgeführt.');
+            console.warn('[ASSET] Image appears to be already linked, aborting');
+            return;
+        }
+        
+        // Sicherheitsabfrage
+        const srcMatch = originalImgTag.match(/src=["']([^"']*)["']/i);
+        const src = srcMatch ? srcMatch[1] : '(kein src)';
+        const confirmMsg = `Wirklich Link um Bild legen?\n\nBild: ${src}\nZiel-URL: ${targetUrl}`;
+        
+        if (!confirm(confirmMsg)) {
+            console.log('[ASSET] User cancelled image link wrap');
+            return;
+        }
+        
+        // Vor Änderung: History speichern
+        assetReviewHistory.push(assetReviewStagedHtml);
+        
+        // Exakte Ersetzung: <img> → <a href="..."><img></a>
+        const wrappedImg = `<a href="${targetUrl}">${originalImgTag}</a>`;
+        
+        // Ersetze nur dieses eine Vorkommen an der Position
+        const before = assetReviewStagedHtml.substring(0, position);
+        const after = assetReviewStagedHtml.substring(position + originalImgTag.length);
+        const newHtml = before + wrappedImg + after;
+        
+        // Update staged HTML
+        assetReviewStagedHtml = newHtml;
+        assetReviewDirty = true;
+        
+        // Logging
+        assetReviewActionLog.push(`IMAGE_LINK_WRAPPED imgSrc="${src}" href="${targetUrl}" at=${position}`);
+        console.log(`[ASSET] Image link wrapped: imgSrc="${src}" href="${targetUrl}"`);
+        
+        // Buttons aktivieren
+        assetUndoBtn.disabled = false;
+        assetCommitBtn.disabled = false;
+        
+        // Counter aktualisieren
+        updateAssetActionsCounter();
+        
+        // Previews aktualisieren
+        updateAssetPreview();
+        
+        // Panel schließen
+        toggleImageLinkPanel(index);
+        
+        // Neu analysieren
+        analyzeAndDisplayAssets();
+        
+        // Jump-to-Mechanik: Code-Snippet auf die geänderte Stelle springen
+        jumpToPixelLocation(position, wrappedImg, 'link-wrap');
+    };
+    
+    // Stage Pixel Edit
+    window.stagePixelEdit = function(pixelIndex) {
+        console.log(`[ASSET] stagePixelEdit called: pixelIndex=${pixelIndex}`);
+        
+        // Hole rawTag und position aus globalem Array
+        if (!assetPixels[pixelIndex]) {
+            console.error(`[ASSET] Pixel ${pixelIndex} not found in assetPixels`);
+            return;
+        }
+        const { position, rawTag: originalPixel } = assetPixels[pixelIndex];
+        console.log(`[ASSET] position=${position}, rawTag length=${originalPixel.length}`);
+        
+        // Bestimme Edit-Mode
+        const index = pixelIndex;
+        const srcRadio = document.querySelector(`input[name="editMode${index}"][value="src"]`);
+        const tagRadio = document.querySelector(`input[name="editMode${index}"][value="tag"]`);
+        const editMode = srcRadio && srcRadio.checked ? 'src' : 'tag';
+        
+        console.log(`[ASSET] Edit-Mode: ${editMode}`);
+        
+        // Hole neue Werte
+        let newValue = '';
+        let actionType = '';
+        
+        if (editMode === 'src') {
+            const newSrcInput = document.getElementById(`newSrc${index}`);
+            if (!newSrcInput) {
+                console.error('[ASSET] newSrc input not found');
+                return;
+            }
+            newValue = newSrcInput.value.trim();
+            if (!newValue) {
+                alert('⚠️ Bitte einen neuen src-Wert eingeben.');
+                return;
+            }
+            actionType = 'src';
+        } else {
+            const newTagTextarea = document.getElementById(`newTag${index}`);
+            if (!newTagTextarea) {
+                console.error('[ASSET] newTag textarea not found');
+                return;
+            }
+            newValue = newTagTextarea.value.trim();
+            if (!newValue) {
+                alert('⚠️ Bitte einen neuen img-Tag eingeben.');
+                return;
+            }
+            actionType = 'tag';
+        }
+        
+        // Sicherheitsabfrage
+        const confirmMsg = actionType === 'src' 
+            ? `Wirklich src ersetzen?\n\nAlt: ${originalPixel.match(/src=["']([^"']*)["']/i)?.[1] || '(kein src)'}\nNeu: ${newValue}`
+            : `Wirklich ganzen img-Tag ersetzen?\n\nAlt: ${originalPixel}\nNeu: ${newValue}`;
+        
+        if (!confirm(confirmMsg)) {
+            console.log('[ASSET] User cancelled pixel edit');
+            return;
+        }
+        
+        // Vor Änderung: History speichern
+        assetReviewHistory.push(assetReviewStagedHtml);
+        
+        // Ersetzung durchführen (nur dieses eine Vorkommen)
+        let newHtml = '';
+        if (actionType === 'src') {
+            // Nur src ersetzen
+            const oldSrc = originalPixel.match(/src=["']([^"']*)["']/i)?.[1] || '';
+            const newPixel = originalPixel.replace(/src=["']([^"']*)["']/i, `src="${newValue}"`);
+            
+            // Ersetze nur dieses eine Vorkommen an der Position
+            const before = assetReviewStagedHtml.substring(0, position);
+            const after = assetReviewStagedHtml.substring(position + originalPixel.length);
+            newHtml = before + newPixel + after;
+            
+            // Logging
+            assetReviewActionLog.push(`OPENING_PIXEL_SRC_REPLACED old="${oldSrc}" new="${newValue}" at=${position}`);
+            console.log(`[ASSET] Pixel src replaced: old="${oldSrc}" new="${newValue}"`);
+        } else {
+            // Ganzen Tag ersetzen
+            const before = assetReviewStagedHtml.substring(0, position);
+            const after = assetReviewStagedHtml.substring(position + originalPixel.length);
+            newHtml = before + newValue + after;
+            
+            // Logging
+            assetReviewActionLog.push(`OPENING_PIXEL_TAG_REPLACED oldTag="${originalPixel}" newTag="${newValue}" at=${position}`);
+            console.log(`[ASSET] Pixel tag replaced`);
+        }
+        
+        // Update staged HTML
+        assetReviewStagedHtml = newHtml;
+        assetReviewDirty = true;
+        
+        // Buttons aktivieren
+        assetUndoBtn.disabled = false;
+        assetCommitBtn.disabled = false;
+        
+        // Counter aktualisieren
+        updateAssetActionsCounter();
+        
+        // Previews aktualisieren
+        updateAssetPreview();
+        
+        // Panel schließen
+        togglePixelEditPanel(index);
+        
+        // Neu analysieren (damit die Liste aktualisiert wird)
+        analyzeAndDisplayAssets();
+        
+        // Jump-to-Mechanik: Code-Snippet auf die geänderte Stelle springen
+        jumpToPixelLocation(position, newValue, actionType);
+    };
+    
+    // Jump-to-Mechanik für bearbeitete Pixel
+    function jumpToPixelLocation(position, value, actionType) {
+        console.log(`[ASSET] jumpToPixelLocation: position=${position}, actionType=${actionType}`);
+        
+        // Aktiviere Code-Tab
+        showAssetCodePreview.classList.add('active');
+        showAssetWebPreview.classList.remove('active');
+        assetCodePreviewContainer.style.display = 'block';
+        assetWebPreviewContainer.style.display = 'none';
+        
+        // Erzeuge Snippet ±10 Zeilen rund um Position
+        const lines = assetReviewStagedHtml.split('\n');
+        let currentPos = 0;
+        let targetLine = -1;
+        
+        // Finde Zeile mit der Position
+        for (let i = 0; i < lines.length; i++) {
+            const lineLength = lines[i].length + 1; // +1 für \n
+            if (currentPos <= position && position < currentPos + lineLength) {
+                targetLine = i;
+                break;
+            }
+            currentPos += lineLength;
+        }
+        
+        if (targetLine === -1) {
+            console.warn('[ASSET] Target line not found for pixel');
+            return;
+        }
+        
+        // Snippet ±10 Zeilen
+        const startLine = Math.max(0, targetLine - 10);
+        const endLine = Math.min(lines.length, targetLine + 11);
+        const snippetLines = lines.slice(startLine, endLine);
+        
+        // Markiere die Zeile mit dem Wert
+        const highlightedSnippet = snippetLines.map((line, idx) => {
+            const lineNum = startLine + idx + 1;
+            const isTargetLine = (startLine + idx) === targetLine;
+            
+            // Wenn es die Zielzeile ist, markiere den Wert
+            if (isTargetLine && line.includes(value)) {
+                const escapedLine = escapeHtml(line);
+                const escapedValue = escapeHtml(value);
+                const highlightedLine = escapedLine.replace(
+                    new RegExp(escapedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                    `<span class="hit">${escapedValue}</span>`
+                );
+                return `<span class="line-num">${lineNum}</span>${highlightedLine}`;
+            } else {
+                return `<span class="line-num">${lineNum}</span>${escapeHtml(line)}`;
+            }
+        }).join('\n');
+        
+        // Zeige Snippet im Code-Preview
+        assetCodePreviewContent.innerHTML = highlightedSnippet;
+        
+        // Scroll im Code-Preview zur Mitte
+        const hitElement = assetCodePreviewContent.querySelector('.hit');
+        if (hitElement) {
+            hitElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
     }
     
@@ -2526,7 +3164,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Globale Funktionen für Bild- und Link-Ersetzung (müssen global sein wegen onclick)
-    window.replaceImageSrc = function(index, position, oldSrc) {
+    window.replaceImageSrc = function(imageIndex) {
+        // Hole rawTag und position aus globalem Array
+        if (!assetImages[imageIndex]) {
+            console.error(`[ASSET] Image ${imageIndex} not found in assetImages`);
+            return;
+        }
+        const { position, rawTag: imgTag, src: oldSrc } = assetImages[imageIndex];
+        
         const newSrc = prompt(`🖼️ Neuen Bildpfad eingeben:\n\nAktuell: ${oldSrc}`, oldSrc);
         if (!newSrc || newSrc === oldSrc) return;
         
@@ -2536,35 +3181,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // Push aktuellen State in History
         assetReviewHistory.push(assetReviewStagedHtml);
         
-        // Finde das exakte img Tag an dieser Position
-        const imgRegex = /<img[^>]*>/gi;
-        const imgMatches = [...assetReviewStagedHtml.matchAll(imgRegex)];
+        // Ersetze src im img Tag
+        const newImgTag = imgTag.replace(/src=["'][^"']*["']/i, `src="${newSrc}"`);
         
-        if (imgMatches[index]) {
-            const imgTag = imgMatches[index][0];
-            const imgPosition = imgMatches[index].index;
-            
-            // Ersetze src im img Tag
-            const newImgTag = imgTag.replace(/src=["'][^"']*["']/i, `src="${newSrc}"`);
-            
-            // Ersetze nur dieses eine Vorkommen
-            assetReviewStagedHtml = 
-                assetReviewStagedHtml.substring(0, imgPosition) + 
-                newImgTag + 
-                assetReviewStagedHtml.substring(imgPosition + imgTag.length);
-            
-            // Logging
-            const logEntry = `IMG_SRC_REPLACED old="${oldSrc}" new="${newSrc}" at=${position}`;
-            assetReviewActionLog.push(logEntry);
-            
-            // Update UI
-            assetReviewDirty = true;
-            assetUndoBtn.disabled = false;
-            assetCommitBtn.disabled = false;
-            updateAssetActionsCounter();
-            analyzeAndDisplayAssets();
-            updateAssetPreview();
-        }
+        // Ersetze nur dieses eine Vorkommen an der Position
+        const before = assetReviewStagedHtml.substring(0, position);
+        const after = assetReviewStagedHtml.substring(position + imgTag.length);
+        assetReviewStagedHtml = before + newImgTag + after;
+        
+        // Logging
+        const logEntry = `IMG_SRC_REPLACED old="${oldSrc}" new="${newSrc}" at=${position}`;
+        assetReviewActionLog.push(logEntry);
+        
+        // Update UI
+        assetReviewDirty = true;
+        assetUndoBtn.disabled = false;
+        assetCommitBtn.disabled = false;
+        updateAssetActionsCounter();
+        analyzeAndDisplayAssets();
+        updateAssetPreview();
     };
     
     window.replaceLinkHref = function(index, position, oldHref) {
