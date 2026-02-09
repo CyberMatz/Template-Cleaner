@@ -975,9 +975,19 @@ class TemplateProcessor {
 
 // UI-Logik
 document.addEventListener('DOMContentLoaded', () => {
+    // Element-Checks mit console.error
     const fileInput = document.getElementById('fileInput');
+    if (!fileInput) console.error('[INIT] fileInput not found!');
+    
     const fileName = document.getElementById('fileName');
+    if (!fileName) console.error('[INIT] fileName not found!');
+    
     const processBtn = document.getElementById('processBtn');
+    if (!processBtn) console.error('[INIT] processBtn not found!');
+    
+    const uploadHint = document.getElementById('uploadHint');
+    if (!uploadHint) console.error('[INIT] uploadHint not found!');
+    
     const checklistType = document.getElementById('checklistType');
     const preheaderText = document.getElementById('preheaderText');
     const removeFonts = document.getElementById('removeFonts');
@@ -988,8 +998,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadReport = document.getElementById('downloadReport');
     const downloadUnresolved = document.getElementById('downloadUnresolved');
 
-    let uploadedFile = null;
+    // State-Variablen (KEIN uploadedFile mehr!)
     let processingResult = null;
+    let selectedHtml = null;  // Single Source of Truth für HTML-Content
+    let selectedFilename = null;  // Single Source of Truth für Dateiname
     
     // ===== PHASE C: ASSET REVIEW STATE =====
     let assetReviewOriginalHtml = null;
@@ -1002,53 +1014,73 @@ document.addEventListener('DOMContentLoaded', () => {
     let assetImages = [];
     let assetPixels = [];
 
-    // Datei-Upload
-    const uploadHint = document.getElementById('uploadHint');
-    
-    fileInput.addEventListener('change', (e) => {
-        console.log('[UPLOAD] File input change event fired');
-        const file = e.target.files[0];
+    // Datei-Upload Handler (change + input für Browser-Kompatibilität)
+    const handleFileSelect = () => {
+        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (file) {
-            console.log(`[UPLOAD] File selected: ${file.name}`);
-            uploadedFile = file;
-            fileName.textContent = `📄 ${file.name}`;
+            console.log('FILE_SELECTED', file.name, file.size, file.type);
             
-            // Button aktivieren
-            if (processBtn) {
+            // FileReader: Lese Datei sofort ein
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // Setze Single Source of Truth
+                selectedHtml = e.target.result;
+                selectedFilename = file.name;
+                
+                console.log('[UPLOAD] FileReader finished, selectedHtml set (' + selectedHtml.length + ' chars)');
+                
+                // UI-Update ERST NACH FileReader fertig
+                fileName.textContent = `📄 ${file.name}`;
+                
+                // Button aktivieren
                 processBtn.disabled = false;
-                console.log('[UPLOAD] processBtn enabled');
-            } else {
-                console.error('[UPLOAD] processBtn not found!');
-            }
-            
-            // Hinweistext ausblenden
-            if (uploadHint) {
+                processBtn.classList.remove('disabled');
+                processBtn.removeAttribute('aria-disabled');
+                
+                // Hinweistext ausblenden
                 uploadHint.style.display = 'none';
-                console.log('[UPLOAD] uploadHint hidden');
-            }
+            };
+            
+            reader.onerror = () => {
+                console.error('[UPLOAD] FileReader error');
+                alert('Fehler beim Lesen der Datei.');
+                selectedHtml = null;
+                selectedFilename = null;
+                processBtn.disabled = true;
+                uploadHint.style.display = 'block';
+            };
+            
+            reader.readAsText(file);
         } else {
             console.log('[UPLOAD] No file selected');
-            if (processBtn) {
-                processBtn.disabled = true;
-            }
-            
-            // Hinweistext einblenden
-            if (uploadHint) {
-                uploadHint.style.display = 'block';
-            }
+            selectedHtml = null;
+            selectedFilename = null;
+            processBtn.disabled = true;
+            uploadHint.style.display = 'block';
         }
-    });
+    };
+    
+    // Beide Events registrieren (Browser-Kompatibilität)
+    fileInput.addEventListener('change', handleFileSelect);
+    fileInput.addEventListener('input', handleFileSelect);
 
     // Template verarbeiten
     processBtn.addEventListener('click', async () => {
-        if (!uploadedFile) return;
+        // Single Source of Truth: selectedHtml
+        console.log('PROCESS_CLICK', 'selectedHtml=', selectedHtml ? selectedHtml.length + ' chars' : 'null', 'disabled=', processBtn.disabled);
+        
+        if (!selectedHtml) {
+            alert('Bitte zuerst eine HTML-Datei auswählen.');
+            uploadHint.style.display = 'block';
+            return;
+        }
 
         processBtn.disabled = true;
         processBtn.innerHTML = '<span class="btn-icon">⏳</span> Verarbeite...';
 
         try {
-            // Datei lesen
-            const htmlContent = await uploadedFile.text();
+            // Verwende selectedHtml direkt (bereits eingelesen)
+            const htmlContent = selectedHtml;
 
             // Processor erstellen und ausführen
             const processor = new TemplateProcessor(
@@ -1095,9 +1127,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Download-Buttons
     downloadOptimized.addEventListener('click', () => {
-        if (processingResult && uploadedFile) {
+        if (processingResult && selectedFilename) {
             // Originalnamen verwenden und "_optimized" anhängen
-            const originalName = uploadedFile.name;
+            const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
@@ -1107,9 +1139,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     downloadReport.addEventListener('click', () => {
-        if (processingResult && uploadedFile) {
+        if (processingResult && selectedFilename) {
             // Originalnamen verwenden und "_report" anhängen
-            const originalName = uploadedFile.name;
+            const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const baseName = nameParts.join('.');
             const newName = `${baseName}_report.txt`;
@@ -1142,9 +1174,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     downloadUnresolved.addEventListener('click', () => {
-        if (processingResult && uploadedFile) {
+        if (processingResult && selectedFilename) {
             // Originalnamen verwenden und "_unresolved" anhängen
-            const originalName = uploadedFile.name;
+            const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const baseName = nameParts.join('.');
             const newName = `${baseName}_unresolved.txt`;
@@ -1177,7 +1209,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showDiffBtn.title = 'Erst Template verarbeiten';
 
     showDiffBtn.addEventListener('click', () => {
-        if (processingResult && uploadedFile) {
+        if (processingResult && selectedFilename) {
             // Generiere Diff-Ansicht
             const originalLines = processingResult.originalHtml.split('\n');
             const optimizedLines = processingResult.optimizedHtml.split('\n');
@@ -2911,9 +2943,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Sicherheitsabfrage
-        const srcMatch = originalImgTag.match(/src=["']([^"']*)["']/i);
-        const src = srcMatch ? srcMatch[1] : '(kein src)';
-        const confirmMsg = `Wirklich Link um Bild legen?\n\nBild: ${src}\nZiel-URL: ${targetUrl}`;
+        const srcMatch = originalImgTag.match(/src=["']([^"']*)["\']/i);
+        const imgSrc = srcMatch ? srcMatch[1] : '(kein src)';
+        const confirmMsg = `Wirklich Link um Bild legen?\n\nBild: ${imgSrc}\nZiel-URL: ${targetUrl}`;
         
         if (!confirm(confirmMsg)) {
             console.log('[ASSET] User cancelled image link wrap');
@@ -2936,8 +2968,8 @@ document.addEventListener('DOMContentLoaded', () => {
         assetReviewDirty = true;
         
         // Logging
-        assetReviewActionLog.push(`IMAGE_LINK_WRAPPED imgSrc="${src}" href="${targetUrl}" at=${position}`);
-        console.log(`[ASSET] Image link wrapped: imgSrc="${src}" href="${targetUrl}"`);
+        assetReviewActionLog.push(`IMAGE_LINK_WRAPPED imgSrc="${imgSrc}" href="${targetUrl}" at=${position}`);
+        console.log(`[ASSET] Image link wrapped: imgSrc="${imgSrc}" href="${targetUrl}"`);
         
         // Buttons aktivieren
         assetUndoBtn.disabled = false;
