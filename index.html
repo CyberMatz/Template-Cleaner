@@ -100,6 +100,10 @@
                         <span class="btn-icon">🖼️</span>
                         Asset und Tracking Review
                     </button>
+                    <button id="showInspectorBtn" class="btn-inspector">
+                        <span class="btn-icon">🔍</span>
+                        Inspector
+                    </button>
                 </div>
 
                 <div id="tagReviewHint" class="tag-review-hint" style="display: none;">
@@ -137,6 +141,78 @@
             </div>
         </div>
     </div>
+
+    <!-- Inspector Section -->
+    <section id="inspectorSection" class="inspector-section" style="display: none;">
+        <h2>🔍 Inspector</h2>
+        
+        <!-- Tabs -->
+        <div class="inspector-tabs">
+            <button id="trackingTab" class="inspector-tab active" data-tab="tracking">
+                <span class="tab-icon">📡</span>
+                Tracking
+            </button>
+            <button id="imagesTab" class="inspector-tab" data-tab="images">
+                <span class="tab-icon">🖼️</span>
+                Bilder
+            </button>
+            <button id="tagReviewTab" class="inspector-tab" data-tab="tagreview">
+                <span class="tab-icon">🔍</span>
+                Tag-Review
+            </button>
+            <button id="editorTab" class="inspector-tab" data-tab="editor">
+                <span class="tab-icon">✏️</span>
+                Editor
+            </button>
+        </div>
+        
+        <!-- 2-Spalten-Layout -->
+        <div class="inspector-container">
+            <!-- Linke Spalte: Controls -->
+            <div class="inspector-controls">
+                <div id="trackingPanel" class="inspector-panel active">
+                    <h3>📡 Tracking & Öffnerpixel</h3>
+                    <div id="trackingContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <div id="imagesPanel" class="inspector-panel" style="display: none;">
+                    <h3>🖼️ Bilder</h3>
+                    <div id="imagesContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <div id="tagreviewPanel" class="inspector-panel" style="display: none;">
+                    <h3>🔍 Tag-Review</h3>
+                    <div id="tagreviewContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <div id="editorPanel" class="inspector-panel" style="display: none;">
+                    <h3>✏️ Editor</h3>
+                    <div id="editorContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Rechte Spalte: Preview -->
+            <div class="inspector-preview">
+                <div class="preview-header">
+                    <h3>👁️ Vorschau</h3>
+                    <div class="preview-disclaimer">
+                        ⚠️ Web-Preview (nicht identisch mit Gmail/Outlook)
+                    </div>
+                </div>
+                <div class="preview-container">
+                    <iframe id="inspectorPreviewFrame" sandbox="allow-same-origin" class="inspector-preview-frame"></iframe>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Tag-Review Modal -->
     <div id="tagReviewModal" class="tag-review-modal" style="display: none;">

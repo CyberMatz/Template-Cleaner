@@ -1013,6 +1013,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Globale Arrays für Match-Daten (rawTag + position)
     let assetImages = [];
     let assetPixels = [];
+    
+    // ===== INSPECTOR STATE =====
+    let currentWorkingHtml = null;  // Single Source of Truth für Inspector
+    let currentInspectorTab = 'tracking';  // Aktueller Tab
 
     // Datei-Upload Handler (change + input für Browser-Kompatibilität)
     const handleFileSelect = () => {
@@ -1113,6 +1117,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Asset-Review Button aktivieren
             showAssetReviewBtn.disabled = false;
             showAssetReviewBtn.title = 'Assets und Tracking manuell überprüfen';
+            
+            // Inspector Button aktivieren
+            if (showInspectorBtn) {
+                showInspectorBtn.disabled = false;
+                showInspectorBtn.title = 'Inspector öffnen';
+            }
 
             // Scroll zu Ergebnissen
             resultsSection.scrollIntoView({ behavior: 'smooth' });
@@ -3335,6 +3345,165 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update Report Preview
         reportPreview.textContent = processingResult.report;
+    }
+    
+    // ===== INSPECTOR FEATURE =====
+    const showInspectorBtn = document.getElementById('showInspectorBtn');
+    const inspectorSection = document.getElementById('inspectorSection');
+    const inspectorPreviewFrame = document.getElementById('inspectorPreviewFrame');
+    
+    // Inspector Tabs
+    const trackingTab = document.getElementById('trackingTab');
+    const imagesTab = document.getElementById('imagesTab');
+    const tagReviewTab = document.getElementById('tagReviewTab');
+    const editorTab = document.getElementById('editorTab');
+    
+    // Inspector Panels
+    const trackingPanel = document.getElementById('trackingPanel');
+    const imagesPanel = document.getElementById('imagesPanel');
+    const tagreviewPanel = document.getElementById('tagreviewPanel');
+    const editorPanel = document.getElementById('editorPanel');
+    
+    // Inspector Button initial deaktivieren
+    if (showInspectorBtn) {
+        showInspectorBtn.disabled = true;
+        showInspectorBtn.title = 'Erst Template verarbeiten';
+    }
+    
+    // Inspector öffnen
+    if (showInspectorBtn) {
+        showInspectorBtn.addEventListener('click', () => {
+            if (!processingResult) {
+                alert('⚠️ Bitte erst Template verarbeiten.');
+                return;
+            }
+            
+            console.log('[INSPECTOR] Opening Inspector...');
+            
+            // Setze currentWorkingHtml auf optimizedHtml
+            currentWorkingHtml = processingResult.optimizedHtml;
+            
+            // Zeige Inspector Section
+            inspectorSection.style.display = 'block';
+            
+            // Scroll zu Inspector
+            inspectorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Lade aktuellen Tab Content
+            loadInspectorTabContent(currentInspectorTab);
+        });
+    }
+    
+    // Tab Switching
+    function switchInspectorTab(tabName) {
+        console.log('[INSPECTOR] Switching to tab:', tabName);
+        
+        // Update Tab Buttons
+        [trackingTab, imagesTab, tagReviewTab, editorTab].forEach(tab => {
+            if (tab) tab.classList.remove('active');
+        });
+        
+        // Update Panels
+        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel].forEach(panel => {
+            if (panel) panel.style.display = 'none';
+        });
+        
+        // Aktiviere gewählten Tab
+        currentInspectorTab = tabName;
+        
+        if (tabName === 'tracking' && trackingTab && trackingPanel) {
+            trackingTab.classList.add('active');
+            trackingPanel.style.display = 'block';
+        } else if (tabName === 'images' && imagesTab && imagesPanel) {
+            imagesTab.classList.add('active');
+            imagesPanel.style.display = 'block';
+        } else if (tabName === 'tagreview' && tagReviewTab && tagreviewPanel) {
+            tagReviewTab.classList.add('active');
+            tagreviewPanel.style.display = 'block';
+        } else if (tabName === 'editor' && editorTab && editorPanel) {
+            editorTab.classList.add('active');
+            editorPanel.style.display = 'block';
+        }
+        
+        // Lade Tab Content
+        loadInspectorTabContent(tabName);
+    }
+    
+    // Tab Click Listeners
+    if (trackingTab) trackingTab.addEventListener('click', () => switchInspectorTab('tracking'));
+    if (imagesTab) imagesTab.addEventListener('click', () => switchInspectorTab('images'));
+    if (tagReviewTab) tagReviewTab.addEventListener('click', () => switchInspectorTab('tagreview'));
+    if (editorTab) editorTab.addEventListener('click', () => switchInspectorTab('editor'));
+    
+    // Load Tab Content (Placeholder für Phase 3-7)
+    function loadInspectorTabContent(tabName) {
+        console.log('[INSPECTOR] Loading content for tab:', tabName);
+        
+        const trackingContent = document.getElementById('trackingContent');
+        const imagesContent = document.getElementById('imagesContent');
+        const tagreviewContent = document.getElementById('tagreviewContent');
+        const editorContent = document.getElementById('editorContent');
+        
+        if (tabName === 'tracking' && trackingContent) {
+            trackingContent.innerHTML = '<p>Tracking-Tab wird in Phase 3 implementiert...</p>';
+        } else if (tabName === 'images' && imagesContent) {
+            imagesContent.innerHTML = '<p>Bilder-Tab wird in Phase 4 implementiert...</p>';
+        } else if (tabName === 'tagreview' && tagreviewContent) {
+            tagreviewContent.innerHTML = '<p>Tag-Review-Tab wird in Phase 5 implementiert...</p>';
+        } else if (tabName === 'editor' && editorContent) {
+            editorContent.innerHTML = '<p>Editor-Tab wird in Phase 6 implementiert...</p>';
+        }
+    }
+    
+    // Update Inspector Preview
+    function updateInspectorPreview() {
+        if (!currentWorkingHtml || !inspectorPreviewFrame) {
+            console.error('[INSPECTOR] Cannot update preview: missing currentWorkingHtml or iframe');
+            return;
+        }
+        
+        console.log('[INSPECTOR] Updating preview (' + currentWorkingHtml.length + ' chars)...');
+        
+        try {
+            // Setze srcdoc
+            inspectorPreviewFrame.srcdoc = currentWorkingHtml;
+            
+            // Warte auf iframe load
+            inspectorPreviewFrame.onload = () => {
+                console.log('[INSPECTOR] Preview loaded successfully');
+            };
+            
+            inspectorPreviewFrame.onerror = (e) => {
+                console.error('[INSPECTOR] Preview load error:', e);
+                showPreviewFallback();
+            };
+        } catch (e) {
+            console.error('[INSPECTOR] Preview update error:', e);
+            showPreviewFallback();
+        }
+    }
+    
+    // Fallback bei iframe-Fehler
+    function showPreviewFallback() {
+        const previewContainer = inspectorPreviewFrame.parentElement;
+        if (!previewContainer) return;
+        
+        previewContainer.innerHTML = `
+            <div style="padding: 40px; text-align: center; color: #e74c3c;">
+                <h3>⚠️ Preview konnte nicht geladen werden</h3>
+                <p>Das HTML enthält möglicherweise ungültige Syntax.</p>
+                <p>Bitte überprüfen Sie die Downloads.</p>
+            </div>
+        `;
+    }
+    
+    // Highlight-API vorbereiten (noch nicht nutzen)
+    function prepareHighlightAPI() {
+        // Wird in Phase 3+ verwendet
+        // Placeholder für spätere Implementierung
     }
 });
 
