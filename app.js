@@ -1023,6 +1023,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let editorHistory = [];  // Undo History Stack
     let editorSelectedElement = null;  // Aktuell ausgewähltes Element
     let editorPending = false;  // Pending Changes Flag
+    
+    // Tracking Tab State (Phase 7A)
+    let trackingTabHtml = null;  // Separate HTML für Tracking Tab
+    let trackingHistory = [];  // Undo History Stack
+    let trackingPending = false;  // Pending Changes Flag
+    
+    // Tracking Insert Mode State (Phase 8)
+    let trackingInsertMode = false;  // Element-Auswahl aktiv
+    let trackingSelectedElement = null;  // Ausgewähltes Element für Link-Insert
+    
+    // Images Tab State (Phase 7B)
+    let imagesTabHtml = null;  // Separate HTML für Images Tab
+    let imagesHistory = [];  // Undo History Stack
+    let imagesPending = false;  // Pending Changes Flag
 
     // Datei-Upload Handler (change + input für Browser-Kompatibilität)
     const handleFileSelect = () => {
@@ -3398,17 +3412,24 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update Preview
             updateInspectorPreview();
             
+            // Update Global Pending Indicator (Phase 9)
+            updateGlobalPendingIndicator();
+            
             // Lade aktuellen Tab Content
             loadInspectorTabContent(currentInspectorTab);
         });
     }
     
-    // PostMessage Listener für SELECT_ELEMENT (Phase 6)
+    // PostMessage Listener für SELECT_ELEMENT (Phase 6 + Phase 8)
     window.addEventListener('message', function(event) {
         if (event.data.type === 'SELECT_ELEMENT') {
-            // Nur im Editor Tab verarbeiten
+            // Editor Tab: Element-Auswahl für Block-Editing
             if (currentInspectorTab === 'editor') {
                 handleEditorElementSelection(event.data);
+            }
+            // Tracking Tab: Element-Auswahl für Link-Insert (Phase 8B)
+            else if (currentInspectorTab === 'tracking' && trackingInsertMode) {
+                handleTrackingElementSelection(event.data);
             }
         }
     });
@@ -3481,8 +3502,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Wähle HTML-Quelle: editorTabHtml im Editor Tab, sonst currentWorkingHtml
-        const sourceHtml = (currentInspectorTab === 'editor' && editorTabHtml) ? editorTabHtml : currentWorkingHtml;
+        // Wähle HTML-Quelle je nach Tab (Phase 7)
+        let sourceHtml = currentWorkingHtml;
+        
+        if (currentInspectorTab === 'editor' && editorTabHtml) {
+            sourceHtml = editorTabHtml;
+        } else if (currentInspectorTab === 'tracking' && trackingTabHtml) {
+            sourceHtml = trackingTabHtml;
+        } else if (currentInspectorTab === 'images' && imagesTabHtml) {
+            sourceHtml = imagesTabHtml;
+        }
         
         console.log('[INSPECTOR] Updating preview (' + sourceHtml.length + ' chars)...');
         
@@ -3748,17 +3777,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // PHASE 3: TRACKING TAB IMPLEMENTATION
     // ============================================
     
-    // Zeige Tracking Tab Content
+    // Zeige Tracking Tab Content (Phase 7A: Edit Mode)
     function showTrackingTab(trackingContent) {
         if (!trackingContent) return;
         
         console.log('[INSPECTOR] Rendering Tracking Tab...');
         
-        // Extrahiere Links aus currentWorkingHtml
-        const links = extractLinksFromHTML(currentWorkingHtml);
+        // Initialisiere trackingTabHtml beim ersten Aufruf
+        if (!trackingTabHtml) {
+            trackingTabHtml = currentWorkingHtml;
+            trackingHistory = [];
+            trackingPending = false;
+        }
+        
+        // Extrahiere Links aus trackingTabHtml
+        const links = extractLinksFromHTML(trackingTabHtml);
         
         // Erkenne Öffnerpixel
-        const trackingPixel = detectTrackingPixel(currentWorkingHtml);
+        const trackingPixel = detectTrackingPixel(trackingTabHtml);
         
         // Render Tracking Tab
         let html = '<div class="tracking-tab-content">';
@@ -3767,17 +3803,56 @@ document.addEventListener('DOMContentLoaded', () => {
         html += '<div class="tracking-section">';
         html += '<h3>📧 Klick-Links (' + links.length + ')</h3>';
         
+        // Phase 8B: Link Insert UI
+        html += '<div class="tracking-insert-section">';
+        if (!trackingInsertMode) {
+            html += '<button id="trackingStartInsert" class="btn-tracking-insert">➤ Element in Preview auswählen</button>';
+        } else if (!trackingSelectedElement) {
+            html += '<div class="tracking-insert-hint">';
+            html += '👉 <strong>Klicke rechts im Template auf das Element, das verlinkt werden soll.</strong>';
+            html += '<button id="trackingCancelInsert" class="btn-tracking-cancel">❌ Abbrechen</button>';
+            html += '</div>';
+        } else {
+            html += '<div class="tracking-insert-selected">';
+            html += '<div class="tracking-insert-selected-header">✓ Ausgewähltes Element:</div>';
+            html += '<div class="tracking-insert-selected-info">';
+            html += '<strong>Typ:</strong> &lt;' + trackingSelectedElement.tagName + '&gt;<br>';
+            if (trackingSelectedElement.text) {
+                html += '<strong>Text:</strong> ' + escapeHtml(trackingSelectedElement.text.substring(0, 50)) + (trackingSelectedElement.text.length > 50 ? '...' : '') + '<br>';
+            }
+            if (trackingSelectedElement.src) {
+                html += '<strong>src:</strong> <code>' + escapeHtml(trackingSelectedElement.src.substring(0, 50)) + (trackingSelectedElement.src.length > 50 ? '...' : '') + '</code><br>';
+            }
+            html += '</div>';
+            html += '<div class="tracking-insert-controls">';
+            html += '<input type="text" id="trackingInsertUrl" class="tracking-insert-input" placeholder="Ziel-URL eingeben...">';
+            html += '<button id="trackingInsertApply" class="btn-tracking-insert-apply">➕ Link um Element legen</button>';
+            html += '<button id="trackingCancelInsert" class="btn-tracking-cancel">❌ Abbrechen</button>';
+            html += '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+        
         if (links.length === 0) {
             html += '<p class="tracking-empty">Keine Links gefunden.</p>';
         } else {
             html += '<div class="tracking-links-list">';
             links.forEach(link => {
-                html += '<div class="tracking-link-item" data-link-id="' + link.id + '">';
+                html += '<div class="tracking-link-item-edit" data-link-id="' + link.id + '">';
                 html += '<div class="tracking-link-header">';
                 html += '<span class="tracking-link-id">' + link.id + '</span>';
                 html += '<span class="tracking-link-text">' + escapeHtml(link.text) + '</span>';
                 html += '</div>';
-                html += '<div class="tracking-link-href">' + escapeHtml(link.href) + '</div>';
+                html += '<div class="tracking-link-href-display">';
+                html += '<strong>Aktuell:</strong> ';
+                html += '<code title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</code>';
+                html += '<button class="btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
+                html += '</div>';
+                html += '<div class="tracking-link-edit-controls">';
+                html += '<input type="text" class="tracking-link-input" placeholder="Neue URL eingeben..." data-link-id="' + link.id + '">';
+                html += '<button class="btn-tracking-apply" data-link-id="' + link.id + '">✓ Anwenden</button>';
+                html += '<button class="btn-tracking-locate" data-link-id="' + link.id + '">👁️ Locate</button>';
+                html += '</div>';
                 html += '</div>';
             });
             html += '</div>';
@@ -3793,24 +3868,47 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '<div class="tracking-pixel-status tracking-pixel-found">✓ Öffnerpixel gefunden</div>';
             html += '<div class="tracking-pixel-details">';
             html += '<strong>Typ:</strong> ' + trackingPixel.type + '<br>';
-            html += '<strong>URL:</strong> <code>' + escapeHtml(trackingPixel.url) + '</code>';
+            html += '<strong>Aktuell:</strong> <code>' + escapeHtml(trackingPixel.url.substring(0, 80)) + (trackingPixel.url.length > 80 ? '...' : '') + '</code>';
             html += '</div>';
-            html += '<p class="tracking-note">ℹ️ Edit-Funktion wird in späteren Phasen implementiert.</p>';
+            html += '<div class="tracking-pixel-edit-controls">';
+            html += '<input type="text" id="trackingPixelInput" class="tracking-pixel-input" placeholder="Neue Pixel-URL eingeben..." value="' + escapeHtml(trackingPixel.url) + '">';
+            html += '<button id="trackingPixelApply" class="btn-tracking-apply">✓ Anwenden</button>';
+            html += '</div>';
             html += '</div>';
         } else {
+            // Phase 8A: Pixel Insert UI (nur wenn fehlt)
             html += '<div class="tracking-pixel-info">';
             html += '<div class="tracking-pixel-status tracking-pixel-missing">⚠ Kein Öffnerpixel gefunden</div>';
-            html += '<p class="tracking-note">ℹ️ Edit-Funktion wird in späteren Phasen implementiert.</p>';
+            html += '<div class="tracking-pixel-insert-controls">';
+            html += '<input type="text" id="trackingPixelInsertInput" class="tracking-pixel-input" placeholder="Pixel-URL eingeben...">';
+            html += '<button id="trackingPixelInsert" class="btn-tracking-insert-apply">➕ Pixel einfügen</button>';
+            html += '</div>';
+            html += '<p class="tracking-note">ℹ️ Pixel wird nach &lt;body&gt; eingefügt (unsichtbarer 1x1 Block).</p>';
             html += '</div>';
         }
         html += '</div>';
+        
+        // Undo Button
+        if (trackingHistory.length > 0) {
+            html += '<div class="tracking-undo-section">';
+            html += '<button id="trackingUndo" class="btn-tracking-undo">↶ Undo (' + trackingHistory.length + ')</button>';
+            html += '</div>';
+        }
+        
+        // Commit Button (nur wenn pending)
+        if (trackingPending) {
+            html += '<div class="tracking-commit-section">';
+            html += '<button id="trackingCommit" class="btn-tracking-commit">✓ Änderungen in diesem Tab übernehmen</button>';
+            html += '<p class="tracking-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
+            html += '</div>';
+        }
         
         html += '</div>';
         
         trackingContent.innerHTML = html;
         
-        // Event Listener für Link-Klicks
-        attachTrackingLinkListeners();
+        // Event Listener
+        attachTrackingEditListeners();
     }
     
     // Extrahiere Links aus HTML
@@ -3878,17 +3976,126 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
     
-    // Event Listener für Link-Klicks im Tracking Tab
-    function attachTrackingLinkListeners() {
-        const linkItems = document.querySelectorAll('.tracking-link-item');
+    // Event Listener für Tracking Tab Edit (Phase 7A)
+    function attachTrackingEditListeners() {
+        // Copy Buttons
+        document.querySelectorAll('.btn-tracking-copy').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const href = this.getAttribute('data-href');
+                navigator.clipboard.writeText(href).then(() => {
+                    alert('✓ URL in Zwischenablage kopiert!');
+                }).catch(err => {
+                    console.error('Copy failed:', err);
+                });
+            });
+        });
         
-        linkItems.forEach(item => {
-            item.addEventListener('click', function() {
+        // Apply Buttons (Links)
+        document.querySelectorAll('.btn-tracking-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
                 const linkId = this.getAttribute('data-link-id');
-                console.log('[INSPECTOR] Link clicked:', linkId);
+                const input = document.querySelector('.tracking-link-input[data-link-id="' + linkId + '"]');
+                const newHref = input ? input.value.trim() : '';
+                
+                if (!newHref) {
+                    alert('⚠️ Bitte neue URL eingeben.');
+                    return;
+                }
+                
+                handleTrackingLinkReplace(linkId, newHref);
+            });
+        });
+        
+        // Locate Buttons
+        document.querySelectorAll('.btn-tracking-locate').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const linkId = this.getAttribute('data-link-id');
                 highlightLinkInPreview(linkId);
             });
         });
+        
+        // Pixel Apply Button
+        const pixelApplyBtn = document.getElementById('trackingPixelApply');
+        if (pixelApplyBtn) {
+            pixelApplyBtn.addEventListener('click', function() {
+                const input = document.getElementById('trackingPixelInput');
+                const newUrl = input ? input.value.trim() : '';
+                
+                if (!newUrl) {
+                    alert('⚠️ Bitte neue Pixel-URL eingeben.');
+                    return;
+                }
+                
+                handleTrackingPixelReplace(newUrl);
+            });
+        }
+        
+        // Undo Button
+        const undoBtn = document.getElementById('trackingUndo');
+        if (undoBtn) {
+            undoBtn.addEventListener('click', handleTrackingUndo);
+        }
+        
+        // Commit Button
+        const commitBtn = document.getElementById('trackingCommit');
+        if (commitBtn) {
+            commitBtn.addEventListener('click', handleTrackingCommit);
+        }
+        
+        // Phase 8A: Pixel Insert Button
+        const pixelInsertBtn = document.getElementById('trackingPixelInsert');
+        if (pixelInsertBtn) {
+            pixelInsertBtn.addEventListener('click', function() {
+                const input = document.getElementById('trackingPixelInsertInput');
+                const pixelUrl = input ? input.value.trim() : '';
+                
+                if (!pixelUrl) {
+                    alert('⚠️ Bitte Pixel-URL eingeben.');
+                    return;
+                }
+                
+                handleTrackingPixelInsert(pixelUrl);
+            });
+        }
+        
+        // Phase 8B: Link Insert Buttons
+        const startInsertBtn = document.getElementById('trackingStartInsert');
+        if (startInsertBtn) {
+            startInsertBtn.addEventListener('click', function() {
+                trackingInsertMode = true;
+                trackingSelectedElement = null;
+                const trackingContent = document.getElementById('trackingContent');
+                showTrackingTab(trackingContent);
+            });
+        }
+        
+        const cancelInsertBtn = document.getElementById('trackingCancelInsert');
+        if (cancelInsertBtn) {
+            cancelInsertBtn.addEventListener('click', function() {
+                trackingInsertMode = false;
+                trackingSelectedElement = null;
+                const trackingContent = document.getElementById('trackingContent');
+                showTrackingTab(trackingContent);
+            });
+        }
+        
+        const insertApplyBtn = document.getElementById('trackingInsertApply');
+        if (insertApplyBtn) {
+            insertApplyBtn.addEventListener('click', function() {
+                const input = document.getElementById('trackingInsertUrl');
+                const targetUrl = input ? input.value.trim() : '';
+                
+                if (!targetUrl) {
+                    alert('⚠️ Bitte Ziel-URL eingeben.');
+                    return;
+                }
+                
+                handleTrackingLinkInsert(targetUrl);
+            });
+        }
     }
     
     // Highlight Link in Preview
@@ -3906,6 +4113,351 @@ document.addEventListener('DOMContentLoaded', () => {
         }, '*');
     }
     
+    // Handle Link Replace (Phase 7A)
+    function handleTrackingLinkReplace(linkId, newHref) {
+        console.log('[INSPECTOR] Replacing link:', linkId, 'with:', newHref);
+        
+        // Speichere in History
+        trackingHistory.push(trackingTabHtml);
+        
+        // Finde Link via linkId (L001 -> 1. Link, L002 -> 2. Link, etc.)
+        const linkIndex = parseInt(linkId.substring(1)) - 1;
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(trackingTabHtml, 'text/html');
+        const anchors = doc.querySelectorAll('a[href]');
+        
+        if (linkIndex >= 0 && linkIndex < anchors.length) {
+            const anchor = anchors[linkIndex];
+            const oldHref = anchor.getAttribute('href');
+            
+            // Ersetze href
+            anchor.setAttribute('href', newHref);
+            
+            // Serialisiere zurück
+            const serializer = new XMLSerializer();
+            trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+            
+            // Pending markieren
+            trackingPending = true;
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Update Global Pending Indicator (Phase 9)
+            updateGlobalPendingIndicator();
+            
+            // Re-render Tracking Tab
+            const trackingContent = document.getElementById('trackingContent');
+            showTrackingTab(trackingContent);
+            
+            console.log('[INSPECTOR] Link replaced:', oldHref, '->', newHref);
+        } else {
+            console.error('[INSPECTOR] Link not found:', linkId);
+        }
+    }
+    
+    // Handle Pixel Replace (Phase 7A)
+    function handleTrackingPixelReplace(newUrl) {
+        console.log('[INSPECTOR] Replacing pixel URL with:', newUrl);
+        
+        // Speichere in History
+        trackingHistory.push(trackingTabHtml);
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(trackingTabHtml, 'text/html');
+        const images = doc.querySelectorAll('img');
+        
+        // Finde Tracking-Pixel (gleiche Logik wie detectTrackingPixel)
+        for (let img of images) {
+            const src = img.getAttribute('src') || '';
+            const width = img.getAttribute('width');
+            const height = img.getAttribute('height');
+            const style = img.getAttribute('style') || '';
+            
+            const is1x1 = (width === '1' && height === '1') || 
+                          style.includes('width:1px') || 
+                          style.includes('height:1px');
+            
+            const hasTrackingUrl = src.includes('track') || 
+                                   src.includes('pixel') || 
+                                   src.includes('open') ||
+                                   src.includes('beacon');
+            
+            if (is1x1 || hasTrackingUrl) {
+                const oldSrc = img.getAttribute('src');
+                
+                // Ersetze src
+                img.setAttribute('src', newUrl);
+                
+                // Serialisiere zurück
+                const serializer = new XMLSerializer();
+                trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+                
+                // Pending markieren
+                trackingPending = true;
+                
+                // Update Preview
+                updateInspectorPreview();
+                
+                // Update Global Pending Indicator (Phase 9)
+                updateGlobalPendingIndicator();
+                
+                // Re-render Tracking Tab
+                const trackingContent = document.getElementById('trackingContent');
+                showTrackingTab(trackingContent);
+                
+                console.log('[INSPECTOR] Pixel replaced:', oldSrc, '->', newUrl);
+                return;
+            }
+        }
+        
+        console.error('[INSPECTOR] Tracking pixel not found');
+    }
+    
+    // Handle Tracking Undo (Phase 7A)
+    function handleTrackingUndo() {
+        if (trackingHistory.length === 0) return;
+        
+        // Restore previous state
+        trackingTabHtml = trackingHistory.pop();
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
+        // Re-render Tracking Tab
+        const trackingContent = document.getElementById('trackingContent');
+        showTrackingTab(trackingContent);
+        
+        console.log('[INSPECTOR] Tracking undo performed');
+    }
+    
+    // Handle Tracking Commit (Phase 7A)
+    function handleTrackingCommit() {
+        if (!trackingPending) return;
+        
+        const confirmed = confirm(
+            'Änderungen übernehmen?\n\n' +
+            'Dies überschreibt currentWorkingHtml und aktualisiert alle Tabs.\n\n' +
+            'Bestätigen?'
+        );
+        
+        if (!confirmed) return;
+        
+        // Commit: trackingTabHtml → currentWorkingHtml
+        currentWorkingHtml = trackingTabHtml;
+        
+        // Reset Tracking State
+        trackingPending = false;
+        trackingHistory = [];
+        
+        // Reset Insert Mode (Phase 8)
+        trackingInsertMode = false;
+        trackingSelectedElement = null;
+        
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
+        // Alle Tabs neu rendern
+        loadInspectorTabContent('tracking');
+        loadInspectorTabContent('images');
+        loadInspectorTabContent('tagreview');
+        loadInspectorTabContent('editor');
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        alert('✓ Änderungen erfolgreich übernommen!');
+        
+        console.log('[INSPECTOR] Tracking changes committed to currentWorkingHtml');
+    }
+    
+    // ============================================
+    // PHASE 8: TRACKING INSERT HANDLERS
+    // ============================================
+    
+    // Handle Pixel Insert (Phase 8A)
+    function handleTrackingPixelInsert(pixelUrl) {
+        console.log('[INSPECTOR] Inserting tracking pixel:', pixelUrl);
+        
+        // Speichere in History
+        trackingHistory.push(trackingTabHtml);
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(trackingTabHtml, 'text/html');
+        
+        // Prüfe ob bereits ein 1x1 Pixel existiert
+        const images = doc.querySelectorAll('img');
+        for (let img of images) {
+            const width = img.getAttribute('width');
+            const height = img.getAttribute('height');
+            const style = img.getAttribute('style') || '';
+            
+            const is1x1 = (width === '1' && height === '1') || 
+                          style.includes('width:1px') || 
+                          style.includes('height:1px');
+            
+            if (is1x1) {
+                alert('⚠️ Es existiert bereits ein 1x1 Pixel. Bitte verwenden Sie "Ersetzen" statt "Einfügen".');
+                trackingHistory.pop(); // Entferne History-Eintrag
+                return;
+            }
+        }
+        
+        // Finde <body> Tag
+        const body = doc.querySelector('body');
+        if (!body) {
+            alert('⚠️ Kein <body> Tag gefunden.');
+            trackingHistory.pop();
+            return;
+        }
+        
+        // Erstelle Pixel-Block (exakt wie in Spec)
+        const pixelBlock = doc.createElement('div');
+        pixelBlock.setAttribute('style', 'display:none;max-height:0;overflow:hidden;mso-hide:all;');
+        
+        const pixelImg = doc.createElement('img');
+        pixelImg.setAttribute('src', pixelUrl);
+        pixelImg.setAttribute('width', '1');
+        pixelImg.setAttribute('height', '1');
+        pixelImg.setAttribute('style', 'display:block;');
+        pixelImg.setAttribute('alt', '');
+        
+        pixelBlock.appendChild(pixelImg);
+        
+        // Füge direkt nach <body> ein (als erstes Kind)
+        if (body.firstChild) {
+            body.insertBefore(pixelBlock, body.firstChild);
+        } else {
+            body.appendChild(pixelBlock);
+        }
+        
+        // Serialisiere zurück
+        const serializer = new XMLSerializer();
+        trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+        
+        // Pending markieren
+        trackingPending = true;
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
+        // Re-render Tracking Tab (neuer Link sollte in Liste erscheinen)
+        const trackingContent = document.getElementById('trackingContent');
+        showTrackingTab(trackingContent);
+        
+        console.log('[INSPECTOR] Pixel inserted:', pixelUrl);
+    }
+    
+    // Handle Link Insert (Phase 8B)
+    function handleTrackingLinkInsert(targetUrl) {
+        if (!trackingSelectedElement) {
+            alert('⚠️ Kein Element ausgewählt.');
+            return;
+        }
+        
+        console.log('[INSPECTOR] Inserting link around element:', trackingSelectedElement.qaNodeId);
+        
+        // Speichere in History
+        trackingHistory.push(trackingTabHtml);
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(trackingTabHtml, 'text/html');
+        
+        // Finde Element via qaNodeId (ohne data-qa-node-id, da nicht in trackingTabHtml)
+        // Wir müssen das Element via Index finden (N001 -> 1. klickbares Element, etc.)
+        const nodeIndex = parseInt(trackingSelectedElement.qaNodeId.substring(1)) - 1;
+        
+        // Sammle alle klickbaren Elemente (gleiche Logik wie in generateAnnotatedPreview)
+        const clickableElements = doc.querySelectorAll('a, img, button, table, td, tr, div');
+        
+        if (nodeIndex < 0 || nodeIndex >= clickableElements.length) {
+            alert('⚠️ Element nicht gefunden.');
+            trackingHistory.pop();
+            return;
+        }
+        
+        const element = clickableElements[nodeIndex];
+        
+        // Sicherheitscheck: Ist Element bereits in einem <a> Tag?
+        let parent = element.parentElement;
+        while (parent) {
+            if (parent.tagName.toLowerCase() === 'a') {
+                alert('⚠️ Element ist bereits verlinkt (innerhalb eines <a> Tags).');
+                trackingHistory.pop();
+                return;
+            }
+            parent = parent.parentElement;
+        }
+        
+        // Erstelle <a> Wrapper
+        const link = doc.createElement('a');
+        link.setAttribute('href', targetUrl);
+        link.setAttribute('target', '_blank');
+        
+        // Ersetze Element durch <a>[Element]</a>
+        const parent2 = element.parentElement;
+        if (parent2) {
+            parent2.insertBefore(link, element);
+            link.appendChild(element);
+        } else {
+            alert('⚠️ Element hat kein Parent-Element.');
+            trackingHistory.pop();
+            return;
+        }
+        
+        // Serialisiere zurück
+        const serializer = new XMLSerializer();
+        trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+        
+        // Pending markieren
+        trackingPending = true;
+        
+        // Reset Insert Mode
+        trackingInsertMode = false;
+        trackingSelectedElement = null;
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
+        // Re-render Tracking Tab (neuer Link sollte in Liste erscheinen)
+        const trackingContent = document.getElementById('trackingContent');
+        showTrackingTab(trackingContent);
+        
+        console.log('[INSPECTOR] Link inserted around element:', targetUrl);
+    }
+    
+    // Handle Tracking Element Selection (Phase 8B)
+    function handleTrackingElementSelection(data) {
+        console.log('[INSPECTOR] Tracking element selected:', data);
+        
+        // Speichere ausgewähltes Element
+        trackingSelectedElement = {
+            qaNodeId: data.qaNodeId,
+            tagName: data.tagName,
+            text: data.text || '',
+            href: data.href || '',
+            src: data.src || ''
+        };
+        
+        // Re-render Tracking Tab (zeigt Auswahl + URL-Eingabe)
+        const trackingContent = document.getElementById('trackingContent');
+        showTrackingTab(trackingContent);
+    }
+    
     // HTML escape helper
     function escapeHtml(text) {
         const div = document.createElement('div');
@@ -3917,17 +4469,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // PHASE 4: IMAGES TAB IMPLEMENTATION
     // ============================================
     
-    // Zeige Bilder Tab Content
+    // Zeige Bilder Tab Content (Phase 7B: Edit Mode)
     function showImagesTab(imagesContent) {
         if (!imagesContent) return;
         
         console.log('[INSPECTOR] Rendering Images Tab...');
         
-        // Extrahiere Bilder aus currentWorkingHtml
-        const images = extractImagesFromHTML(currentWorkingHtml);
+        // Initialisiere imagesTabHtml beim ersten Aufruf
+        if (!imagesTabHtml) {
+            imagesTabHtml = currentWorkingHtml;
+            imagesHistory = [];
+            imagesPending = false;
+        }
+        
+        // Extrahiere Bilder aus imagesTabHtml
+        const images = extractImagesFromHTML(imagesTabHtml);
         
         // Extrahiere Background Images (optional)
-        const bgImages = extractBackgroundImagesFromHTML(currentWorkingHtml);
+        const bgImages = extractBackgroundImagesFromHTML(imagesTabHtml);
         
         // Render Bilder Tab
         let html = '<div class="images-tab-content">';
@@ -3941,19 +4500,28 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             html += '<div class="images-list">';
             images.forEach(img => {
-                html += '<div class="image-item" data-img-id="' + img.id + '">';
+                html += '<div class="image-item-edit" data-img-id="' + img.id + '">';
                 html += '<div class="image-header">';
                 html += '<span class="image-id">' + img.id + '</span>';
                 html += '<span class="image-alt">' + escapeHtml(img.alt) + '</span>';
                 html += '</div>';
-                html += '<div class="image-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
+                html += '<div class="image-src-display">';
+                html += '<strong>Aktuell:</strong> ';
+                html += '<code title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</code>';
+                html += '</div>';
+                html += '<div class="image-edit-controls">';
+                html += '<input type="text" class="image-src-input" placeholder="Neue src URL eingeben..." data-img-id="' + img.id + '">';
+                html += '<button class="btn-image-apply" data-img-id="' + img.id + '">✓ Anwenden</button>';
+                html += '<button class="btn-image-remove" data-img-id="' + img.id + '">🗑️ Entfernen</button>';
+                html += '<button class="btn-image-locate" data-img-id="' + img.id + '">👁️ Locate</button>';
+                html += '</div>';
                 html += '</div>';
             });
             html += '</div>';
         }
         html += '</div>';
         
-        // Sektion 2: Background Images (optional)
+        // Sektion 2: Background Images (optional, read-only)
         if (bgImages.length > 0) {
             html += '<div class="images-section">';
             html += '<h3>🎨 Background Images (' + bgImages.length + ')</h3>';
@@ -3965,7 +4533,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '</div>';
             });
             html += '</div>';
-            html += '<p class="images-note">ℹ️ Background Images sind read-only und nicht klickbar (kein Highlight).</p>';
+            html += '<p class="images-note">ℹ️ Background Images sind read-only.</p>';
+            html += '</div>';
+        }
+        
+        // Undo Button
+        if (imagesHistory.length > 0) {
+            html += '<div class="images-undo-section">';
+            html += '<button id="imagesUndo" class="btn-images-undo">↶ Undo (' + imagesHistory.length + ')</button>';
+            html += '</div>';
+        }
+        
+        // Commit Button (nur wenn pending)
+        if (imagesPending) {
+            html += '<div class="images-commit-section">';
+            html += '<button id="imagesCommit" class="btn-images-commit">✓ Änderungen in diesem Tab übernehmen</button>';
+            html += '<p class="images-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
             html += '</div>';
         }
         
@@ -3973,8 +4556,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         imagesContent.innerHTML = html;
         
-        // Event Listener für Bild-Klicks
-        attachImageListeners();
+        // Event Listener
+        attachImagesEditListeners();
     }
     
     // Extrahiere Bilder aus HTML
@@ -4055,17 +4638,58 @@ document.addEventListener('DOMContentLoaded', () => {
         return bgImages;
     }
     
-    // Event Listener für Bild-Klicks im Bilder Tab
-    function attachImageListeners() {
-        const imageItems = document.querySelectorAll('.image-item');
-        
-        imageItems.forEach(item => {
-            item.addEventListener('click', function() {
+    // Event Listener für Images Tab Edit (Phase 7B)
+    function attachImagesEditListeners() {
+        // Apply Buttons (Images)
+        document.querySelectorAll('.btn-image-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
                 const imgId = this.getAttribute('data-img-id');
-                console.log('[INSPECTOR] Image clicked:', imgId);
+                const input = document.querySelector('.image-src-input[data-img-id="' + imgId + '"]');
+                const newSrc = input ? input.value.trim() : '';
+                
+                if (!newSrc) {
+                    alert('⚠️ Bitte neue src URL eingeben.');
+                    return;
+                }
+                
+                handleImageSrcReplace(imgId, newSrc);
+            });
+        });
+        
+        // Remove Buttons
+        document.querySelectorAll('.btn-image-remove').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
+                
+                const confirmed = confirm('Bild entfernen?\n\nDies löscht nur den <img> Tag, nicht die umliegende Struktur.');
+                if (!confirmed) return;
+                
+                handleImageRemove(imgId);
+            });
+        });
+        
+        // Locate Buttons
+        document.querySelectorAll('.btn-image-locate').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
                 highlightImageInPreview(imgId);
             });
         });
+        
+        // Undo Button
+        const undoBtn = document.getElementById('imagesUndo');
+        if (undoBtn) {
+            undoBtn.addEventListener('click', handleImagesUndo);
+        }
+        
+        // Commit Button
+        const commitBtn = document.getElementById('imagesCommit');
+        if (commitBtn) {
+            commitBtn.addEventListener('click', handleImagesCommit);
+        }
     }
     
     // Highlight Image in Preview
@@ -4081,6 +4705,155 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'HIGHLIGHT_IMG',
             id: imgId
         }, '*');
+    }
+    
+    // Handle Image Src Replace (Phase 7B)
+    function handleImageSrcReplace(imgId, newSrc) {
+        console.log('[INSPECTOR] Replacing image src:', imgId, 'with:', newSrc);
+        
+        // Speichere in History
+        imagesHistory.push(imagesTabHtml);
+        
+        // Finde Image via imgId (I001 -> 1. Image, I002 -> 2. Image, etc.)
+        const imgIndex = parseInt(imgId.substring(1)) - 1;
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
+        const images = doc.querySelectorAll('img');
+        
+        if (imgIndex >= 0 && imgIndex < images.length) {
+            const img = images[imgIndex];
+            const oldSrc = img.getAttribute('src');
+            
+            // Ersetze src
+            img.setAttribute('src', newSrc);
+            
+            // Serialisiere zurück
+            const serializer = new XMLSerializer();
+            imagesTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+            
+            // Pending markieren
+            imagesPending = true;
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Update Global Pending Indicator (Phase 9)
+            updateGlobalPendingIndicator();
+            
+            // Re-render Images Tab
+            const imagesContent = document.getElementById('imagesContent');
+            showImagesTab(imagesContent);
+            
+            console.log('[INSPECTOR] Image src replaced:', oldSrc, '->', newSrc);
+        } else {
+            console.error('[INSPECTOR] Image not found:', imgId);
+        }
+    }
+    
+    // Handle Image Remove (Phase 7B)
+    function handleImageRemove(imgId) {
+        console.log('[INSPECTOR] Removing image:', imgId);
+        
+        // Speichere in History
+        imagesHistory.push(imagesTabHtml);
+        
+        // Finde Image via imgId
+        const imgIndex = parseInt(imgId.substring(1)) - 1;
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
+        const images = doc.querySelectorAll('img');
+        
+        if (imgIndex >= 0 && imgIndex < images.length) {
+            const img = images[imgIndex];
+            
+            // Entferne <img> Tag
+            img.remove();
+            
+            // Serialisiere zurück
+            const serializer = new XMLSerializer();
+            imagesTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+            
+            // Pending markieren
+            imagesPending = true;
+            
+            // Update Preview
+              // Pending markieren
+            imagesPending = true;
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Update Global Pending Indicator (Phase 9)
+            updateGlobalPendingIndicator();
+            
+            // Re-render Images Tab
+            const imagesContent = document.getElementById('imagesContent');
+            showImagesTab(imagesContent);
+            
+            console.log('[INSPECTOR] Image removed:', imgId);
+        } else {
+            console.error('[INSPECTOR] Image not found:', imgId);
+        }
+    }
+    
+    // Handle Images Undo (Phase 7B)
+    function handleImagesUndo() {
+        if (imagesHistory.length === 0) return;
+        
+        // Restore previous state
+        imagesTabHtml = imagesHistory.pop();
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
+        // Re-render Images Tab
+        const imagesContent = document.getElementById('imagesContent');
+        showImagesTab(imagesContent);
+        
+        console.log('[INSPECTOR] Images undo performed');
+    }
+    
+    // Handle Images Commit (Phase 7B)
+    function handleImagesCommit() {
+        if (!imagesPending) return;
+        
+        const confirmed = confirm(
+            'Änderungen übernehmen?\n\n' +
+            'Dies überschreibt currentWorkingHtml und aktualisiert alle Tabs.\n\n' +
+            'Bestätigen?'
+        );
+        
+        if (!confirmed) return;
+        
+        // Commit: imagesTabHtml → currentWorkingHtml
+        currentWorkingHtml = imagesTabHtml;
+        
+        // Reset Images State
+        imagesPending = false;
+        imagesHistory = [];
+        
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
+        // Alle Tabs neu rendern
+        loadInspectorTabContent('tracking');
+        loadInspectorTabContent('images');
+        loadInspectorTabContent('tagreview');
+        loadInspectorTabContent('editor');
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        alert('✓ Änderungen erfolgreich übernommen!');
+        
+        console.log('[INSPECTOR] Images changes committed to currentWorkingHtml');
     }
     
     // ============================================
@@ -4506,6 +5279,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updateInspectorPreview();
         
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
         // Re-render Editor Tab
         const editorContent = document.getElementById('editorContent');
         showEditorTab(editorContent);
@@ -4556,6 +5332,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updateInspectorPreview();
         
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
         // Re-render Editor Tab
         const editorContent = document.getElementById('editorContent');
         showEditorTab(editorContent);
@@ -4576,11 +5355,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updateInspectorPreview();
         
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
         // Re-render Editor Tab
         const editorContent = document.getElementById('editorContent');
         showEditorTab(editorContent);
         
-        console.log('[INSPECTOR] Undo performed');
+        console.log('[INSPECTOR] Editor undo performed');
     }
     
     // Handle Commit
@@ -4603,6 +5385,9 @@ document.addEventListener('DOMContentLoaded', () => {
         editorHistory = [];
         editorSelectedElement = null;
         
+        // Update Global Pending Indicator (Phase 9)
+        updateGlobalPendingIndicator();
+        
         // Alle Tabs neu rendern
         loadInspectorTabContent('tracking');
         loadInspectorTabContent('images');
@@ -4622,6 +5407,73 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================
     
     // Highlight-API vorbereiten (noch nicht nutzen)
+    // ============================================
+    // PHASE 9: GLOBAL PENDING INDICATOR
+    // ============================================
+    
+    function updateGlobalPendingIndicator() {
+        const indicator = document.getElementById('globalPendingIndicator');
+        const trackingChip = document.getElementById('trackingStatusChip');
+        const imagesChip = document.getElementById('imagesStatusChip');
+        const tagreviewChip = document.getElementById('tagreviewStatusChip');
+        const editorChip = document.getElementById('editorStatusChip');
+        const warning = document.getElementById('pendingWarning');
+        
+        if (!indicator) return;
+        
+        // Zeige Indicator
+        indicator.style.display = 'block';
+        
+        // Update Chips
+        if (trackingChip) {
+            if (trackingPending) {
+                trackingChip.className = 'status-chip status-pending';
+                trackingChip.textContent = 'Tracking: Pending';
+            } else {
+                trackingChip.className = 'status-chip status-committed';
+                trackingChip.textContent = 'Tracking: Committed';
+            }
+        }
+        
+        if (imagesChip) {
+            if (imagesPending) {
+                imagesChip.className = 'status-chip status-pending';
+                imagesChip.textContent = 'Bilder: Pending';
+            } else {
+                imagesChip.className = 'status-chip status-committed';
+                imagesChip.textContent = 'Bilder: Committed';
+            }
+        }
+        
+        if (tagreviewChip) {
+            // Tag-Review hat aktuell kein pending State (read-only in Phase 5)
+            tagreviewChip.className = 'status-chip status-committed';
+            tagreviewChip.textContent = 'Tag-Review: Committed';
+        }
+        
+        if (editorChip) {
+            if (editorPending) {
+                editorChip.className = 'status-chip status-pending';
+                editorChip.textContent = 'Editor: Pending';
+            } else {
+                editorChip.className = 'status-chip status-committed';
+                editorChip.textContent = 'Editor: Committed';
+            }
+        }
+        
+        // Zeige Warning wenn irgendein Tab pending
+        const anyPending = trackingPending || imagesPending || editorPending;
+        if (warning) {
+            warning.style.display = anyPending ? 'block' : 'none';
+        }
+        
+        console.log('[INSPECTOR] Global pending indicator updated:', {
+            tracking: trackingPending,
+            images: imagesPending,
+            editor: editorPending
+        });
+    }
+    
     function prepareHighlightAPI() {
         // Wird in Phase 3+ verwendet
         // Placeholder für spätere Implementierung

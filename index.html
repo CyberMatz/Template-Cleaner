@@ -166,6 +166,19 @@
             </button>
         </div>
         
+        <!-- Phase 9: Global Pending Indicator -->
+        <div id="globalPendingIndicator" class="global-pending-indicator" style="display: none;">
+            <div class="pending-status-chips">
+                <span id="trackingStatusChip" class="status-chip status-committed">Tracking: Committed</span>
+                <span id="imagesStatusChip" class="status-chip status-committed">Bilder: Committed</span>
+                <span id="tagreviewStatusChip" class="status-chip status-committed">Tag-Review: Committed</span>
+                <span id="editorStatusChip" class="status-chip status-committed">Editor: Committed</span>
+            </div>
+            <div id="pendingWarning" class="pending-warning" style="display: none;">
+                ⚠️ <strong>Achtung:</strong> Änderungen sind noch nicht übernommen. Downloads verwenden den letzten übernommenen Stand.
+            </div>
+        </div>
+        
         <!-- 2-Spalten-Layout -->
         <div class="inspector-container">
             <!-- Linke Spalte: Controls -->

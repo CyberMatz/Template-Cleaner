@@ -2416,3 +2416,520 @@ footer {
     font-weight: 500;
     text-align: center;
 }
+
+
+/* ============================================
+   PHASE 7A: TRACKING TAB EDIT MODE STYLING
+   ============================================ */
+
+.tracking-link-item-edit {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.tracking-link-href-display {
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tracking-link-href-display code {
+    flex: 1;
+    background: #f5f5f5;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    overflow-x: auto;
+}
+
+.btn-tracking-copy {
+    padding: 6px 12px;
+    background: #9e9e9e;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-tracking-copy:hover {
+    background: #757575;
+}
+
+.tracking-link-edit-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.tracking-link-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.tracking-link-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.btn-tracking-apply {
+    padding: 8px 16px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-tracking-apply:hover {
+    background: #45a049;
+}
+
+.btn-tracking-locate {
+    padding: 8px 16px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-tracking-locate:hover {
+    background: #2980b9;
+}
+
+/* Pixel Edit Controls */
+.tracking-pixel-edit-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.tracking-pixel-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.tracking-pixel-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+/* Undo Section */
+.tracking-undo-section {
+    margin: 20px 0;
+}
+
+.btn-tracking-undo {
+    width: 100%;
+    padding: 12px 16px;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.btn-tracking-undo:hover {
+    background: #f57c00;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+}
+
+/* Commit Section */
+.tracking-commit-section {
+    background: #fff3e0;
+    border: 2px solid #ff9800;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.btn-tracking-commit {
+    width: 100%;
+    padding: 15px 20px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.btn-tracking-commit:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.tracking-commit-hint {
+    margin: 0;
+    color: #f57c00;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* ============================================
+   PHASE 7B: IMAGES TAB EDIT MODE STYLING
+   ============================================ */
+
+.image-item-edit {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.image-src-display {
+    margin: 10px 0;
+}
+
+.image-src-display code {
+    background: #f5f5f5;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: inline-block;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.image-edit-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.image-src-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.image-src-input:focus {
+    outline: none;
+    border-color: #e74c3c;
+}
+
+.btn-image-apply {
+    padding: 8px 16px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-image-apply:hover {
+    background: #45a049;
+}
+
+.btn-image-remove {
+    padding: 8px 16px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-image-remove:hover {
+    background: #d32f2f;
+}
+
+.btn-image-locate {
+    padding: 8px 16px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-image-locate:hover {
+    background: #c0392b;
+}
+
+/* Undo Section */
+.images-undo-section {
+    margin: 20px 0;
+}
+
+.btn-images-undo {
+    width: 100%;
+    padding: 12px 16px;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.btn-images-undo:hover {
+    background: #f57c00;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+}
+
+/* Commit Section */
+.images-commit-section {
+    background: #ffebee;
+    border: 2px solid #f44336;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.btn-images-commit {
+    width: 100%;
+    padding: 15px 20px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.btn-images-commit:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.images-commit-hint {
+    margin: 0;
+    color: #d32f2f;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+}
+
+
+/* ============================================
+   PHASE 8: TRACKING INSERT MODE STYLING
+   ============================================ */
+
+/* Insert Section */
+.tracking-insert-section {
+    background: #e3f2fd;
+    border: 2px solid #2196f3;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.btn-tracking-insert {
+    width: 100%;
+    padding: 12px 16px;
+    background: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.btn-tracking-insert:hover {
+    background: #1976d2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+}
+
+/* Insert Hint (Waiting for Selection) */
+.tracking-insert-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    color: #1976d2;
+    font-size: 14px;
+}
+
+.btn-tracking-cancel {
+    padding: 8px 16px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-tracking-cancel:hover {
+    background: #d32f2f;
+}
+
+/* Insert Selected Element */
+.tracking-insert-selected {
+    background: white;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.tracking-insert-selected-header {
+    font-weight: 700;
+    color: #4caf50;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.tracking-insert-selected-info {
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.tracking-insert-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.tracking-insert-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.tracking-insert-input:focus {
+    outline: none;
+    border-color: #2196f3;
+}
+
+.btn-tracking-insert-apply {
+    padding: 8px 16px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.btn-tracking-insert-apply:hover {
+    background: #45a049;
+}
+
+/* Pixel Insert Controls */
+.tracking-pixel-insert-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+
+/* ============================================
+   PHASE 9: GLOBAL PENDING INDICATOR STYLING
+   ============================================ */
+
+.global-pending-indicator {
+    background: #fff;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.pending-status-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.status-chip {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-chip.status-committed {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #4caf50;
+}
+
+.status-chip.status-pending {
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #ff9800;
+    animation: pulse-pending 2s ease-in-out infinite;
+}
+
+@keyframes pulse-pending {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.pending-warning {
+    background: #fff3e0;
+    border: 1px solid #ff9800;
+    border-radius: 6px;
+    padding: 12px;
+    color: #e65100;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.pending-warning strong {
+    font-weight: 700;
+}
