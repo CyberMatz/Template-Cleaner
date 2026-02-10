@@ -1786,3 +1786,633 @@ footer {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
+
+
+/* ============================================
+   PHASE 3: TRACKING TAB STYLING
+   ============================================ */
+
+.tracking-tab-content {
+    padding: 20px;
+}
+
+.tracking-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.tracking-section h3 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.tracking-empty {
+    color: #7f8c8d;
+    font-style: italic;
+    margin: 10px 0;
+}
+
+/* Link Items */
+.tracking-links-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tracking-link-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tracking-link-item:hover {
+    border-color: #3498db;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.15);
+    transform: translateY(-1px);
+}
+
+.tracking-link-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.tracking-link-id {
+    background: #3498db;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.tracking-link-text {
+    color: #2c3e50;
+    font-weight: 500;
+    flex: 1;
+}
+
+.tracking-link-href {
+    color: #7f8c8d;
+    font-size: 12px;
+    font-family: monospace;
+    word-break: break-all;
+    padding-left: 45px;
+}
+
+/* Tracking Pixel */
+.tracking-pixel-info {
+    background: white;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.tracking-pixel-status {
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.tracking-pixel-found {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.tracking-pixel-missing {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.tracking-pixel-details {
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.tracking-pixel-details code {
+    background: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #e74c3c;
+    word-break: break-all;
+    display: inline-block;
+    max-width: 100%;
+}
+
+.tracking-note {
+    color: #7f8c8d;
+    font-size: 12px;
+    font-style: italic;
+    margin: 10px 0 0 0;
+}
+
+
+/* ============================================
+   PHASE 4: IMAGES TAB STYLING
+   ============================================ */
+
+.images-tab-content {
+    padding: 20px;
+}
+
+.images-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.images-section h3 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.images-empty {
+    color: #7f8c8d;
+    font-style: italic;
+    margin: 10px 0;
+}
+
+/* Image Items */
+.images-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.image-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.image-item:hover {
+    border-color: #e74c3c;
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.15);
+    transform: translateY(-1px);
+}
+
+.image-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.image-id {
+    background: #e74c3c;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.image-alt {
+    color: #2c3e50;
+    font-weight: 500;
+    flex: 1;
+    font-style: italic;
+}
+
+.image-src {
+    color: #7f8c8d;
+    font-size: 12px;
+    font-family: monospace;
+    word-break: break-all;
+    padding-left: 45px;
+}
+
+/* Background Images */
+.bg-images-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bg-image-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px 15px;
+}
+
+.bg-image-url {
+    color: #7f8c8d;
+    font-size: 12px;
+    font-family: monospace;
+    word-break: break-all;
+    margin-bottom: 6px;
+}
+
+.bg-image-context {
+    color: #95a5a6;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.images-note {
+    color: #7f8c8d;
+    font-size: 12px;
+    font-style: italic;
+    margin: 10px 0 0 0;
+}
+
+
+/* ============================================
+   PHASE 5: TAG-REVIEW TAB STYLING
+   ============================================ */
+
+.tagreview-tab-content {
+    padding: 20px;
+}
+
+.tagreview-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.tagreview-section h3 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.tagreview-empty {
+    color: #4caf50;
+    font-weight: 600;
+    margin: 10px 0;
+}
+
+/* Fix Items */
+.tagreview-fixes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tagreview-fix-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tagreview-fix-item:hover {
+    border-color: #ff9800;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.tagreview-fix-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.tagreview-fix-id {
+    background: #ff9800;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.tagreview-fix-tag {
+    background: #4caf50;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+.tagreview-fix-details {
+    color: #555;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.tagreview-fix-snippet {
+    background: #f5f5f5;
+    border-left: 3px solid #ff9800;
+    padding: 10px;
+    margin: 10px 0;
+    overflow-x: auto;
+}
+
+.tagreview-fix-snippet pre {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    white-space: pre;
+}
+
+.tagreview-fix-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.btn-tagreview-undo,
+.btn-tagreview-keep {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+}
+
+.btn-tagreview-undo {
+    background: #ff9800;
+    color: white;
+}
+
+.btn-tagreview-undo:hover:not(:disabled) {
+    background: #f57c00;
+}
+
+.btn-tagreview-keep {
+    background: #4caf50;
+    color: white;
+}
+
+.btn-tagreview-keep:hover:not(:disabled) {
+    background: #45a049;
+}
+
+.btn-tagreview-undo:disabled,
+.btn-tagreview-keep:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Manual Actions */
+.tagreview-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tagreview-action-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.tagreview-action-number {
+    background: #667eea;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+.tagreview-action-text {
+    color: #555;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+
+/* ============================================
+   PHASE 6: EDITOR TAB STYLING
+   ============================================ */
+
+.editor-tab-content {
+    padding: 20px;
+}
+
+.editor-hint {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.editor-hint p {
+    margin: 0;
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.editor-no-selection {
+    background: #f5f5f5;
+    border: 1px dashed #ccc;
+    padding: 30px;
+    text-align: center;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.editor-no-selection p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+/* Selection Section */
+.editor-selection {
+    background: #f8f9fa;
+    border: 2px solid #9c27b0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.editor-selection h3 {
+    margin: 0 0 15px 0;
+    color: #9c27b0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.editor-selection-info {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    line-height: 1.8;
+    color: #555;
+}
+
+.editor-selection-info strong {
+    color: #333;
+}
+
+/* Block Snippet */
+.editor-block-snippet {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.editor-block-snippet h4 {
+    margin: 0 0 10px 0;
+    color: #666;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.editor-block-snippet pre {
+    background: #f5f5f5;
+    border-left: 3px solid #9c27b0;
+    padding: 10px;
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Actions */
+.editor-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-editor-delete,
+.btn-editor-replace {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.btn-editor-delete {
+    background: #f44336;
+    color: white;
+}
+
+.btn-editor-delete:hover {
+    background: #d32f2f;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+}
+
+.btn-editor-replace {
+    background: #2196f3;
+    color: white;
+}
+
+.btn-editor-replace:hover {
+    background: #1976d2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+}
+
+/* Undo Section */
+.editor-undo-section {
+    margin: 20px 0;
+}
+
+.btn-editor-undo {
+    width: 100%;
+    padding: 12px 16px;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.btn-editor-undo:hover {
+    background: #f57c00;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255, 152, 0, 0.3);
+}
+
+/* Commit Section */
+.editor-commit-section {
+    background: #fff3e0;
+    border: 2px solid #ff9800;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.btn-editor-commit {
+    width: 100%;
+    padding: 15px 20px;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.btn-editor-commit:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.editor-commit-hint {
+    margin: 0;
+    color: #f57c00;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+}

@@ -1017,6 +1017,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== INSPECTOR STATE =====
     let currentWorkingHtml = null;  // Single Source of Truth für Inspector
     let currentInspectorTab = 'tracking';  // Aktueller Tab
+    
+    // Editor Tab State (Phase 6)
+    let editorTabHtml = null;  // Separate HTML für Editor Tab
+    let editorHistory = [];  // Undo History Stack
+    let editorSelectedElement = null;  // Aktuell ausgewähltes Element
+    let editorPending = false;  // Pending Changes Flag
 
     // Datei-Upload Handler (change + input für Browser-Kompatibilität)
     const handleFileSelect = () => {
@@ -3397,6 +3403,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // PostMessage Listener für SELECT_ELEMENT (Phase 6)
+    window.addEventListener('message', function(event) {
+        if (event.data.type === 'SELECT_ELEMENT') {
+            // Nur im Editor Tab verarbeiten
+            if (currentInspectorTab === 'editor') {
+                handleEditorElementSelection(event.data);
+            }
+        }
+    });
+    
     // Tab Switching
     function switchInspectorTab(tabName) {
         console.log('[INSPECTOR] Switching to tab:', tabName);
@@ -3448,13 +3464,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const editorContent = document.getElementById('editorContent');
         
         if (tabName === 'tracking' && trackingContent) {
-            trackingContent.innerHTML = '<p>Tracking-Tab wird in Phase 3 implementiert...</p>';
+            showTrackingTab(trackingContent);
         } else if (tabName === 'images' && imagesContent) {
-            imagesContent.innerHTML = '<p>Bilder-Tab wird in Phase 4 implementiert...</p>';
+            showImagesTab(imagesContent);
         } else if (tabName === 'tagreview' && tagreviewContent) {
-            tagreviewContent.innerHTML = '<p>Tag-Review-Tab wird in Phase 5 implementiert...</p>';
+            showTagReviewTab(tagreviewContent);
         } else if (tabName === 'editor' && editorContent) {
-            editorContent.innerHTML = '<p>Editor-Tab wird in Phase 6 implementiert...</p>';
+            showEditorTab(editorContent);
         }
     }
     
@@ -3465,11 +3481,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        console.log('[INSPECTOR] Updating preview (' + currentWorkingHtml.length + ' chars)...');
+        // Wähle HTML-Quelle: editorTabHtml im Editor Tab, sonst currentWorkingHtml
+        const sourceHtml = (currentInspectorTab === 'editor' && editorTabHtml) ? editorTabHtml : currentWorkingHtml;
+        
+        console.log('[INSPECTOR] Updating preview (' + sourceHtml.length + ' chars)...');
         
         try {
-            // Setze srcdoc
-            inspectorPreviewFrame.srcdoc = currentWorkingHtml;
+            // Erzeuge annotierte Preview-Version (nur für iframe, nicht für Downloads)
+            const annotatedHtml = generateAnnotatedPreview(sourceHtml);
+            
+            // Setze srcdoc mit annotiertem HTML
+            inspectorPreviewFrame.srcdoc = annotatedHtml;
             
             // Warte auf iframe load
             inspectorPreviewFrame.onload = () => {
@@ -3486,6 +3508,228 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // Erzeuge annotierte Preview-Version mit data-qa-link-id und data-qa-img-id
+    function generateAnnotatedPreview(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Annotiere alle <a> Tags mit data-qa-link-id
+        const anchors = doc.querySelectorAll('a[href]');
+        anchors.forEach((anchor, index) => {
+            const id = 'L' + String(index + 1).padStart(3, '0');
+            anchor.setAttribute('data-qa-link-id', id);
+        });
+        
+        // Annotiere alle <img> Tags mit data-qa-img-id (Phase 4)
+        const images = doc.querySelectorAll('img');
+        images.forEach((img, index) => {
+            const id = 'I' + String(index + 1).padStart(3, '0');
+            img.setAttribute('data-qa-img-id', id);
+        });
+        
+        // Füge Fix-Marker ein (Phase 5)
+        // Hole autoFixes aus processingResult
+        const autoFixes = (processingResult && processingResult.autoFixes) ? processingResult.autoFixes : [];
+        if (autoFixes.length > 0) {
+            // Sortiere autoFixes nach insertPosition (absteigend) um Offset-Probleme zu vermeiden
+            const sortedFixes = [...autoFixes].sort((a, b) => b.insertPosition - a.insertPosition);
+            
+            // Serialisiere HTML zu String für Marker-Einfügung
+            let htmlString = doc.documentElement.outerHTML;
+            
+            sortedFixes.forEach(fix => {
+                // Finde Position via beforeCtx + inserted + afterCtx
+                const searchPattern = fix.beforeCtx + fix.inserted + fix.afterCtx;
+                const index = htmlString.indexOf(searchPattern);
+                
+                if (index !== -1) {
+                    // Füge Marker NACH inserted ein
+                    const markerPos = index + fix.beforeCtx.length + fix.inserted.length;
+                    const marker = `<span data-qa-fix-id="${fix.id}" style="display:inline-block;width:0;height:0;position:relative;"></span>`;
+                    htmlString = htmlString.substring(0, markerPos) + marker + htmlString.substring(markerPos);
+                }
+            });
+            
+            // Parse zurück zu DOM
+            doc = parser.parseFromString(htmlString, 'text/html');
+            console.log('[INSPECTOR] Inserted ' + sortedFixes.length + ' fix markers');
+        }
+        
+        // Annotiere klickbare Elemente mit data-qa-node-id (Phase 6)
+        const clickableSelectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div'];
+        let nodeIdCounter = 0;
+        
+        clickableSelectors.forEach(selector => {
+            const elements = doc.querySelectorAll(selector);
+            elements.forEach(el => {
+                nodeIdCounter++;
+                const id = 'N' + String(nodeIdCounter).padStart(4, '0');
+                el.setAttribute('data-qa-node-id', id);
+            });
+        });
+        
+        console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
+        
+        // Füge Highlight-Script in <head> ein
+        const highlightScript = doc.createElement('script');
+        highlightScript.textContent = `
+            // Highlight-Script für Inspector Preview (Phase 3 + 4)
+            window.addEventListener('message', function(event) {
+                // Entferne vorherige Highlights
+                function clearHighlights() {
+                    document.querySelectorAll('.qa-highlight').forEach(el => {
+                        el.classList.remove('qa-highlight');
+                    });
+                    document.querySelectorAll('.qa-highlight-img').forEach(el => {
+                        el.classList.remove('qa-highlight-img');
+                    });
+                }
+                
+                // HIGHLIGHT_LINK (Phase 3)
+                if (event.data.type === 'HIGHLIGHT_LINK') {
+                    const linkId = event.data.id;
+                    const element = document.querySelector('[data-qa-link-id="' + linkId + '"]');
+                    
+                    if (element) {
+                        clearHighlights();
+                        element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        element.classList.add('qa-highlight');
+                        
+                        setTimeout(() => {
+                            element.classList.remove('qa-highlight');
+                        }, 3000);
+                    }
+                }
+                
+                // HIGHLIGHT_IMG (Phase 4)
+                if (event.data.type === 'HIGHLIGHT_IMG') {
+                    const imgId = event.data.id;
+                    const element = document.querySelector('[data-qa-img-id="' + imgId + '"]');
+                    
+                    if (element) {
+                        clearHighlights();
+                        element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        element.classList.add('qa-highlight-img');
+                        
+                        setTimeout(() => {
+                            element.classList.remove('qa-highlight-img');
+                        }, 3000);
+                    }
+                }
+                
+                // HIGHLIGHT_FIX (Phase 5)
+                if (event.data.type === 'HIGHLIGHT_FIX') {
+                    const fixId = event.data.id;
+                    const marker = document.querySelector('[data-qa-fix-id="' + fixId + '"]');
+                    
+                    if (marker) {
+                        // Entferne vorherige Fix-Pins
+                        document.querySelectorAll('.qa-fix-pin').forEach(pin => pin.remove());
+                        
+                        // Scroll zu Marker
+                        marker.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        
+                        // Erstelle sichtbaren Pin
+                        const pin = document.createElement('div');
+                        pin.className = 'qa-fix-pin';
+                        pin.textContent = fixId;
+                        pin.style.cssText = 'position:absolute;left:0;top:0;background:#ff9800;color:white;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+                        
+                        // Positioniere Pin relativ zum Marker
+                        const rect = marker.getBoundingClientRect();
+                        pin.style.left = (rect.left + window.scrollX) + 'px';
+                        pin.style.top = (rect.top + window.scrollY - 30) + 'px';
+                        
+                        document.body.appendChild(pin);
+                        
+                        // Entferne Pin nach 3 Sekunden
+                        setTimeout(() => {
+                            pin.remove();
+                        }, 3000);
+                    }
+                }
+            });
+            
+            // Click Handler für Element-Auswahl (Phase 6)
+            document.addEventListener('click', function(event) {
+                // Finde nächstes Element mit data-qa-node-id
+                let target = event.target;
+                let maxDepth = 5;
+                let depth = 0;
+                
+                while (target && depth < maxDepth) {
+                    const qaNodeId = target.getAttribute('data-qa-node-id');
+                    if (qaNodeId) {
+                        // Element gefunden, sende an Parent
+                        const tagName = target.tagName.toLowerCase();
+                        const text = target.textContent ? target.textContent.substring(0, 50) : '';
+                        const href = target.getAttribute('href') || '';
+                        const src = target.getAttribute('src') || '';
+                        
+                        // Entferne vorherige Auswahl-Markierung
+                        document.querySelectorAll('.qa-selected').forEach(el => {
+                            el.classList.remove('qa-selected');
+                        });
+                        
+                        // Markiere ausgewähltes Element
+                        target.classList.add('qa-selected');
+                        
+                        // Sende an Parent
+                        window.parent.postMessage({
+                            type: 'SELECT_ELEMENT',
+                            tagName: tagName,
+                            qaNodeId: qaNodeId,
+                            text: text,
+                            href: href,
+                            src: src
+                        }, '*');
+                        
+                        event.preventDefault();
+                        event.stopPropagation();
+                        break;
+                    }
+                    target = target.parentElement;
+                    depth++;
+                }
+            });
+        `;
+        
+        // Füge Highlight-Style in <head> ein
+        const highlightStyle = doc.createElement('style');
+        highlightStyle.textContent = `
+            .qa-highlight {
+                outline: 3px solid #3498db !important;
+                outline-offset: 2px !important;
+                transition: outline 0.3s ease !important;
+            }
+            .qa-highlight-img {
+                outline: 3px solid #e74c3c !important;
+                outline-offset: 2px !important;
+                box-shadow: 0 0 20px rgba(231, 76, 60, 0.5) !important;
+                transition: all 0.3s ease !important;
+            }
+            .qa-selected {
+                outline: 3px solid #9c27b0 !important;
+                outline-offset: 2px !important;
+                background: rgba(156, 39, 176, 0.1) !important;
+                transition: all 0.3s ease !important;
+            }
+        `;
+        
+        const head = doc.querySelector('head');
+        if (head) {
+            head.appendChild(highlightScript);
+            head.appendChild(highlightStyle);
+        }
+        
+        // Serialisiere zurück zu HTML
+        const serializer = new XMLSerializer();
+        const annotatedHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+        
+        console.log('[INSPECTOR] Generated annotated preview with ' + anchors.length + ' link annotations and ' + images.length + ' image annotations');
+        return annotatedHtml;
+    }
+    
     // Fallback bei iframe-Fehler
     function showPreviewFallback() {
         const previewContainer = inspectorPreviewFrame.parentElement;
@@ -3499,6 +3743,883 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
     }
+    
+    // ============================================
+    // PHASE 3: TRACKING TAB IMPLEMENTATION
+    // ============================================
+    
+    // Zeige Tracking Tab Content
+    function showTrackingTab(trackingContent) {
+        if (!trackingContent) return;
+        
+        console.log('[INSPECTOR] Rendering Tracking Tab...');
+        
+        // Extrahiere Links aus currentWorkingHtml
+        const links = extractLinksFromHTML(currentWorkingHtml);
+        
+        // Erkenne Öffnerpixel
+        const trackingPixel = detectTrackingPixel(currentWorkingHtml);
+        
+        // Render Tracking Tab
+        let html = '<div class="tracking-tab-content">';
+        
+        // Sektion 1: Klick-Links
+        html += '<div class="tracking-section">';
+        html += '<h3>📧 Klick-Links (' + links.length + ')</h3>';
+        
+        if (links.length === 0) {
+            html += '<p class="tracking-empty">Keine Links gefunden.</p>';
+        } else {
+            html += '<div class="tracking-links-list">';
+            links.forEach(link => {
+                html += '<div class="tracking-link-item" data-link-id="' + link.id + '">';
+                html += '<div class="tracking-link-header">';
+                html += '<span class="tracking-link-id">' + link.id + '</span>';
+                html += '<span class="tracking-link-text">' + escapeHtml(link.text) + '</span>';
+                html += '</div>';
+                html += '<div class="tracking-link-href">' + escapeHtml(link.href) + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        // Sektion 2: Öffnerpixel
+        html += '<div class="tracking-section">';
+        html += '<h3>👁️ Öffnerpixel</h3>';
+        
+        if (trackingPixel) {
+            html += '<div class="tracking-pixel-info">';
+            html += '<div class="tracking-pixel-status tracking-pixel-found">✓ Öffnerpixel gefunden</div>';
+            html += '<div class="tracking-pixel-details">';
+            html += '<strong>Typ:</strong> ' + trackingPixel.type + '<br>';
+            html += '<strong>URL:</strong> <code>' + escapeHtml(trackingPixel.url) + '</code>';
+            html += '</div>';
+            html += '<p class="tracking-note">ℹ️ Edit-Funktion wird in späteren Phasen implementiert.</p>';
+            html += '</div>';
+        } else {
+            html += '<div class="tracking-pixel-info">';
+            html += '<div class="tracking-pixel-status tracking-pixel-missing">⚠ Kein Öffnerpixel gefunden</div>';
+            html += '<p class="tracking-note">ℹ️ Edit-Funktion wird in späteren Phasen implementiert.</p>';
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        html += '</div>';
+        
+        trackingContent.innerHTML = html;
+        
+        // Event Listener für Link-Klicks
+        attachTrackingLinkListeners();
+    }
+    
+    // Extrahiere Links aus HTML
+    function extractLinksFromHTML(html) {
+        if (!html) return [];
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const anchors = doc.querySelectorAll('a[href]');
+        
+        const links = [];
+        anchors.forEach((anchor, index) => {
+            const href = anchor.getAttribute('href');
+            const text = anchor.textContent.trim() || '[ohne Text]';
+            const id = 'L' + String(index + 1).padStart(3, '0');
+            
+            links.push({
+                id: id,
+                text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+                href: href
+            });
+        });
+        
+        console.log('[INSPECTOR] Extracted ' + links.length + ' links');
+        return links;
+    }
+    
+    // Erkenne Tracking-Pixel
+    function detectTrackingPixel(html) {
+        if (!html) return null;
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Suche nach typischen Tracking-Pixeln
+        // 1x1 Bilder, oft am Ende des Body
+        const images = doc.querySelectorAll('img');
+        
+        for (let img of images) {
+            const src = img.getAttribute('src') || '';
+            const width = img.getAttribute('width');
+            const height = img.getAttribute('height');
+            const style = img.getAttribute('style') || '';
+            
+            // Typische Pixel-Merkmale
+            const is1x1 = (width === '1' && height === '1') || 
+                          style.includes('width:1px') || 
+                          style.includes('height:1px');
+            
+            const hasTrackingUrl = src.includes('track') || 
+                                   src.includes('pixel') || 
+                                   src.includes('open') ||
+                                   src.includes('beacon');
+            
+            if (is1x1 || hasTrackingUrl) {
+                console.log('[INSPECTOR] Tracking pixel detected:', src);
+                return {
+                    type: 'IMG (1x1 Pixel)',
+                    url: src
+                };
+            }
+        }
+        
+        console.log('[INSPECTOR] No tracking pixel detected');
+        return null;
+    }
+    
+    // Event Listener für Link-Klicks im Tracking Tab
+    function attachTrackingLinkListeners() {
+        const linkItems = document.querySelectorAll('.tracking-link-item');
+        
+        linkItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const linkId = this.getAttribute('data-link-id');
+                console.log('[INSPECTOR] Link clicked:', linkId);
+                highlightLinkInPreview(linkId);
+            });
+        });
+    }
+    
+    // Highlight Link in Preview
+    function highlightLinkInPreview(linkId) {
+        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
+            console.error('[INSPECTOR] Preview iframe not ready');
+            return;
+        }
+        
+        console.log('[INSPECTOR] Sending highlight message for:', linkId);
+        
+        inspectorPreviewFrame.contentWindow.postMessage({
+            type: 'HIGHLIGHT_LINK',
+            id: linkId
+        }, '*');
+    }
+    
+    // HTML escape helper
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // ============================================
+    // PHASE 4: IMAGES TAB IMPLEMENTATION
+    // ============================================
+    
+    // Zeige Bilder Tab Content
+    function showImagesTab(imagesContent) {
+        if (!imagesContent) return;
+        
+        console.log('[INSPECTOR] Rendering Images Tab...');
+        
+        // Extrahiere Bilder aus currentWorkingHtml
+        const images = extractImagesFromHTML(currentWorkingHtml);
+        
+        // Extrahiere Background Images (optional)
+        const bgImages = extractBackgroundImagesFromHTML(currentWorkingHtml);
+        
+        // Render Bilder Tab
+        let html = '<div class="images-tab-content">';
+        
+        // Sektion 1: IMG src
+        html += '<div class="images-section">';
+        html += '<h3>🖼️ IMG src (' + images.length + ')</h3>';
+        
+        if (images.length === 0) {
+            html += '<p class="images-empty">Keine Bilder gefunden.</p>';
+        } else {
+            html += '<div class="images-list">';
+            images.forEach(img => {
+                html += '<div class="image-item" data-img-id="' + img.id + '">';
+                html += '<div class="image-header">';
+                html += '<span class="image-id">' + img.id + '</span>';
+                html += '<span class="image-alt">' + escapeHtml(img.alt) + '</span>';
+                html += '</div>';
+                html += '<div class="image-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        // Sektion 2: Background Images (optional)
+        if (bgImages.length > 0) {
+            html += '<div class="images-section">';
+            html += '<h3>🎨 Background Images (' + bgImages.length + ')</h3>';
+            html += '<div class="bg-images-list">';
+            bgImages.forEach(bg => {
+                html += '<div class="bg-image-item">';
+                html += '<div class="bg-image-url" title="' + escapeHtml(bg.url) + '">' + escapeHtml(bg.urlShort) + '</div>';
+                html += '<div class="bg-image-context">' + escapeHtml(bg.context) + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '<p class="images-note">ℹ️ Background Images sind read-only und nicht klickbar (kein Highlight).</p>';
+            html += '</div>';
+        }
+        
+        html += '</div>';
+        
+        imagesContent.innerHTML = html;
+        
+        // Event Listener für Bild-Klicks
+        attachImageListeners();
+    }
+    
+    // Extrahiere Bilder aus HTML
+    function extractImagesFromHTML(html) {
+        if (!html) return [];
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const imgElements = doc.querySelectorAll('img');
+        
+        const images = [];
+        imgElements.forEach((img, index) => {
+            const src = img.getAttribute('src') || '';
+            const alt = img.getAttribute('alt') || '[kein alt]';
+            const id = 'I' + String(index + 1).padStart(3, '0');
+            
+            images.push({
+                id: id,
+                src: src,
+                srcShort: src.length > 60 ? src.substring(0, 57) + '...' : src,
+                alt: alt.length > 40 ? alt.substring(0, 37) + '...' : alt
+            });
+        });
+        
+        console.log('[INSPECTOR] Extracted ' + images.length + ' images');
+        return images;
+    }
+    
+    // Extrahiere Background Images aus HTML (optional)
+    function extractBackgroundImagesFromHTML(html) {
+        if (!html) return [];
+        
+        const bgImages = [];
+        
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Suche in inline styles
+            const elementsWithStyle = doc.querySelectorAll('[style]');
+            elementsWithStyle.forEach(el => {
+                const style = el.getAttribute('style') || '';
+                const bgMatch = style.match(/background-image:\s*url\(['"]?([^'"\)]+)['"]?\)/);
+                
+                if (bgMatch && bgMatch[1]) {
+                    const url = bgMatch[1];
+                    bgImages.push({
+                        url: url,
+                        urlShort: url.length > 50 ? url.substring(0, 47) + '...' : url,
+                        context: 'inline style auf ' + el.tagName.toLowerCase()
+                    });
+                }
+            });
+            
+            // Suche in <style> Blöcken
+            const styleElements = doc.querySelectorAll('style');
+            styleElements.forEach(styleEl => {
+                const cssText = styleEl.textContent || '';
+                const bgMatches = cssText.matchAll(/background-image:\s*url\(['"]?([^'"\)]+)['"]?\)/g);
+                
+                for (let match of bgMatches) {
+                    if (match[1]) {
+                        const url = match[1];
+                        bgImages.push({
+                            url: url,
+                            urlShort: url.length > 50 ? url.substring(0, 47) + '...' : url,
+                            context: '<style> Block'
+                        });
+                    }
+                }
+            });
+            
+            console.log('[INSPECTOR] Extracted ' + bgImages.length + ' background images');
+        } catch (e) {
+            console.error('[INSPECTOR] Error extracting background images:', e);
+        }
+        
+        return bgImages;
+    }
+    
+    // Event Listener für Bild-Klicks im Bilder Tab
+    function attachImageListeners() {
+        const imageItems = document.querySelectorAll('.image-item');
+        
+        imageItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const imgId = this.getAttribute('data-img-id');
+                console.log('[INSPECTOR] Image clicked:', imgId);
+                highlightImageInPreview(imgId);
+            });
+        });
+    }
+    
+    // Highlight Image in Preview
+    function highlightImageInPreview(imgId) {
+        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
+            console.error('[INSPECTOR] Preview iframe not ready');
+            return;
+        }
+        
+        console.log('[INSPECTOR] Sending highlight message for:', imgId);
+        
+        inspectorPreviewFrame.contentWindow.postMessage({
+            type: 'HIGHLIGHT_IMG',
+            id: imgId
+        }, '*');
+    }
+    
+    // ============================================
+    // PHASE 5: TAG-REVIEW TAB IMPLEMENTATION
+    // ============================================
+    
+    // Zeige Tag-Review Tab Content
+    function showTagReviewTab(tagreviewContent) {
+        if (!tagreviewContent) return;
+        
+        console.log('[INSPECTOR] Rendering Tag-Review Tab...');
+        
+        // Hole autoFixes aus processingResult
+        const autoFixes = (processingResult && processingResult.autoFixes) ? processingResult.autoFixes : [];
+        
+        // Hole manualActionLog (falls vorhanden)
+        const manualActions = (typeof manualActionLog !== 'undefined') ? manualActionLog : [];
+        
+        // Render Tag-Review Tab
+        let html = '<div class="tagreview-tab-content">';
+        
+        // Sektion A: Automatisch geschlossene Tags
+        html += '<div class="tagreview-section">';
+        html += '<h3>⚙️ Automatisch geschlossene Tags (' + autoFixes.length + ')</h3>';
+        
+        if (autoFixes.length === 0) {
+            html += '<p class="tagreview-empty">✅ Keine automatischen Tag-Schließungen durchgeführt.</p>';
+        } else {
+            html += '<div class="tagreview-fixes-list">';
+            autoFixes.forEach(fix => {
+                html += '<div class="tagreview-fix-item" data-fix-id="' + fix.id + '">';
+                html += '<div class="tagreview-fix-header">';
+                html += '<span class="tagreview-fix-id">' + fix.id + '</span>';
+                html += '<span class="tagreview-fix-tag">' + escapeHtml(fix.inserted) + '</span>';
+                html += '</div>';
+                html += '<div class="tagreview-fix-details">';
+                html += '<strong>Tag-Typ:</strong> &lt;' + escapeHtml(fix.tag) + '&gt;<br>';
+                html += '<strong>Position:</strong> ' + fix.insertPosition;
+                html += '</div>';
+                html += '<div class="tagreview-fix-snippet">';
+                html += '<pre>' + escapeHtml(fix.snippetBefore) + '<span style="background:#4caf50;color:white;">' + escapeHtml(fix.inserted) + '</span></pre>';
+                html += '</div>';
+                html += '<div class="tagreview-fix-actions">';
+                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Undo</button>';
+                html += '<button class="btn-tagreview-keep" data-fix-id="' + fix.id + '">✓ Behalten</button>';
+                html += '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        // Sektion B: Manuelle Aktionen
+        if (manualActions.length > 0) {
+            html += '<div class="tagreview-section">';
+            html += '<h3>📝 Manuelle Aktionen (' + manualActions.length + ')</h3>';
+            html += '<div class="tagreview-actions-list">';
+            manualActions.forEach((action, index) => {
+                html += '<div class="tagreview-action-item">';
+                html += '<span class="tagreview-action-number">#' + (index + 1) + '</span>';
+                html += '<span class="tagreview-action-text">' + escapeHtml(action) + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '</div>';
+        }
+        
+        html += '</div>';
+        
+        tagreviewContent.innerHTML = html;
+        
+        // Event Listener für Fix-Klicks (Locate)
+        attachTagReviewFixListeners(autoFixes);
+        
+        // Event Listener für Undo/Keep Buttons
+        attachTagReviewActionListeners(autoFixes);
+    }
+    
+    // Event Listener für Fix-Klicks (Locate)
+    function attachTagReviewFixListeners(autoFixes) {
+        const fixItems = document.querySelectorAll('.tagreview-fix-item');
+        
+        fixItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                // Nur wenn nicht auf Button geklickt wurde
+                if (e.target.tagName === 'BUTTON') return;
+                
+                const fixId = this.getAttribute('data-fix-id');
+                console.log('[INSPECTOR] Fix clicked:', fixId);
+                highlightFixInPreview(fixId);
+            });
+        });
+    }
+    
+    // Event Listener für Undo/Keep Buttons
+    function attachTagReviewActionListeners(autoFixes) {
+        // Undo Buttons
+        const undoButtons = document.querySelectorAll('.btn-tagreview-undo');
+        undoButtons.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const fixId = this.getAttribute('data-fix-id');
+                const fix = autoFixes.find(f => f.id === fixId);
+                if (fix) {
+                    undoTagReviewFix(fix, this.closest('.tagreview-fix-item'));
+                }
+            });
+        });
+        
+        // Keep Buttons
+        const keepButtons = document.querySelectorAll('.btn-tagreview-keep');
+        keepButtons.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const fixId = this.getAttribute('data-fix-id');
+                keepTagReviewFix(this.closest('.tagreview-fix-item'), fixId);
+            });
+        });
+    }
+    
+    // Undo Tag-Review Fix
+    function undoTagReviewFix(fix, fixElement) {
+        console.log('[INSPECTOR] Undo fix:', fix.id);
+        
+        // Suche nach beforeCtx + inserted + afterCtx in currentWorkingHtml
+        const searchPattern = fix.beforeCtx + fix.inserted + fix.afterCtx;
+        const index = currentWorkingHtml.indexOf(searchPattern);
+        
+        if (index === -1) {
+            alert('Fehler: Fix konnte nicht rückgängig gemacht werden (Pattern nicht gefunden)');
+            return;
+        }
+        
+        // Entferne inserted
+        const before = currentWorkingHtml.substring(0, index + fix.beforeCtx.length);
+        const after = currentWorkingHtml.substring(index + fix.beforeCtx.length + fix.inserted.length);
+        currentWorkingHtml = before + after;
+        
+        // Log (falls manualActionLog existiert)
+        if (typeof manualActionLog !== 'undefined') {
+            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${fix.id} rückgängig gemacht (Inspector)`;
+            manualActionLog.push(logEntry);
+        }
+        
+        // Update UI
+        fixElement.style.opacity = '0.3';
+        fixElement.style.backgroundColor = '#ffebee';
+        fixElement.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        
+        // Markierung
+        const undoneLabel = document.createElement('span');
+        undoneLabel.textContent = '↶ Rückgängig gemacht';
+        undoneLabel.style.color = '#f44336';
+        undoneLabel.style.fontWeight = 'bold';
+        undoneLabel.style.marginLeft = '10px';
+        fixElement.querySelector('.tagreview-fix-header').appendChild(undoneLabel);
+        
+        // Update Preview
+        updateInspectorPreview();
+    }
+    
+    // Keep Tag-Review Fix
+    function keepTagReviewFix(fixElement, fixId) {
+        console.log('[INSPECTOR] Keep fix:', fixId);
+        
+        // Log (falls manualActionLog existiert)
+        if (typeof manualActionLog !== 'undefined') {
+            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_ACCEPTED - ${fixId} akzeptiert (Inspector)`;
+            manualActionLog.push(logEntry);
+        }
+        
+        // Update UI
+        fixElement.style.opacity = '0.6';
+        fixElement.style.backgroundColor = '#e8f5e9';
+        fixElement.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        
+        // Markierung
+        const acceptedLabel = document.createElement('span');
+        acceptedLabel.textContent = '✓ Akzeptiert';
+        acceptedLabel.style.color = '#4caf50';
+        acceptedLabel.style.fontWeight = 'bold';
+        acceptedLabel.style.marginLeft = '10px';
+        fixElement.querySelector('.tagreview-fix-header').appendChild(acceptedLabel);
+    }
+    
+    // Highlight Fix in Preview
+    function highlightFixInPreview(fixId) {
+        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
+            console.error('[INSPECTOR] Preview iframe not ready');
+            return;
+        }
+        
+        console.log('[INSPECTOR] Sending highlight message for fix:', fixId);
+        
+        inspectorPreviewFrame.contentWindow.postMessage({
+            type: 'HIGHLIGHT_FIX',
+            id: fixId
+        }, '*');
+    }
+    
+    // ============================================
+    // PHASE 6: EDITOR TAB IMPLEMENTATION
+    // ============================================
+    
+    // Zeige Editor Tab Content
+    function showEditorTab(editorContent) {
+        if (!editorContent) return;
+        
+        console.log('[INSPECTOR] Rendering Editor Tab...');
+        
+        // Initialisiere editorTabHtml beim ersten Aufruf
+        if (!editorTabHtml) {
+            editorTabHtml = currentWorkingHtml;
+            editorHistory = [];
+            editorSelectedElement = null;
+            editorPending = false;
+        }
+        
+        // Render Editor Tab
+        let html = '<div class="editor-tab-content">';
+        
+        // Hinweis
+        html += '<div class="editor-hint">';
+        html += '<p>👆 Klicken Sie auf ein Element in der Preview rechts, um es zu bearbeiten.</p>';
+        html += '</div>';
+        
+        // Ausgewähltes Element
+        if (editorSelectedElement) {
+            html += '<div class="editor-selection">';
+            html += '<h3>🎯 Ausgewähltes Element</h3>';
+            html += '<div class="editor-selection-info">';
+            html += '<strong>Typ:</strong> &lt;' + escapeHtml(editorSelectedElement.tagName) + '&gt;<br>';
+            if (editorSelectedElement.text) {
+                html += '<strong>Text:</strong> ' + escapeHtml(editorSelectedElement.text) + '<br>';
+            }
+            if (editorSelectedElement.href) {
+                html += '<strong>href:</strong> ' + escapeHtml(editorSelectedElement.href) + '<br>';
+            }
+            if (editorSelectedElement.src) {
+                html += '<strong>src:</strong> ' + escapeHtml(editorSelectedElement.src) + '<br>';
+            }
+            html += '</div>';
+            
+            // Block Snippet
+            html += '<div class="editor-block-snippet">';
+            html += '<h4>Block-Snippet (±30 Zeilen)</h4>';
+            html += '<pre>' + escapeHtml(editorSelectedElement.blockSnippet) + '</pre>';
+            html += '</div>';
+            
+            // Aktionen
+            html += '<div class="editor-actions">';
+            html += '<button id="editorDeleteBlock" class="btn-editor-delete">🗑️ Block löschen</button>';
+            html += '<button id="editorReplaceBlock" class="btn-editor-replace">✏️ Block ersetzen</button>';
+            html += '</div>';
+            
+            html += '</div>';
+        } else {
+            html += '<div class="editor-no-selection">';
+            html += '<p>ℹ️ Kein Element ausgewählt. Klicken Sie in der Preview auf ein Element.</p>';
+            html += '</div>';
+        }
+        
+        // Undo Button
+        if (editorHistory.length > 0) {
+            html += '<div class="editor-undo-section">';
+            html += '<button id="editorUndo" class="btn-editor-undo">↶ Undo (' + editorHistory.length + ')</button>';
+            html += '</div>';
+        }
+        
+        // Commit Button (nur wenn pending)
+        if (editorPending) {
+            html += '<div class="editor-commit-section">';
+            html += '<button id="editorCommit" class="btn-editor-commit">✓ Änderungen in diesem Tab übernehmen</button>';
+            html += '<p class="editor-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
+            html += '</div>';
+        }
+        
+        html += '</div>';
+        
+        editorContent.innerHTML = html;
+        
+        // Event Listener
+        attachEditorActionListeners();
+    }
+    
+    // Event Listener für Editor Aktionen
+    function attachEditorActionListeners() {
+        const deleteBtn = document.getElementById('editorDeleteBlock');
+        const replaceBtn = document.getElementById('editorReplaceBlock');
+        const undoBtn = document.getElementById('editorUndo');
+        const commitBtn = document.getElementById('editorCommit');
+        
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', handleEditorDeleteBlock);
+        }
+        
+        if (replaceBtn) {
+            replaceBtn.addEventListener('click', handleEditorReplaceBlock);
+        }
+        
+        if (undoBtn) {
+            undoBtn.addEventListener('click', handleEditorUndo);
+        }
+        
+        if (commitBtn) {
+            commitBtn.addEventListener('click', handleEditorCommit);
+        }
+    }
+    
+    // Handle Element Selection from Preview
+    function handleEditorElementSelection(data) {
+        console.log('[INSPECTOR] Element selected:', data);
+        
+        // Finde Element in editorTabHtml via qaNodeId
+        const block = extractBlockFromHtml(editorTabHtml, data.qaNodeId);
+        
+        if (!block) {
+            console.error('[INSPECTOR] Block not found for qaNodeId:', data.qaNodeId);
+            return;
+        }
+        
+        // Speichere Auswahl
+        editorSelectedElement = {
+            tagName: data.tagName,
+            text: data.text || '',
+            href: data.href || '',
+            src: data.src || '',
+            qaNodeId: data.qaNodeId,
+            blockSnippet: block.snippet,
+            blockStart: block.start,
+            blockEnd: block.end
+        };
+        
+        // Re-render Editor Tab
+        const editorContent = document.getElementById('editorContent');
+        showEditorTab(editorContent);
+    }
+    
+    // Extrahiere Block (±30 Zeilen) aus HTML
+    function extractBlockFromHtml(html, qaNodeId) {
+        if (!html || !qaNodeId) return null;
+        
+        // Finde Element via data-qa-node-id
+        const searchPattern = 'data-qa-node-id="' + qaNodeId + '"';
+        const index = html.indexOf(searchPattern);
+        
+        if (index === -1) return null;
+        
+        // Finde Start des Tags (rückwärts bis <)
+        let tagStart = index;
+        while (tagStart > 0 && html[tagStart] !== '<') {
+            tagStart--;
+        }
+        
+        // Finde Ende des Tags (vorwärts bis >)
+        let tagEnd = index;
+        while (tagEnd < html.length && html[tagEnd] !== '>') {
+            tagEnd++;
+        }
+        tagEnd++; // Include >
+        
+        // Zähle Zeilen vor und nach
+        const linesBefore = 30;
+        const linesAfter = 30;
+        
+        // Finde Start (30 Zeilen vor tagStart)
+        let blockStart = tagStart;
+        let lineCount = 0;
+        while (blockStart > 0 && lineCount < linesBefore) {
+            blockStart--;
+            if (html[blockStart] === '\n') lineCount++;
+        }
+        
+        // Finde Ende (30 Zeilen nach tagEnd)
+        let blockEnd = tagEnd;
+        lineCount = 0;
+        while (blockEnd < html.length && lineCount < linesAfter) {
+            if (html[blockEnd] === '\n') lineCount++;
+            blockEnd++;
+        }
+        
+        const snippet = html.substring(blockStart, blockEnd);
+        
+        return {
+            snippet: snippet,
+            start: blockStart,
+            end: blockEnd,
+            tagStart: tagStart,
+            tagEnd: tagEnd
+        };
+    }
+    
+    // Handle Delete Block
+    function handleEditorDeleteBlock() {
+        if (!editorSelectedElement) return;
+        
+        const blockSnippet = editorSelectedElement.blockSnippet;
+        
+        // Bestätigung mit Vorher/Nachher
+        const confirmed = confirm(
+            'Block löschen?\n\n' +
+            'VORHER:\n' + blockSnippet.substring(0, 200) + '...\n\n' +
+            'NACHHER: (Block wird entfernt)\n\n' +
+            'Bestätigen?'
+        );
+        
+        if (!confirmed) return;
+        
+        // Speichere in History
+        editorHistory.push(editorTabHtml);
+        
+        // Lösche Block
+        const before = editorTabHtml.substring(0, editorSelectedElement.blockStart);
+        const after = editorTabHtml.substring(editorSelectedElement.blockEnd);
+        editorTabHtml = before + after;
+        
+        // Pending markieren
+        editorPending = true;
+        
+        // Auswahl zurücksetzen
+        editorSelectedElement = null;
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Re-render Editor Tab
+        const editorContent = document.getElementById('editorContent');
+        showEditorTab(editorContent);
+        
+        console.log('[INSPECTOR] Block deleted');
+    }
+    
+    // Handle Replace Block
+    function handleEditorReplaceBlock() {
+        if (!editorSelectedElement) return;
+        
+        const blockSnippet = editorSelectedElement.blockSnippet;
+        
+        // Zeige Textarea mit Block-Inhalt
+        const newBlock = prompt(
+            'Block ersetzen:\n\n' +
+            'Bearbeiten Sie den Block-Inhalt unten:\n\n' +
+            '(Hinweis: Verwenden Sie einen externen Editor für größere Änderungen)',
+            blockSnippet
+        );
+        
+        if (newBlock === null) return; // Cancel
+        
+        // Bestätigung mit Vorher/Nachher
+        const confirmed = confirm(
+            'Block ersetzen?\n\n' +
+            'VORHER:\n' + blockSnippet.substring(0, 200) + '...\n\n' +
+            'NACHHER:\n' + newBlock.substring(0, 200) + '...\n\n' +
+            'Bestätigen?'
+        );
+        
+        if (!confirmed) return;
+        
+        // Speichere in History
+        editorHistory.push(editorTabHtml);
+        
+        // Ersetze Block
+        const before = editorTabHtml.substring(0, editorSelectedElement.blockStart);
+        const after = editorTabHtml.substring(editorSelectedElement.blockEnd);
+        editorTabHtml = before + newBlock + after;
+        
+        // Pending markieren
+        editorPending = true;
+        
+        // Auswahl zurücksetzen
+        editorSelectedElement = null;
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Re-render Editor Tab
+        const editorContent = document.getElementById('editorContent');
+        showEditorTab(editorContent);
+        
+        console.log('[INSPECTOR] Block replaced');
+    }
+    
+    // Handle Undo
+    function handleEditorUndo() {
+        if (editorHistory.length === 0) return;
+        
+        // Restore previous state
+        editorTabHtml = editorHistory.pop();
+        
+        // Auswahl zurücksetzen
+        editorSelectedElement = null;
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Re-render Editor Tab
+        const editorContent = document.getElementById('editorContent');
+        showEditorTab(editorContent);
+        
+        console.log('[INSPECTOR] Undo performed');
+    }
+    
+    // Handle Commit
+    function handleEditorCommit() {
+        if (!editorPending) return;
+        
+        const confirmed = confirm(
+            'Änderungen übernehmen?\n\n' +
+            'Dies überschreibt currentWorkingHtml und aktualisiert alle Tabs.\n\n' +
+            'Bestätigen?'
+        );
+        
+        if (!confirmed) return;
+        
+        // Commit: editorTabHtml → currentWorkingHtml
+        currentWorkingHtml = editorTabHtml;
+        
+        // Reset Editor State
+        editorPending = false;
+        editorHistory = [];
+        editorSelectedElement = null;
+        
+        // Alle Tabs neu rendern
+        loadInspectorTabContent('tracking');
+        loadInspectorTabContent('images');
+        loadInspectorTabContent('tagreview');
+        loadInspectorTabContent('editor');
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        alert('✓ Änderungen erfolgreich übernommen!');
+        
+        console.log('[INSPECTOR] Changes committed to currentWorkingHtml');
+    }
+    
+    // ============================================
+    // PHASE 3: ANNOTATED PREVIEW GENERATION
+    // ============================================
     
     // Highlight-API vorbereiten (noch nicht nutzen)
     function prepareHighlightAPI() {
