@@ -88,6 +88,11 @@
                         <span class="btn-icon">⚠️</span>
                         unresolved.txt
                     </button>
+                    <!-- Phase 11: Final Output Button -->
+                    <button id="downloadFinalOutput" class="btn-download btn-final-output">
+                        <span class="btn-icon">⬇️</span>
+                        Final Output (committed)
+                    </button>
                     <button id="showDiffBtn" class="btn-diff">
                         <span class="btn-icon">📊</span>
                         Änderungen anzeigen (Diff)
@@ -129,6 +134,10 @@
             <div class="diff-info">
                 ℹ️ Diese Ansicht zeigt nur Änderungen. Es werden keine Anpassungen vorgenommen.
             </div>
+            <!-- Phase 11 B4: Pending Hint Box (dynamisch) -->
+            <div id="diffPendingHint" class="diff-pending-hint" style="display: none;">
+                <strong>Hinweis:</strong> Es gibt nicht übernommene Änderungen. Diff zeigt den letzten übernommenen Stand.
+            </div>
             <div class="diff-container">
                 <div class="diff-pane">
                     <h3>📄 Original</h3>
@@ -144,7 +153,13 @@
 
     <!-- Inspector Section -->
     <section id="inspectorSection" class="inspector-section" style="display: none;">
-        <h2>🔍 Inspector</h2>
+        <div class="inspector-header">
+            <h2>🔍 Inspector</h2>
+            <!-- Phase 11: Global Finalize Button -->
+            <button id="globalFinalizeBtn" class="btn-global-finalize" disabled title="Keine offenen Änderungen">
+                ✅ Alles finalisieren & Export aktualisieren
+            </button>
+        </div>
         
         <!-- Tabs -->
         <div class="inspector-tabs">

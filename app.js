@@ -997,6 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadOptimized = document.getElementById('downloadOptimized');
     const downloadReport = document.getElementById('downloadReport');
     const downloadUnresolved = document.getElementById('downloadUnresolved');
+    const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
 
     // State-Variablen (KEIN uploadedFile mehr!)
     let processingResult = null;
@@ -1037,12 +1038,52 @@ document.addEventListener('DOMContentLoaded', () => {
     let imagesTabHtml = null;  // Separate HTML für Images Tab
     let imagesHistory = [];  // Undo History Stack
     let imagesPending = false;  // Pending Changes Flag
+    
+    // Phase 11: Global Commit Log & Action Counters
+    let globalCommitLog = [];  // TAB_COMMITS History
+    
+    // Tracking Commit Stats
+    let trackingCommitStats = {
+        linksReplaced: 0,
+        pixelReplaced: 0,
+        pixelInserted: 0,
+        linkInserts: 0
+    };
+    
+    // Images Commit Stats
+    let imagesCommitStats = {
+        srcReplaced: 0,
+        imagesRemoved: 0
+    };
+    
+    // Editor Commit Stats
+    let editorCommitStats = {
+        blocksDeleted: 0,
+        blocksReplaced: 0
+    };
 
     // Datei-Upload Handler (change + input für Browser-Kompatibilität)
     const handleFileSelect = () => {
         const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (file) {
             console.log('FILE_SELECTED', file.name, file.size, file.type);
+            
+            // Phase 10: Check for pending changes before loading new file
+            const anyPending = trackingPending || imagesPending || editorPending;
+            if (anyPending) {
+                const discard = confirm(
+                    '⚠️ Es gibt nicht übernommene Änderungen in einem oder mehreren Tabs.\n\n' +
+                    'Wenn Sie eine neue Datei laden, gehen alle nicht übernommenen Änderungen verloren.\n\n' +
+                    'Fortfahren?'
+                );
+                
+                if (!discard) {
+                    // Reset file input
+                    fileInput.value = '';
+                    console.log('[UPLOAD] File load cancelled by user');
+                    return;
+                }
+            }
             
             // FileReader: Lese Datei sofort ein
             const reader = new FileReader();
@@ -1115,6 +1156,33 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             processingResult = processor.process();
+            
+            // Phase 10: Reset all tab states when processing new file
+            trackingTabHtml = null;
+            trackingHistory = [];
+            trackingPending = false;
+            trackingInsertMode = false;
+            trackingSelectedElement = null;
+            
+            imagesTabHtml = null;
+            imagesHistory = [];
+            imagesPending = false;
+            
+            editorTabHtml = null;
+            editorHistory = [];
+            editorPending = false;
+            editorSelectedElement = null;
+            
+            // Phase 11 B7: Reset Global Commit Log
+            globalCommitLog = [];
+            
+            // Phase 12 FIX: Set currentWorkingHtml sofort auf neues optimizedHtml
+            currentWorkingHtml = processingResult.optimizedHtml;
+            
+            console.log('[INSPECTOR] All tab states reset for new processing (including globalCommitLog, currentWorkingHtml set)');
+            
+            // Phase 12 FIX 3: SelfTest nach Processing
+            runPhase11SelfTest('AFTER_PROCESSING');
 
             // Ergebnisse anzeigen
             resultsSection.style.display = 'block';
@@ -1158,13 +1226,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // Download-Buttons
     downloadOptimized.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
+            // Phase 12 FIX 2: Download strikt aus currentWorkingHtml (kein Fallback)
+            if (!currentWorkingHtml) {
+                showInspectorToast('❌ Kein committed Stand vorhanden');
+                console.log('[DOWNLOAD] currentWorkingHtml is empty');
+                return;
+            }
+            
             // Originalnamen verwenden und "_optimized" anhängen
             const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
             const newName = `${baseName}_optimized.${extension}`;
-            downloadFile(processingResult.optimizedHtml, newName, 'text/html');
+            downloadFile(currentWorkingHtml, newName, 'text/html');
         }
     });
 
@@ -1199,6 +1274,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 reportContent += `\n\nMANUAL_ACTIONS_COUNT=0\n`;
             }
             
+            // Phase 11 B5: TAB_COMMITS Extension
+            if (globalCommitLog.length > 0) {
+                reportContent += `\n\nTAB_COMMITS_COUNT=${globalCommitLog.length}\n`;
+                reportContent += `TAB_COMMITS:\n`;
+                globalCommitLog.forEach(commit => {
+                    reportContent += `${commit}\n`;
+                });
+            } else {
+                reportContent += `\n\nTAB_COMMITS_COUNT=0\n`;
+            }
+            
             downloadFile(reportContent, newName, 'text/plain');
         }
     });
@@ -1213,6 +1299,50 @@ document.addEventListener('DOMContentLoaded', () => {
             downloadFile(processingResult.unresolved, newName, 'text/plain');
         }
     });
+    
+    // Phase 11 B3: Final Output Download
+    if (downloadFinalOutput) {
+        downloadFinalOutput.addEventListener('click', () => {
+            // Phase 12 FIX 2: Strikt currentWorkingHtml prüfen
+            if (!currentWorkingHtml) {
+                showInspectorToast('❌ Kein committed Stand vorhanden');
+                console.log('[FINAL OUTPUT] currentWorkingHtml is empty');
+                return;
+            }
+            
+            if (!selectedFilename) {
+                showInspectorToast('⚠️ Bitte erst Template verarbeiten');
+                return;
+            }
+            
+            // Prüfe ob pending Changes existieren
+            const anyPending = trackingPending || imagesPending || editorPending;
+            
+            if (anyPending) {
+                const confirmed = confirm(
+                    'Es gibt nicht übernommene Änderungen.\n\n' +
+                    'Final Output enthält nur den letzten übernommenen Stand.\n\n' +
+                    'Trotzdem herunterladen?'
+                );
+                
+                if (!confirmed) {
+                    console.log('[FINAL OUTPUT] Download cancelled by user');
+                    return;
+                }
+            }
+            
+            // Download currentWorkingHtml (committed Stand)
+            const originalName = selectedFilename;
+            const nameParts = originalName.split('.');
+            const extension = nameParts.pop();
+            const baseName = nameParts.join('.');
+            const newName = `${baseName}_final_optimized.${extension}`;
+            
+            downloadFile(currentWorkingHtml, newName, 'text/html');
+            
+            console.log('[FINAL OUTPUT] Downloaded committed stand:', newName);
+        });
+    }
 
     // Download-Hilfsfunktion
     function downloadFile(content, filename, mimeType) {
@@ -1240,9 +1370,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showDiffBtn.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
-            // Generiere Diff-Ansicht
+            // Phase 11 B4: Prüfe ob pending Changes existieren
+            const anyPending = trackingPending || imagesPending || editorPending;
+            const diffPendingHint = document.getElementById('diffPendingHint');
+            
+            if (diffPendingHint) {
+                diffPendingHint.style.display = anyPending ? 'flex' : 'none';
+            }
+            
+            // Generiere Diff-Ansicht (Original vs currentWorkingHtml = committed)
             const originalLines = processingResult.originalHtml.split('\n');
-            const optimizedLines = processingResult.optimizedHtml.split('\n');
+            const optimizedLines = (currentWorkingHtml || processingResult.optimizedHtml).split('\n');
             
             // Einfacher Line-by-Line Diff
             const diff = generateLineDiff(originalLines, optimizedLines);
@@ -1253,6 +1391,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Öffne Modal
             diffModal.style.display = 'flex';
+            
+            console.log('[DIFF] Opened with anyPending=' + anyPending);
         }
     });
 
@@ -3415,9 +3555,108 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update Global Pending Indicator (Phase 9)
             updateGlobalPendingIndicator();
             
+            // Update Global Finalize Button (Phase 11 B2)
+            updateGlobalFinalizeButton();
+            
             // Lade aktuellen Tab Content
             loadInspectorTabContent(currentInspectorTab);
         });
+    }
+    
+    // Phase 11 B2: Global Finalize Button Logic
+    const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
+    
+    function updateGlobalFinalizeButton() {
+        if (!globalFinalizeBtn) return;
+        
+        const anyPending = trackingPending || imagesPending || editorPending;
+        
+        if (anyPending) {
+            globalFinalizeBtn.disabled = false;
+            globalFinalizeBtn.title = 'Alle offenen Änderungen übernehmen';
+        } else {
+            globalFinalizeBtn.disabled = true;
+            globalFinalizeBtn.title = 'Keine offenen Änderungen';
+        }
+        
+        console.log('[FINALIZE] Button updated: anyPending=' + anyPending);
+    }
+    
+    function finalizeAllPendingTabs() {
+        const anyPending = trackingPending || imagesPending || editorPending;
+        
+        if (!anyPending) {
+            console.log('[FINALIZE] No pending changes');
+            return;
+        }
+        
+        // Liste der pending Tabs
+        const pendingTabs = [];
+        if (trackingPending) pendingTabs.push('Tracking');
+        if (imagesPending) pendingTabs.push('Bilder');
+        if (editorPending) pendingTabs.push('Editor');
+        
+        const confirmed = confirm(
+            'Es gibt nicht übernommene Änderungen in: ' + pendingTabs.join(', ') + '.\n\n' +
+            'Möchten Sie diese jetzt übernehmen?'
+        );
+        
+        if (!confirmed) {
+            console.log('[FINALIZE] User cancelled');
+            return;
+        }
+        
+        // Commit in Reihenfolge: Tracking → Images → Editor
+        const committedTabs = [];
+        
+        if (trackingPending) {
+            const success = commitTrackingChanges();
+            if (success) committedTabs.push('Tracking');
+        }
+        
+        if (imagesPending) {
+            const success = commitImagesChanges();
+            if (success) committedTabs.push('Bilder');
+        }
+        
+        if (editorPending) {
+            const success = commitEditorChanges();
+            if (success) committedTabs.push('Editor');
+        }
+        
+        // Log Global Finalize (Phase 11 B6)
+        if (committedTabs.length > 0) {
+            const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
+            const timestamp = new Date().toISOString();
+            globalCommitLog.push(`${commitId}_GLOBAL_FINALIZE - ${timestamp} - committed: ${committedTabs.join(', ')}`);
+        }
+        
+        // Update UI
+        updateGlobalPendingIndicator();
+        updateGlobalFinalizeButton();
+        
+        // Alle Tabs neu rendern
+        loadInspectorTabContent('tracking');
+        loadInspectorTabContent('images');
+        loadInspectorTabContent('tagreview');
+        loadInspectorTabContent('editor');
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Phase 12: EIN Erfolgshinweis als Toast (kein Alert)
+        if (committedTabs.length > 0) {
+            showInspectorToast('✅ Finalisiert: ' + committedTabs.join(', '));
+        }
+        
+        console.log('[FINALIZE] Completed: ' + committedTabs.join(', '));
+        
+        // Phase 12 FIX 3: SelfTest nach Global Finalize
+        runPhase11SelfTest('AFTER_GLOBAL_FINALIZE');
+    }
+    
+    if (globalFinalizeBtn) {
+        globalFinalizeBtn.addEventListener('click', finalizeAllPendingTabs);
     }
     
     // PostMessage Listener für SELECT_ELEMENT (Phase 6 + Phase 8)
@@ -3435,8 +3674,67 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Tab Switching
+    // Phase 10: Check if current tab has pending changes before switching
+    function checkPendingBeforeSwitch(fromTab, toTab) {
+        let hasPending = false;
+        let tabName = '';
+        
+        if (fromTab === 'tracking' && trackingPending) {
+            hasPending = true;
+            tabName = 'Tracking';
+        } else if (fromTab === 'images' && imagesPending) {
+            hasPending = true;
+            tabName = 'Bilder';
+        } else if (fromTab === 'editor' && editorPending) {
+            hasPending = true;
+            tabName = 'Editor';
+        }
+        
+        if (hasPending) {
+            const discard = confirm(
+                `⚠️ Es gibt nicht übernommene Änderungen im ${tabName}-Tab.\n\n` +
+                'Möchten Sie diese verwerfen?\n\n' +
+                'Verwerfen = Änderungen gehen verloren\n' +
+                'Abbrechen = Im Tab bleiben'
+            );
+            
+            if (!discard) {
+                return false; // Stay in current tab
+            }
+            
+            // Discard changes: reset tab state
+            if (fromTab === 'tracking') {
+                trackingTabHtml = currentWorkingHtml;
+                trackingHistory = [];
+                trackingPending = false;
+                trackingInsertMode = false;
+                trackingSelectedElement = null;
+            } else if (fromTab === 'images') {
+                imagesTabHtml = currentWorkingHtml;
+                imagesHistory = [];
+                imagesPending = false;
+            } else if (fromTab === 'editor') {
+                editorTabHtml = currentWorkingHtml;
+                editorHistory = [];
+                editorPending = false;
+                editorSelectedElement = null;
+            }
+            
+            updateGlobalPendingIndicator();
+            console.log('[INSPECTOR] Pending changes discarded for:', fromTab);
+        }
+        
+        return true; // Allow switch
+    }
+    
     function switchInspectorTab(tabName) {
         console.log('[INSPECTOR] Switching to tab:', tabName);
+        
+        // Phase 10: Check pending before switch
+        if (!checkPendingBeforeSwitch(currentInspectorTab, tabName)) {
+            console.log('[INSPECTOR] Tab switch cancelled by user');
+            return;
+        }
         
         // Update Tab Buttons
         [trackingTab, imagesTab, tagReviewTab, editorTab].forEach(tab => {
@@ -4113,6 +4411,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }, '*');
     }
     
+    // Phase 10: Check if tracking tab has pending changes
+    function checkTrackingPending() {
+        const isPending = trackingTabHtml !== currentWorkingHtml;
+        if (trackingPending !== isPending) {
+            trackingPending = isPending;
+            updateGlobalPendingIndicator();
+            console.log('[INSPECTOR] Tracking pending status updated:', isPending);
+        }
+    }
+    
     // Handle Link Replace (Phase 7A)
     function handleTrackingLinkReplace(linkId, newHref) {
         console.log('[INSPECTOR] Replacing link:', linkId, 'with:', newHref);
@@ -4139,14 +4447,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const serializer = new XMLSerializer();
             trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
             
-            // Pending markieren
-            trackingPending = true;
+            // Check Pending (Phase 10)
+            checkTrackingPending();
             
             // Update Preview
             updateInspectorPreview();
-            
-            // Update Global Pending Indicator (Phase 9)
-            updateGlobalPendingIndicator();
             
             // Re-render Tracking Tab
             const trackingContent = document.getElementById('trackingContent');
@@ -4196,14 +4501,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const serializer = new XMLSerializer();
                 trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
                 
-                // Pending markieren
-                trackingPending = true;
+                // Check Pending (Phase 10)
+                checkTrackingPending();
                 
                 // Update Preview
                 updateInspectorPreview();
-                
-                // Update Global Pending Indicator (Phase 9)
-                updateGlobalPendingIndicator();
                 
                 // Re-render Tracking Tab
                 const trackingContent = document.getElementById('trackingContent');
@@ -4224,11 +4526,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore previous state
         trackingTabHtml = trackingHistory.pop();
         
+        // Check Pending (Phase 10: might be false now if identical to currentWorkingHtml)
+        checkTrackingPending();
+        
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Tracking Tab
         const trackingContent = document.getElementById('trackingContent');
@@ -4238,43 +4540,126 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Handle Tracking Commit (Phase 7A)
-    function handleTrackingCommit() {
-        if (!trackingPending) return;
-        
-        const confirmed = confirm(
-            'Änderungen übernehmen?\n\n' +
-            'Dies überschreibt currentWorkingHtml und aktualisiert alle Tabs.\n\n' +
-            'Bestätigen?'
-        );
-        
-        if (!confirmed) return;
+    // Phase 11 B1: Zentrale Commit-Funktionen (wiederverwendbar, kein Alert)
+    function commitTrackingChanges() {
+        if (!trackingTabHtml || trackingTabHtml === currentWorkingHtml) {
+            console.log('[COMMIT] Tracking: Nothing to commit');
+            return false;
+        }
         
         // Commit: trackingTabHtml → currentWorkingHtml
         currentWorkingHtml = trackingTabHtml;
         
-        // Reset Tracking State
-        trackingPending = false;
-        trackingHistory = [];
+        // Sync: trackingTabHtml = currentWorkingHtml (für nächste Änderungen)
+        trackingTabHtml = currentWorkingHtml;
         
-        // Reset Insert Mode (Phase 8)
+        // Reset Tracking State
+        trackingHistory = [];
         trackingInsertMode = false;
         trackingSelectedElement = null;
         
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
+        // Pending neu berechnen (sollte false sein)
+        checkTrackingPending();
         
-        // Alle Tabs neu rendern
-        loadInspectorTabContent('tracking');
-        loadInspectorTabContent('images');
-        loadInspectorTabContent('tagreview');
-        loadInspectorTabContent('editor');
+        // Log Commit (Phase 11 B6)
+        const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
+        const timestamp = new Date().toISOString();
+        globalCommitLog.push(`${commitId}_TRACKING_COMMIT - ${timestamp}`);
         
-        // Update Preview
-        updateInspectorPreview();
+        console.log('[COMMIT] Tracking changes committed to currentWorkingHtml');
         
-        alert('✓ Änderungen erfolgreich übernommen!');
+        // Phase 12 FIX 3: SelfTest nach Commit
+        runPhase11SelfTest('AFTER_TRACKING_COMMIT');
         
-        console.log('[INSPECTOR] Tracking changes committed to currentWorkingHtml');
+        return true;
+    }
+    
+    function commitImagesChanges() {
+        if (!imagesTabHtml || imagesTabHtml === currentWorkingHtml) {
+            console.log('[COMMIT] Images: Nothing to commit');
+            return false;
+        }
+        
+        // Commit: imagesTabHtml → currentWorkingHtml
+        currentWorkingHtml = imagesTabHtml;
+        
+        // Sync: imagesTabHtml = currentWorkingHtml
+        imagesTabHtml = currentWorkingHtml;
+        
+        // Reset Images State
+        imagesHistory = [];
+        
+        // Pending neu berechnen
+        checkImagesPending();
+        
+        // Log Commit (Phase 11 B6)
+        const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
+        const timestamp = new Date().toISOString();
+        globalCommitLog.push(`${commitId}_IMAGES_COMMIT - ${timestamp}`);
+        
+        console.log('[COMMIT] Images changes committed to currentWorkingHtml');
+        
+        // Phase 12 FIX 3: SelfTest nach Commit
+        runPhase11SelfTest('AFTER_IMAGES_COMMIT');
+        
+        return true;
+    }
+    
+    function commitEditorChanges() {
+        if (!editorTabHtml || editorTabHtml === currentWorkingHtml) {
+            console.log('[COMMIT] Editor: Nothing to commit');
+            return false;
+        }
+        
+        // Commit: editorTabHtml → currentWorkingHtml
+        currentWorkingHtml = editorTabHtml;
+        
+        // Sync: editorTabHtml = currentWorkingHtml
+        editorTabHtml = currentWorkingHtml;
+        
+        // Reset Editor State
+        editorHistory = [];
+        editorSelectedElement = null;
+        
+        // Pending neu berechnen
+        checkEditorPending();
+        
+        // Log Commit (Phase 11 B6)
+        const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
+        const timestamp = new Date().toISOString();
+        globalCommitLog.push(`${commitId}_EDITOR_COMMIT - ${timestamp}`);
+        
+        console.log('[COMMIT] Editor changes committed to currentWorkingHtml');
+        
+        // Phase 12 FIX 3: SelfTest nach Commit
+        runPhase11SelfTest('AFTER_EDITOR_COMMIT');
+        
+        return true;
+    }
+    
+    // Tab-Commit Handler (nutzt zentrale Funktionen)
+    function handleTrackingCommit() {
+        if (!trackingPending) return;
+        
+        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausführen
+        const success = commitTrackingChanges();
+        
+        if (success) {
+            // Update Global Pending Indicator
+            updateGlobalPendingIndicator();
+            
+            // Alle Tabs neu rendern
+            loadInspectorTabContent('tracking');
+            loadInspectorTabContent('images');
+            loadInspectorTabContent('tagreview');
+            loadInspectorTabContent('editor');
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Phase 12: Inline Toast statt Alert
+            showInspectorToast('✅ Committed');
+        }
     }
     
     // ============================================
@@ -4342,14 +4727,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const serializer = new XMLSerializer();
         trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
         
-        // Pending markieren
-        trackingPending = true;
+        // Check Pending (Phase 10)
+        checkTrackingPending();
         
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Tracking Tab (neuer Link sollte in Liste erscheinen)
         const trackingContent = document.getElementById('trackingContent');
@@ -4420,8 +4802,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const serializer = new XMLSerializer();
         trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
         
-        // Pending markieren
-        trackingPending = true;
+        // Check Pending (Phase 10)
+        checkTrackingPending();
         
         // Reset Insert Mode
         trackingInsertMode = false;
@@ -4429,9 +4811,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Tracking Tab (neuer Link sollte in Liste erscheinen)
         const trackingContent = document.getElementById('trackingContent');
@@ -4692,6 +5071,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // Phase 10: Check if images tab has pending changes
+    function checkImagesPending() {
+        const isPending = imagesTabHtml !== currentWorkingHtml;
+        if (imagesPending !== isPending) {
+            imagesPending = isPending;
+            updateGlobalPendingIndicator();
+            console.log('[INSPECTOR] Images pending status updated:', isPending);
+        }
+    }
+    
     // Highlight Image in Preview
     function highlightImageInPreview(imgId) {
         if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
@@ -4733,14 +5122,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const serializer = new XMLSerializer();
             imagesTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
             
-            // Pending markieren
-            imagesPending = true;
+            // Check Pending (Phase 10)
+            checkImagesPending();
             
             // Update Preview
             updateInspectorPreview();
-            
-            // Update Global Pending Indicator (Phase 9)
-            updateGlobalPendingIndicator();
             
             // Re-render Images Tab
             const imagesContent = document.getElementById('imagesContent');
@@ -4777,18 +5163,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const serializer = new XMLSerializer();
             imagesTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
             
-            // Pending markieren
-            imagesPending = true;
-            
-            // Update Preview
-              // Pending markieren
-            imagesPending = true;
+            // Check Pending (Phase 10)
+            checkImagesPending();
             
             // Update Preview
             updateInspectorPreview();
-            
-            // Update Global Pending Indicator (Phase 9)
-            updateGlobalPendingIndicator();
             
             // Re-render Images Tab
             const imagesContent = document.getElementById('imagesContent');
@@ -4807,11 +5186,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore previous state
         imagesTabHtml = imagesHistory.pop();
         
+        // Check Pending (Phase 10: might be false now if identical to currentWorkingHtml)
+        checkImagesPending();
+        
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Images Tab
         const imagesContent = document.getElementById('imagesContent');
@@ -4824,36 +5203,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleImagesCommit() {
         if (!imagesPending) return;
         
-        const confirmed = confirm(
-            'Änderungen übernehmen?\n\n' +
-            'Dies überschreibt currentWorkingHtml und aktualisiert alle Tabs.\n\n' +
-            'Bestätigen?'
-        );
+        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausführen
+        const success = commitImagesChanges();
         
-        if (!confirmed) return;
-        
-        // Commit: imagesTabHtml → currentWorkingHtml
-        currentWorkingHtml = imagesTabHtml;
-        
-        // Reset Images State
-        imagesPending = false;
-        imagesHistory = [];
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
-        
-        // Alle Tabs neu rendern
-        loadInspectorTabContent('tracking');
-        loadInspectorTabContent('images');
-        loadInspectorTabContent('tagreview');
-        loadInspectorTabContent('editor');
-        
-        // Update Preview
-        updateInspectorPreview();
-        
-        alert('✓ Änderungen erfolgreich übernommen!');
-        
-        console.log('[INSPECTOR] Images changes committed to currentWorkingHtml');
+        if (success) {
+            // Update Global Pending Indicator
+            updateGlobalPendingIndicator();
+            
+            // Alle Tabs neu rendern
+            loadInspectorTabContent('tracking');
+            loadInspectorTabContent('images');
+            loadInspectorTabContent('tagreview');
+            loadInspectorTabContent('editor');
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Phase 12: Inline Toast statt Alert
+            showInspectorToast('✅ Committed');
+        }
     }
     
     // ============================================
@@ -5246,6 +5614,16 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
     
+    // Phase 10: Check if editor tab has pending changes
+    function checkEditorPending() {
+        const isPending = editorTabHtml !== currentWorkingHtml;
+        if (editorPending !== isPending) {
+            editorPending = isPending;
+            updateGlobalPendingIndicator();
+            console.log('[INSPECTOR] Editor pending status updated:', isPending);
+        }
+    }
+    
     // Handle Delete Block
     function handleEditorDeleteBlock() {
         if (!editorSelectedElement) return;
@@ -5270,17 +5648,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const after = editorTabHtml.substring(editorSelectedElement.blockEnd);
         editorTabHtml = before + after;
         
-        // Pending markieren
-        editorPending = true;
+        // Check Pending (Phase 10)
+        checkEditorPending();
         
         // Auswahl zurücksetzen
         editorSelectedElement = null;
         
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Editor Tab
         const editorContent = document.getElementById('editorContent');
@@ -5323,17 +5698,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const after = editorTabHtml.substring(editorSelectedElement.blockEnd);
         editorTabHtml = before + newBlock + after;
         
-        // Pending markieren
-        editorPending = true;
+        // Check Pending (Phase 10)
+        checkEditorPending();
         
         // Auswahl zurücksetzen
         editorSelectedElement = null;
         
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Editor Tab
         const editorContent = document.getElementById('editorContent');
@@ -5349,14 +5721,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore previous state
         editorTabHtml = editorHistory.pop();
         
+        // Check Pending (Phase 10: might be false now if identical to currentWorkingHtml)
+        checkEditorPending();
+        
         // Auswahl zurücksetzen
         editorSelectedElement = null;
         
         // Update Preview
         updateInspectorPreview();
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
         
         // Re-render Editor Tab
         const editorContent = document.getElementById('editorContent');
@@ -5369,37 +5741,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleEditorCommit() {
         if (!editorPending) return;
         
-        const confirmed = confirm(
-            'Änderungen übernehmen?\n\n' +
-            'Dies überschreibt currentWorkingHtml und aktualisiert alle Tabs.\n\n' +
-            'Bestätigen?'
-        );
+        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausführen
+        const success = commitEditorChanges();
         
-        if (!confirmed) return;
-        
-        // Commit: editorTabHtml → currentWorkingHtml
-        currentWorkingHtml = editorTabHtml;
-        
-        // Reset Editor State
-        editorPending = false;
-        editorHistory = [];
-        editorSelectedElement = null;
-        
-        // Update Global Pending Indicator (Phase 9)
-        updateGlobalPendingIndicator();
-        
-        // Alle Tabs neu rendern
-        loadInspectorTabContent('tracking');
-        loadInspectorTabContent('images');
-        loadInspectorTabContent('tagreview');
-        loadInspectorTabContent('editor');
-        
-        // Update Preview
-        updateInspectorPreview();
-        
-        alert('✓ Änderungen erfolgreich übernommen!');
-        
-        console.log('[INSPECTOR] Changes committed to currentWorkingHtml');
+        if (success) {
+            // Update Global Pending Indicator
+            updateGlobalPendingIndicator();
+            
+            // Alle Tabs neu rendern
+            loadInspectorTabContent('tracking');
+            loadInspectorTabContent('images');
+            loadInspectorTabContent('tagreview');
+            loadInspectorTabContent('editor');
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Phase 12: Inline Toast statt Alert
+            showInspectorToast('✅ Committed');
+        }
     }
     
     // ============================================
@@ -5410,6 +5770,81 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================
     // PHASE 9: GLOBAL PENDING INDICATOR
     // ============================================
+    
+    // Phase 12 FIX 3: SelfTest Funktion
+    function runPhase11SelfTest(contextLabel) {
+        const lenOriginal = processingResult?.originalHtml?.length || 0;
+        const lenCurrent = currentWorkingHtml?.length || 0;
+        const anyPending = trackingPending || imagesPending || editorPending;
+        
+        // Prüfe ob Downloads currentWorkingHtml verwenden
+        const downloadSourceOK = (currentWorkingHtml !== null && currentWorkingHtml !== undefined);
+        
+        console.log('='.repeat(60));
+        console.log(`SELFTEST ${contextLabel}`);
+        console.log(`LEN_originalHtml=${lenOriginal} LEN_currentWorkingHtml=${lenCurrent}`);
+        console.log(`anyPending=${anyPending} trackingPending=${trackingPending} imagesPending=${imagesPending} editorPending=${editorPending}`);
+        console.log(`DOWNLOAD_SOURCE_OK=${downloadSourceOK} (download uses currentWorkingHtml only)`);
+        console.log('='.repeat(60));
+    }
+    
+    // Phase 12: Inline Toast Funktion (statt Alert)
+    function showInspectorToast(message) {
+        // Prüfe ob Toast-Container existiert, sonst erstelle ihn
+        let toastContainer = document.getElementById('inspectorToastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'inspectorToastContainer';
+            toastContainer.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000;';
+            document.body.appendChild(toastContainer);
+        }
+        
+        // Erstelle Toast
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            background: #2ecc71;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-size: 14px;
+            font-weight: 500;
+            animation: slideIn 0.3s ease-out;
+        `;
+        toast.textContent = message;
+        
+        // Füge CSS Animation hinzu (falls noch nicht vorhanden)
+        if (!document.getElementById('toastAnimationStyle')) {
+            const style = document.createElement('style');
+            style.id = 'toastAnimationStyle';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(400px); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(400px); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        toastContainer.appendChild(toast);
+        
+        // Entferne Toast nach 3 Sekunden
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+        
+        console.log('[TOAST] ' + message);
+    }
     
     function updateGlobalPendingIndicator() {
         const indicator = document.getElementById('globalPendingIndicator');
@@ -5472,6 +5907,9 @@ document.addEventListener('DOMContentLoaded', () => {
             images: imagesPending,
             editor: editorPending
         });
+        
+        // Update Global Finalize Button (Phase 11 B2)
+        updateGlobalFinalizeButton();
     }
     
     function prepareHighlightAPI() {
