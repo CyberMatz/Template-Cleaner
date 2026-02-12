@@ -1,6 +1,9 @@
 // HTML Template QA Tool - Client-Side Processing
 // Keine Server-Komponenten - Alles läuft im Browser
 
+// Phase 13 P6: DEV_MODE Schalter (false = Produktion, true = Debug Logs)
+window.DEV_MODE = false;
+
 class TemplateProcessor {
     constructor(html, checklistType, preheaderText = '', removeFonts = true) {
         this.originalHtml = html;
@@ -3800,18 +3803,37 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Wähle HTML-Quelle je nach Tab (Phase 7)
+        // Phase 13 P1: Wähle HTML-Quelle strikt nach Tab (mit Initialisierung)
         let sourceHtml = currentWorkingHtml;
+        let sourceLabel = 'current';
         
-        if (currentInspectorTab === 'editor' && editorTabHtml) {
-            sourceHtml = editorTabHtml;
-        } else if (currentInspectorTab === 'tracking' && trackingTabHtml) {
+        if (currentInspectorTab === 'tracking') {
+            if (!trackingTabHtml) {
+                trackingTabHtml = currentWorkingHtml; // Initialisiere sofort
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Tracking initialized from currentWorkingHtml');
+            }
             sourceHtml = trackingTabHtml;
-        } else if (currentInspectorTab === 'images' && imagesTabHtml) {
+            sourceLabel = 'tracking';
+        } else if (currentInspectorTab === 'images') {
+            if (!imagesTabHtml) {
+                imagesTabHtml = currentWorkingHtml; // Initialisiere sofort
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Images initialized from currentWorkingHtml');
+            }
             sourceHtml = imagesTabHtml;
+            sourceLabel = 'images';
+        } else if (currentInspectorTab === 'editor') {
+            if (!editorTabHtml) {
+                editorTabHtml = currentWorkingHtml; // Initialisiere sofort
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Editor initialized from currentWorkingHtml');
+            }
+            sourceHtml = editorTabHtml;
+            sourceLabel = 'editor';
         }
         
-        console.log('[INSPECTOR] Updating preview (' + sourceHtml.length + ' chars)...');
+        // Phase 13 P1: Debug Log (nur in DEV_MODE)
+        if (window.DEV_MODE) {
+            console.log(`[PREVIEW_SOURCE] ${sourceLabel} (${sourceHtml.length} chars)`);
+        }
         
         try {
             // Erzeuge annotierte Preview-Version (nur für iframe, nicht für Downloads)
@@ -3840,8 +3862,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         
-        // Annotiere alle <a> Tags mit data-qa-link-id
-        const anchors = doc.querySelectorAll('a[href]');
+        // Phase 13 P7: Strip <script> tags für Preview-Security (nur in srcdoc, nicht in committed HTML)
+        const scripts = doc.querySelectorAll('script');
+        scripts.forEach(script => script.remove());
+        if (window.DEV_MODE && scripts.length > 0) {
+            console.log(`[PREVIEW_SECURITY] Removed ${scripts.length} script tags from preview`);
+        }
+        
+        // Annotiere alle <a> Tags with data-qa-link-id        const anchors = doc.querySelectorAll('a[href]');
         anchors.forEach((anchor, index) => {
             const id = 'L' + String(index + 1).padStart(3, '0');
             anchor.setAttribute('data-qa-link-id', id);
@@ -5773,6 +5801,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Phase 12 FIX 3: SelfTest Funktion
     function runPhase11SelfTest(contextLabel) {
+        // Phase 13 P6: Nur in DEV_MODE loggen
+        if (window.DEV_MODE !== true) return;
+        
         const lenOriginal = processingResult?.originalHtml?.length || 0;
         const lenCurrent = currentWorkingHtml?.length || 0;
         const anyPending = trackingPending || imagesPending || editorPending;
