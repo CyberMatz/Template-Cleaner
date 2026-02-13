@@ -25,7 +25,7 @@ body {
 
 /* Header */
 header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     padding: 40px 30px;
     text-align: center;
@@ -173,7 +173,7 @@ input[type="file"] {
 .btn-primary {
     width: 100%;
     padding: 16px 32px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border: none;
     border-radius: 12px;
@@ -349,7 +349,7 @@ footer {
     align-items: center;
     padding: 20px 30px;
     border-bottom: 2px solid #e0e0e0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border-radius: 12px 12px 0 0;
 }
@@ -471,7 +471,7 @@ footer {
 
 /* Diff Button */
 .btn-diff {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border: none;
     padding: 15px 30px;
@@ -560,7 +560,7 @@ footer {
     align-items: center;
     padding: 20px 30px;
     border-bottom: 2px solid #e0e0e0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border-radius: 12px 12px 0 0;
 }
@@ -1013,7 +1013,7 @@ footer {
 }
 
 .count-badge {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     padding: 4px 12px;
     border-radius: 12px;
@@ -1252,7 +1252,7 @@ footer {
 
 /* ===== PHASE C: ASSET REVIEW ===== */
 .btn-asset-review {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border: none;
     padding: 15px 30px;
@@ -1551,7 +1551,7 @@ footer {
 
 /* Insert Pixel Button */
 .btn-insert-pixel {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border: none;
     padding: 10px 16px;
@@ -1580,7 +1580,7 @@ footer {
 
 /* Image Link Button */
 .btn-link {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: #f2a93b;
     color: white;
     border: none;
     padding: 8px 12px;
@@ -1769,7 +1769,7 @@ footer {
 
 /* Inspector Button */
 .btn-inspector {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f2a93b;
     color: white;
     border: none;
     padding: 12px 24px;
