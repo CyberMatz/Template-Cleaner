@@ -25,8 +25,8 @@ body {
 
 /* Header */
 header {
-    background: #f2a93b;
-    color: white;
+    background: white;
+    color: #f2a93b;
     padding: 40px 30px;
     text-align: center;
 }
