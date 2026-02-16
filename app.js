@@ -4137,9 +4137,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const highlightStyle = doc.createElement('style');
         highlightStyle.textContent = `
             .qa-highlight {
-                outline: 3px solid #3498db !important;
+                outline: 3px solid #e74c3c !important;
                 outline-offset: 2px !important;
-                transition: outline 0.3s ease !important;
+                box-shadow: 0 0 15px rgba(231, 76, 60, 0.4) !important;
+                transition: all 0.3s ease !important;
             }
             .qa-highlight-img {
                 outline: 3px solid #e74c3c !important;
