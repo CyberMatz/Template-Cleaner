@@ -1009,6 +1009,80 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadUnresolved = document.getElementById('downloadUnresolved');
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
     const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');  // FIX: TDZ - früh deklarieren
+    const showInspectorBtn = document.getElementById('showInspectorBtn');  // FIX: TDZ - früh deklarieren
+    
+    // FIX: Alle weiteren DOM-Elemente früh deklarieren (TDZ-Vermeidung)
+    const uploadBtn = document.getElementById('uploadBtn');
+    const showDiffBtn = document.getElementById('showDiffBtn');
+    const diffModal = document.getElementById('diffModal');
+    const closeDiffModal = document.getElementById('closeDiffModal');
+    const diffOriginal = document.getElementById('diffOriginal');
+    const diffOptimized = document.getElementById('diffOptimized');
+    const diffPendingHint = document.getElementById('diffPendingHint');
+    
+    const showTagReviewBtn = document.getElementById('showTagReviewBtn');
+    const tagReviewModal = document.getElementById('tagReviewModal');
+    const closeTagReviewModal = document.getElementById('closeTagReviewModal');
+    const tagProblemsList = document.getElementById('tagProblemsList');
+    const undoLastAction = document.getElementById('undoLastAction');
+    const webPreviewFrame = document.getElementById('webPreviewFrame');
+    const codePreviewContent = document.getElementById('codePreviewContent');
+    const showWebPreview = document.getElementById('showWebPreview');
+    const showCodePreview = document.getElementById('showCodePreview');
+    const webPreviewContainer = document.getElementById('webPreviewContainer');
+    const codePreviewContainer = document.getElementById('codePreviewContainer');
+    const changeSnippet = document.getElementById('changeSnippet');
+    const snippetBefore = document.getElementById('snippetBefore');
+    const snippetAfter = document.getElementById('snippetAfter');
+    const tagReviewHint = document.getElementById('tagReviewHint');
+    const problemsCountBadge = document.getElementById('problemsCountBadge');
+    const autoFixesCountBadge = document.getElementById('autoFixesCountBadge');
+    const commitReviewChangesBtn = document.getElementById('commitReviewChanges');
+    const reviewHint = document.getElementById('reviewHint');
+    const autoFixesList = document.getElementById('autoFixesList');
+    const manualActionsCounter = document.getElementById('manualActionsCounter');
+    
+    const assetReviewModal = document.getElementById('assetReviewModal');
+    const closeAssetReviewModal = document.getElementById('closeAssetReviewModal');
+    const assetUndoBtn = document.getElementById('assetUndoBtn');
+    const assetCommitBtn = document.getElementById('assetCommitBtn');
+    const assetWebPreviewFrame = document.getElementById('assetWebPreviewFrame');
+    const assetCodePreviewContent = document.getElementById('assetCodePreviewContent');
+    const showAssetWebPreview = document.getElementById('showAssetWebPreview');
+    const showAssetCodePreview = document.getElementById('showAssetCodePreview');
+    const assetWebPreviewContainer = document.getElementById('assetWebPreviewContainer');
+    const assetCodePreviewContainer = document.getElementById('assetCodePreviewContainer');
+    const assetActionsCounter = document.getElementById('assetActionsCounter');
+    const preheaderInfo = document.getElementById('preheaderInfo');
+    const imagesList = document.getElementById('imagesList');
+    const linksList = document.getElementById('linksList');
+    const trackingInfo = document.getElementById('trackingInfo');
+    
+    const inspectorSection = document.getElementById('inspectorSection');
+    const inspectorPreviewFrame = document.getElementById('inspectorPreviewFrame');
+    const trackingTab = document.getElementById('trackingTab');
+    const imagesTab = document.getElementById('imagesTab');
+    const tagReviewTab = document.getElementById('tagReviewTab');
+    const editorTab = document.getElementById('editorTab');
+    const trackingPanel = document.getElementById('trackingPanel');
+    const imagesPanel = document.getElementById('imagesPanel');
+    const tagreviewPanel = document.getElementById('tagreviewPanel');
+    const editorPanel = document.getElementById('editorPanel');
+    const trackingContent = document.getElementById('trackingContent');
+    const imagesContent = document.getElementById('imagesContent');
+    const tagreviewContent = document.getElementById('tagreviewContent');
+    const editorContent = document.getElementById('editorContent');
+    
+    const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
+    const commitChangesBtn = document.getElementById('commitChangesBtn');
+    const downloadManualOptimized = document.getElementById('downloadManualOptimized');
+    
+    const globalPendingIndicator = document.getElementById('globalPendingIndicator');
+    const trackingStatusChip = document.getElementById('trackingStatusChip');
+    const imagesStatusChip = document.getElementById('imagesStatusChip');
+    const tagreviewStatusChip = document.getElementById('tagreviewStatusChip');
+    const editorStatusChip = document.getElementById('editorStatusChip');
+    const pendingWarning = document.getElementById('pendingWarning');
 
     // State-Variablen (KEIN uploadedFile mehr!)
     let processingResult = null;
@@ -1144,8 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.addEventListener('change', handleFileSelect);
     fileInput.addEventListener('input', handleFileSelect);
     
-    // PATCH: uploadBtn triggert fileInput click
-    const uploadBtn = document.getElementById('uploadBtn');
+    // PATCH: uploadBtn triggert fileInput click (bereits oben deklariert)
     if (uploadBtn) {
         uploadBtn.addEventListener('click', () => {
             fileInput.click();
@@ -1385,14 +1458,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-
-    // Diff-Ansicht
-    const showDiffBtn = document.getElementById('showDiffBtn');
-    const diffModal = document.getElementById('diffModal');
-    const closeDiffModal = document.getElementById('closeDiffModal');
-    const diffOriginal = document.getElementById('diffOriginal');
-    const diffOptimized = document.getElementById('diffOptimized');
-
+    
+    // ===== DIFF MODAL =====
+    // Alle Diff-Elemente bereits oben deklariert (TDZ Fix)
     // Button initial deaktivieren
     showDiffBtn.disabled = true;
     showDiffBtn.title = 'Erst Template verarbeiten';
@@ -1401,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (processingResult && selectedFilename) {
             // Phase 11 B4: Prüfe ob pending Changes existieren
             const anyPending = trackingPending || imagesPending || editorPending;
-            const diffPendingHint = document.getElementById('diffPendingHint');
+            // diffPendingHint bereits oben deklariert
             
             if (diffPendingHint) {
                 diffPendingHint.style.display = anyPending ? 'flex' : 'none';
@@ -1479,22 +1547,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 
-    // ===== TAG-REVIEW FEATURE =====
-    const showTagReviewBtn = document.getElementById('showTagReviewBtn');
-    const tagReviewModal = document.getElementById('tagReviewModal');
-    const closeTagReviewModal = document.getElementById('closeTagReviewModal');
-    const tagProblemsList = document.getElementById('tagProblemsList');
-    const undoLastAction = document.getElementById('undoLastAction');
-    const webPreviewFrame = document.getElementById('webPreviewFrame');
-    const codePreviewContent = document.getElementById('codePreviewContent');
-    const showWebPreview = document.getElementById('showWebPreview');
-    const showCodePreview = document.getElementById('showCodePreview');
-    const webPreviewContainer = document.getElementById('webPreviewContainer');
-    const codePreviewContainer = document.getElementById('codePreviewContainer');
-    const changeSnippet = document.getElementById('changeSnippet');
-    const snippetBefore = document.getElementById('snippetBefore');
-    const snippetAfter = document.getElementById('snippetAfter');
-    const tagReviewHint = document.getElementById('tagReviewHint');
+     // ===== TAG-REVIEW MODAL =====
+    // Alle Tag-Review-Elemente bereits oben deklariert (TDZ Fix);
 
     // State
     let currentReviewHtml = '';
@@ -1527,8 +1581,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const problems = analyzeUnclosedTags(currentReviewHtml);
         
         // Update Badges
-        const problemsCountBadge = document.getElementById('problemsCountBadge');
-        const autoFixesCountBadge = document.getElementById('autoFixesCountBadge');
+        // problemsCountBadge und autoFixesCountBadge bereits oben deklariert
         if (problemsCountBadge) problemsCountBadge.textContent = problems.length;
         if (autoFixesCountBadge) autoFixesCountBadge.textContent = (processingResult.autoFixes || []).length;
         
@@ -1564,7 +1617,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Änderungen übernehmen Button
-    const commitReviewChangesBtn = document.getElementById('commitReviewChanges');
+    // commitReviewChangesBtn bereits oben deklariert (TDZ Fix)
     if (commitReviewChangesBtn) {
         console.log('[DEBUG] commitReviewChanges Button gefunden, Event-Listener wird gebunden');
         commitReviewChangesBtn.addEventListener('click', () => {
@@ -1576,15 +1629,15 @@ document.addEventListener('DOMContentLoaded', () => {
             processingResult.optimizedHtml = currentReviewHtml;
             
             // Zeige Bestätigung
-            const hint = document.getElementById('reviewHint');
-            if (hint) {
-                hint.textContent = '✅ Übernommen. Downloads nutzen jetzt den neuen Stand.';
-                hint.style.display = 'block';
-                hint.style.backgroundColor = '#e8f5e9';
-                hint.style.color = '#2e7d32';
+            // reviewHint bereits oben deklariert
+            if (reviewHint) {
+                reviewHint.textContent = '✅ Übernommen. Downloads nutzen jetzt den neuen Stand.';
+                reviewHint.style.display = 'block';
+                reviewHint.style.backgroundColor = '#e8f5e9';
+                reviewHint.style.color = '#2e7d32';
                 
                 setTimeout(() => {
-                    hint.style.display = 'none';
+                    reviewHint.style.display = 'none';
                 }, 3000);
             } else {
                 console.warn('[DEBUG] reviewHint Element nicht gefunden');
@@ -1644,7 +1697,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatePreview();
                 
                 // Snippet verstecken
-                const changeSnippet = document.getElementById('changeSnippet');
+                // changeSnippet bereits oben deklariert
                 if (changeSnippet) {
                     changeSnippet.style.display = 'none';
                 }
@@ -1774,7 +1827,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Zeige Snippet im Code-Preview
                 const snippet = item.getAttribute('data-snippet');
                 if (snippet) {
-                    const codePreviewContent = document.getElementById('codePreviewContent');
+                    // codePreviewContent bereits oben deklariert
                     if (codePreviewContent) {
                         codePreviewContent.textContent = snippet;
                     }
@@ -1803,7 +1856,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Auto-Fixes anzeigen
     function displayAutoFixes(autoFixes) {
-        const autoFixesList = document.getElementById('autoFixesList');
+        // autoFixesList bereits oben deklariert
         
         if (!autoFixes || autoFixes.length === 0) {
             autoFixesList.innerHTML = '<div class="no-problems">✅ Keine automatischen Tag-Schließungen durchgeführt.</div>';
@@ -1859,7 +1912,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Fallback: Zeige Snippet im Code-Preview
                     const snippet = item.getAttribute('data-snippet');
                     if (snippet) {
-                        const codePreviewContent = document.getElementById('codePreviewContent');
+                        // codePreviewContent bereits oben deklariert
                         if (codePreviewContent) {
                             codePreviewContent.textContent = snippet;
                         }
@@ -1943,9 +1996,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateActionCounter();
         
         // Aktiviere globalen Undo-Button
-        const undoButton = document.getElementById('undoLastAction');
-        if (undoButton) {
-            undoButton.disabled = false;
+        // undoLastAction bereits oben deklariert
+        if (undoLastAction) {
+            undoLastAction.disabled = false;
         }
     }
     
@@ -1981,9 +2034,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateActionCounter();
         
         // Aktiviere globalen Undo-Button
-        const undoButton = document.getElementById('undoLastAction');
-        if (undoButton) {
-            undoButton.disabled = false;
+        // undoLastAction bereits oben deklariert
+        if (undoLastAction) {
+            undoLastAction.disabled = false;
         }
     }
 
@@ -2118,15 +2171,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Aktions-Counter aktualisieren
     function updateActionCounter() {
-        const counterElement = document.getElementById('manualActionsCounter');
-        if (counterElement) {
-            counterElement.textContent = `Manuelle Aktionen: ${manualActionLog.length}`;
+        // manualActionsCounter bereits oben deklariert
+        if (manualActionsCounter) {
+            manualActionsCounter.textContent = `Manuelle Aktionen: ${manualActionLog.length}`;
         }
         
         // Commit-Button aktivieren wenn mindestens 1 Aktion
-        const commitButton = document.getElementById('commitReviewChanges');
-        if (commitButton) {
-            commitButton.disabled = manualActionLog.length === 0;
+        // commitReviewChangesBtn bereits oben deklariert
+        if (commitReviewChangesBtn) {
+            commitReviewChangesBtn.disabled = manualActionLog.length === 0;
         }
     }
 
@@ -2206,16 +2259,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Jump to location in preview
     function jumpToLocation(insertPosition, snippet) {
         // 1. Wechsel automatisch zu Code-Snippet Tab
-        const codeTab = document.getElementById('showCodePreview');
-        const webTab = document.getElementById('showWebPreview');
-        const codePreviewContainer = document.getElementById('codePreviewContainer');
-        const webPreviewContainer = document.getElementById('webPreviewContainer');
-        const codePreviewContent = document.getElementById('codePreviewContent');
+        // Alle Preview-Elemente bereits oben deklariert (TDZ Fix)
         
-        if (codeTab && webTab && codePreviewContainer && webPreviewContainer && codePreviewContent) {
+        if (showCodePreview && showWebPreview && codePreviewContainer && webPreviewContainer && codePreviewContent) {
             // Aktiviere Code-Tab
-            codeTab.classList.add('active');
-            webTab.classList.remove('active');
+            showCodePreview.classList.add('active');
+            showWebPreview.classList.remove('active');
             codePreviewContainer.style.display = 'block';
             webPreviewContainer.style.display = 'none';
             
@@ -2359,24 +2408,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // ===== PHASE C: ASSET REVIEW FEATURE =====
-    // showAssetReviewBtn bereits oben deklariert (TDZ Fix)
-    const assetReviewModal = document.getElementById('assetReviewModal');
-    const closeAssetReviewModal = document.getElementById('closeAssetReviewModal');
-    const assetUndoBtn = document.getElementById('assetUndoBtn');
-    const assetCommitBtn = document.getElementById('assetCommitBtn');
-    const assetWebPreviewFrame = document.getElementById('assetWebPreviewFrame');
-    const assetCodePreviewContent = document.getElementById('assetCodePreviewContent');
-    const showAssetWebPreview = document.getElementById('showAssetWebPreview');
-    const showAssetCodePreview = document.getElementById('showAssetCodePreview');
-    const assetWebPreviewContainer = document.getElementById('assetWebPreviewContainer');
-    const assetCodePreviewContainer = document.getElementById('assetCodePreviewContainer');
-    const assetActionsCounter = document.getElementById('assetActionsCounter');
-    
-    // Sections
-    const preheaderInfo = document.getElementById('preheaderInfo');
-    const imagesList = document.getElementById('imagesList');
-    const linksList = document.getElementById('linksList');
-    const trackingInfo = document.getElementById('trackingInfo');
+    // Alle Asset Review Elemente bereits oben deklariert (TDZ Fix)
     
     // Button initial deaktivieren
     showAssetReviewBtn.disabled = true;
@@ -3537,21 +3569,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // ===== INSPECTOR FEATURE =====
-    const showInspectorBtn = document.getElementById('showInspectorBtn');
-    const inspectorSection = document.getElementById('inspectorSection');
-    const inspectorPreviewFrame = document.getElementById('inspectorPreviewFrame');
-    
-    // Inspector Tabs
-    const trackingTab = document.getElementById('trackingTab');
-    const imagesTab = document.getElementById('imagesTab');
-    const tagReviewTab = document.getElementById('tagReviewTab');
-    const editorTab = document.getElementById('editorTab');
-    
-    // Inspector Panels
-    const trackingPanel = document.getElementById('trackingPanel');
-    const imagesPanel = document.getElementById('imagesPanel');
-    const tagreviewPanel = document.getElementById('tagreviewPanel');
-    const editorPanel = document.getElementById('editorPanel');
+    // Alle Inspector-Elemente bereits oben deklariert (TDZ Fix)
     
     // Inspector Button initial deaktivieren
     if (showInspectorBtn) {
@@ -3594,7 +3612,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Phase 11 B2: Global Finalize Button Logic
-    const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
+    // globalFinalizeBtn bereits oben deklariert (TDZ Fix)
     
     function updateGlobalFinalizeButton() {
         if (!globalFinalizeBtn) return;
@@ -3690,9 +3708,8 @@ document.addEventListener('DOMContentLoaded', () => {
         globalFinalizeBtn.addEventListener('click', finalizeAllPendingTabs);
     }
     
-    // PATCH: Neue Footer Buttons (Inspector)
-    const commitChangesBtn = document.getElementById('commitChangesBtn');
-    const downloadManualOptimized = document.getElementById('downloadManualOptimized');
+    // Footer Buttons
+    // commitChangesBtn und downloadManualOptimized bereits oben deklariert (TDZ Fix)
     
     if (commitChangesBtn) {
         commitChangesBtn.addEventListener('click', () => {
@@ -3706,7 +3723,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (downloadManualOptimized) {
         downloadManualOptimized.addEventListener('click', () => {
             // Trigger downloadFinalOutput
-            const downloadFinalOutput = document.getElementById('downloadFinalOutput');
+            // downloadFinalOutput bereits oben deklariert
             if (downloadFinalOutput) {
                 downloadFinalOutput.click();
             }
@@ -3846,10 +3863,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadInspectorTabContent(tabName) {
         console.log('[INSPECTOR] Loading content for tab:', tabName);
         
-        const trackingContent = document.getElementById('trackingContent');
-        const imagesContent = document.getElementById('imagesContent');
-        const tagreviewContent = document.getElementById('tagreviewContent');
-        const editorContent = document.getElementById('editorContent');
+        // trackingContent bereits oben deklariert
+        // imagesContent bereits oben deklariert
+        // tagreviewContent bereits oben deklariert
+        // editorContent bereits oben deklariert
         
         if (tabName === 'tracking' && trackingContent) {
             showTrackingTab(trackingContent);
@@ -4459,7 +4476,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startInsertBtn.addEventListener('click', function() {
                 trackingInsertMode = true;
                 trackingSelectedElement = null;
-                const trackingContent = document.getElementById('trackingContent');
+                // trackingContent bereits oben deklariert
                 showTrackingTab(trackingContent);
             });
         }
@@ -4469,7 +4486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelInsertBtn.addEventListener('click', function() {
                 trackingInsertMode = false;
                 trackingSelectedElement = null;
-                const trackingContent = document.getElementById('trackingContent');
+                // trackingContent bereits oben deklariert
                 showTrackingTab(trackingContent);
             });
         }
@@ -4548,7 +4565,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateInspectorPreview();
             
             // Re-render Tracking Tab
-            const trackingContent = document.getElementById('trackingContent');
+            // trackingContent bereits oben deklariert
             showTrackingTab(trackingContent);
             
             console.log('[INSPECTOR] Link replaced:', oldHref, '->', newHref);
@@ -4602,7 +4619,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateInspectorPreview();
                 
                 // Re-render Tracking Tab
-                const trackingContent = document.getElementById('trackingContent');
+                // trackingContent bereits oben deklariert
                 showTrackingTab(trackingContent);
                 
                 console.log('[INSPECTOR] Pixel replaced:', oldSrc, '->', newUrl);
@@ -4627,7 +4644,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Tracking Tab
-        const trackingContent = document.getElementById('trackingContent');
+        // trackingContent bereits oben deklariert
         showTrackingTab(trackingContent);
         
         console.log('[INSPECTOR] Tracking undo performed');
@@ -4828,7 +4845,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Tracking Tab (neuer Link sollte in Liste erscheinen)
-        const trackingContent = document.getElementById('trackingContent');
+        // trackingContent bereits oben deklariert
         showTrackingTab(trackingContent);
         
         console.log('[INSPECTOR] Pixel inserted:', pixelUrl);
@@ -4907,7 +4924,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Tracking Tab (neuer Link sollte in Liste erscheinen)
-        const trackingContent = document.getElementById('trackingContent');
+        // trackingContent bereits oben deklariert
         showTrackingTab(trackingContent);
         
         console.log('[INSPECTOR] Link inserted around element:', targetUrl);
@@ -4927,7 +4944,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         // Re-render Tracking Tab (zeigt Auswahl + URL-Eingabe)
-        const trackingContent = document.getElementById('trackingContent');
+        // trackingContent bereits oben deklariert
         showTrackingTab(trackingContent);
     }
     
@@ -5223,7 +5240,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateInspectorPreview();
             
             // Re-render Images Tab
-            const imagesContent = document.getElementById('imagesContent');
+            // imagesContent bereits oben deklariert
             showImagesTab(imagesContent);
             
             console.log('[INSPECTOR] Image src replaced:', oldSrc, '->', newSrc);
@@ -5264,7 +5281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateInspectorPreview();
             
             // Re-render Images Tab
-            const imagesContent = document.getElementById('imagesContent');
+            // imagesContent bereits oben deklariert
             showImagesTab(imagesContent);
             
             console.log('[INSPECTOR] Image removed:', imgId);
@@ -5287,7 +5304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Images Tab
-        const imagesContent = document.getElementById('imagesContent');
+        // imagesContent bereits oben deklariert
         showImagesTab(imagesContent);
         
         console.log('[INSPECTOR] Images undo performed');
@@ -5650,7 +5667,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         // Re-render Editor Tab
-        const editorContent = document.getElementById('editorContent');
+        // editorContent bereits oben deklariert
         showEditorTab(editorContent);
     }
     
@@ -5752,7 +5769,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Editor Tab
-        const editorContent = document.getElementById('editorContent');
+        // editorContent bereits oben deklariert
         showEditorTab(editorContent);
         
         console.log('[INSPECTOR] Block deleted');
@@ -5802,7 +5819,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Editor Tab
-        const editorContent = document.getElementById('editorContent');
+        // editorContent bereits oben deklariert
         showEditorTab(editorContent);
         
         console.log('[INSPECTOR] Block replaced');
@@ -5825,7 +5842,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInspectorPreview();
         
         // Re-render Editor Tab
-        const editorContent = document.getElementById('editorContent');
+        // editorContent bereits oben deklariert
         showEditorTab(editorContent);
         
         console.log('[INSPECTOR] Editor undo performed');
@@ -5944,59 +5961,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateGlobalPendingIndicator() {
-        const indicator = document.getElementById('globalPendingIndicator');
-        const trackingChip = document.getElementById('trackingStatusChip');
-        const imagesChip = document.getElementById('imagesStatusChip');
-        const tagreviewChip = document.getElementById('tagreviewStatusChip');
-        const editorChip = document.getElementById('editorStatusChip');
-        const warning = document.getElementById('pendingWarning');
+        // Alle Pending-Indicator-Elemente bereits oben deklariert (TDZ Fix)
         
-        if (!indicator) return;
+        if (!globalPendingIndicator) return;
         
         // Zeige Indicator
-        indicator.style.display = 'block';
+        globalPendingIndicator.style.display = 'block';
         
         // Update Chips
-        if (trackingChip) {
+        if (trackingStatusChip) {
             if (trackingPending) {
-                trackingChip.className = 'status-chip status-pending';
-                trackingChip.textContent = 'Tracking: Pending';
+                trackingStatusChip.className = 'status-chip status-pending';
+                trackingStatusChip.textContent = 'Tracking: Pending';
             } else {
-                trackingChip.className = 'status-chip status-committed';
-                trackingChip.textContent = 'Tracking: Committed';
+                trackingStatusChip.className = 'status-chip status-committed';
+                trackingStatusChip.textContent = 'Tracking: Committed';
             }
         }
         
-        if (imagesChip) {
+        if (imagesStatusChip) {
             if (imagesPending) {
-                imagesChip.className = 'status-chip status-pending';
-                imagesChip.textContent = 'Bilder: Pending';
+                imagesStatusChip.className = 'status-chip status-pending';
+                imagesStatusChip.textContent = 'Bilder: Pending';
             } else {
-                imagesChip.className = 'status-chip status-committed';
-                imagesChip.textContent = 'Bilder: Committed';
+                imagesStatusChip.className = 'status-chip status-committed';
+                imagesStatusChip.textContent = 'Bilder: Committed';
             }
         }
         
-        if (tagreviewChip) {
+        if (tagreviewStatusChip) {
             // Tag-Review hat aktuell kein pending State (read-only in Phase 5)
-            tagreviewChip.className = 'status-chip status-committed';
-            tagreviewChip.textContent = 'Tag-Review: Committed';
+            tagreviewStatusChip.className = 'status-chip status-committed';
+            tagreviewStatusChip.textContent = 'Tag-Review: Committed';
         }
         
-        if (editorChip) {
+        if (editorStatusChip) {
             if (editorPending) {
-                editorChip.className = 'status-chip status-pending';
-                editorChip.textContent = 'Editor: Pending';
+                editorStatusChip.className = 'status-chip status-pending';
+                editorStatusChip.textContent = 'Editor: Pending';
             } else {
-                editorChip.className = 'status-chip status-committed';
-                editorChip.textContent = 'Editor: Committed';
+                editorStatusChip.className = 'status-chip status-committed';
+                editorStatusChip.textContent = 'Editor: Committed';
             }
         }
         
         // Zeige Warning wenn irgendein Tab pending
         const anyPending = trackingPending || imagesPending || editorPending;
-        if (warning) {
-            warning.style.display = anyPending ? 'block' : 'none';
+        if (pendingWarning) {
+            pendingWarning.style.display = anyPending ? 'block' : 'none';
         }
         
         console.log('[INSPECTOR] Global pending indicator updated:', {
