@@ -1104,6 +1104,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentWorkingHtml = null;  // Single Source of Truth für Inspector
     let currentInspectorTab = 'tracking';  // Aktueller Tab
     
+    // Preview Ready State (für Message Queue)
+    let previewReady = false;  // Ist Preview iframe geladen?
+    let pendingPreviewMessage = null;  // Wartende Message
+    
     // Editor Tab State (Phase 6)
     let editorTabHtml = null;  // Separate HTML für Editor Tab
     let editorHistory = [];  // Undo History Stack
@@ -3851,6 +3855,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Lade Tab Content
         loadInspectorTabContent(tabName);
+        
+        // Aktualisiere Preview rechts (damit data-qa-IDs zum aktuellen Tab passen)
+        updateInspectorPreview();
     }
     
     // Tab Click Listeners
@@ -3922,12 +3929,24 @@ document.addEventListener('DOMContentLoaded', () => {
             // Erzeuge annotierte Preview-Version (nur für iframe, nicht für Downloads)
             const annotatedHtml = generateAnnotatedPreview(sourceHtml);
             
+            // Reset Preview Ready State
+            previewReady = false;
+            pendingPreviewMessage = null;
+            
             // Setze srcdoc mit annotiertem HTML
             inspectorPreviewFrame.srcdoc = annotatedHtml;
             
-            // Warte auf iframe load
+            // Warte auf iframe load und sende pending messages
             inspectorPreviewFrame.onload = () => {
                 console.log('[INSPECTOR] Preview loaded successfully');
+                previewReady = true;
+                
+                // Sende wartende Message, falls vorhanden
+                if (pendingPreviewMessage && inspectorPreviewFrame.contentWindow) {
+                    console.log('[INSPECTOR] Sending pending message:', pendingPreviewMessage);
+                    inspectorPreviewFrame.contentWindow.postMessage(pendingPreviewMessage, '*');
+                    pendingPreviewMessage = null;
+                }
             };
             
             inspectorPreviewFrame.onerror = (e) => {
@@ -4517,17 +4536,26 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Highlight Link in Preview
     function highlightLinkInPreview(linkId) {
-        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
-            console.error('[INSPECTOR] Preview iframe not ready');
+        if (!inspectorPreviewFrame) {
+            console.error('[INSPECTOR] Preview iframe not found');
             return;
         }
         
-        console.log('[INSPECTOR] Sending highlight message for:', linkId);
-        
-        inspectorPreviewFrame.contentWindow.postMessage({
+        const message = {
             type: 'HIGHLIGHT_LINK',
             id: linkId
-        }, '*');
+        };
+        
+        // Wenn Preview noch nicht ready, Message in Queue stellen
+        if (!previewReady || !inspectorPreviewFrame.contentWindow) {
+            console.log('[INSPECTOR] Preview not ready, queueing message:', message);
+            pendingPreviewMessage = message;
+            return;
+        }
+        
+        // Preview ready, Message sofort senden
+        console.log('[INSPECTOR] Sending highlight message for:', linkId);
+        inspectorPreviewFrame.contentWindow.postMessage(message, '*');
     }
     
     // Phase 10: Check if tracking tab has pending changes
@@ -5202,17 +5230,26 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Highlight Image in Preview
     function highlightImageInPreview(imgId) {
-        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
-            console.error('[INSPECTOR] Preview iframe not ready');
+        if (!inspectorPreviewFrame) {
+            console.error('[INSPECTOR] Preview iframe not found');
             return;
         }
         
-        console.log('[INSPECTOR] Sending highlight message for:', imgId);
-        
-        inspectorPreviewFrame.contentWindow.postMessage({
+        const message = {
             type: 'HIGHLIGHT_IMG',
             id: imgId
-        }, '*');
+        };
+        
+        // Wenn Preview noch nicht ready, Message in Queue stellen
+        if (!previewReady || !inspectorPreviewFrame.contentWindow) {
+            console.log('[INSPECTOR] Preview not ready, queueing message:', message);
+            pendingPreviewMessage = message;
+            return;
+        }
+        
+        // Preview ready, Message sofort senden
+        console.log('[INSPECTOR] Sending highlight message for:', imgId);
+        inspectorPreviewFrame.contentWindow.postMessage(message, '*');
     }
     
     // Handle Image Src Replace (Phase 7B)
