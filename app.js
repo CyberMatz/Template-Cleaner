@@ -4014,14 +4014,26 @@ document.addEventListener('DOMContentLoaded', () => {
         highlightScript.textContent = `
             // Highlight-Script für Inspector Preview (Phase 3 + 4)
             window.addEventListener('message', function(event) {
-                // Entferne vorherige Highlights
-                function clearHighlights() {
-                    document.querySelectorAll('.qa-highlight').forEach(el => {
-                        el.classList.remove('qa-highlight');
-                    });
-                    document.querySelectorAll('.qa-highlight-img').forEach(el => {
-                        el.classList.remove('qa-highlight-img');
-                    });
+                // Helper: Zeige Locate-Overlay über Element
+                function showLocateOverlayForElement(element) {
+                    document.querySelectorAll('.qa-locate-overlay').forEach(o => o.remove());
+                    const rect = element.getBoundingClientRect();
+                    const overlay = document.createElement('div');
+                    overlay.className = 'qa-locate-overlay';
+                    overlay.style.cssText =
+                        'position:absolute;' +
+                        'left:' + (rect.left + window.scrollX) + 'px;' +
+                        'top:' + (rect.top + window.scrollY) + 'px;' +
+                        'width:' + rect.width + 'px;' +
+                        'height:' + rect.height + 'px;' +
+                        'border:3px solid #e74c3c;' +
+                        'box-shadow:0 0 0 4px rgba(231,76,60,0.25);' +
+                        'background:rgba(231,76,60,0.06);' +
+                        'border-radius:4px;' +
+                        'z-index:2147483647;' +
+                        'pointer-events:none;';
+                    document.body.appendChild(overlay);
+                    setTimeout(() => overlay.remove(), 2800);
                 }
                 
                 // HIGHLIGHT_LINK (Phase 3)
@@ -4030,13 +4042,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const element = document.querySelector('[data-qa-link-id="' + linkId + '"]');
                     
                     if (element) {
-                        clearHighlights();
                         element.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        element.classList.add('qa-highlight');
-                        
                         setTimeout(() => {
-                            element.classList.remove('qa-highlight');
-                        }, 3000);
+                            showLocateOverlayForElement(element);
+                        }, 180);
                     }
                 }
                 
@@ -4046,13 +4055,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const element = document.querySelector('[data-qa-img-id="' + imgId + '"]');
                     
                     if (element) {
-                        clearHighlights();
                         element.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        element.classList.add('qa-highlight-img');
-                        
                         setTimeout(() => {
-                            element.classList.remove('qa-highlight-img');
-                        }, 3000);
+                            showLocateOverlayForElement(element);
+                        }, 180);
                     }
                 }
                 
