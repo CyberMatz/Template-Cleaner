@@ -3943,7 +3943,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Erzeuge annotierte Preview-Version mit data-qa-link-id und data-qa-img-id
     function generateAnnotatedPreview(html) {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+        let doc = parser.parseFromString(html, 'text/html');  // FIX: let statt const (wird später neu zugewiesen)
         
         // Phase 13 P7: Strip <script> tags für Preview-Security (nur in srcdoc, nicht in committed HTML)
         const scripts = doc.querySelectorAll('script');
