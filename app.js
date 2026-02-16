@@ -1008,6 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadReport = document.getElementById('downloadReport');
     const downloadUnresolved = document.getElementById('downloadUnresolved');
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
+    const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');  // FIX: TDZ - früh deklarieren
 
     // State-Variablen (KEIN uploadedFile mehr!)
     let processingResult = null;
@@ -2358,7 +2359,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // ===== PHASE C: ASSET REVIEW FEATURE =====
-    const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');
+    // showAssetReviewBtn bereits oben deklariert (TDZ Fix)
     const assetReviewModal = document.getElementById('assetReviewModal');
     const closeAssetReviewModal = document.getElementById('closeAssetReviewModal');
     const assetUndoBtn = document.getElementById('assetUndoBtn');
