@@ -4030,133 +4030,130 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Füge Highlight-Script in <head> ein
         const highlightScript = doc.createElement('script');
-        highlightScript.textContent = `
-            // Highlight-Script für Inspector Preview (Phase 3 + 4)
-            window.addEventListener('message', function(event) {
-                // Helper: Zeige Locate-Overlay über Element
-                function showLocateOverlayForElement(element) {
-                    document.querySelectorAll('.qa-locate-overlay').forEach(o => o.remove());
-                    const rect = element.getBoundingClientRect();
-                    const overlay = document.createElement('div');
-                    overlay.className = 'qa-locate-overlay';
-                    overlay.style.cssText =
-                        'position:absolute;' +
-                        'left:' + (rect.left + window.scrollX) + 'px;' +
-                        'top:' + (rect.top + window.scrollY) + 'px;' +
-                        'width:' + rect.width + 'px;' +
-                        'height:' + rect.height + 'px;' +
-                        'border:3px solid #e74c3c;' +
-                        'box-shadow:0 0 0 4px rgba(231,76,60,0.25);' +
-                        'background:rgba(231,76,60,0.06);' +
-                        'border-radius:4px;' +
-                        'z-index:2147483647;' +
-                        'pointer-events:none;';
-                    document.body.appendChild(overlay);
-                    setTimeout(() => overlay.remove(), 2800);
-                }
-                
-                // HIGHLIGHT_LINK (Phase 3)
-                if (event.data.type === 'HIGHLIGHT_LINK') {
-                    const linkId = event.data.id;
-                    const element = document.querySelector('[data-qa-link-id="' + linkId + '"]');
-                    
-                    if (element) {
-                        element.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        setTimeout(() => {
-                            showLocateOverlayForElement(element);
-                        }, 180);
-                    }
-                }
-                
-                // HIGHLIGHT_IMG (Phase 4)
-                if (event.data.type === 'HIGHLIGHT_IMG') {
-                    const imgId = event.data.id;
-                    const element = document.querySelector('[data-qa-img-id="' + imgId + '"]');
-                    
-                    if (element) {
-                        element.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        setTimeout(() => {
-                            showLocateOverlayForElement(element);
-                        }, 180);
-                    }
-                }
-                
-                // HIGHLIGHT_FIX (Phase 5)
-                if (event.data.type === 'HIGHLIGHT_FIX') {
-                    const fixId = event.data.id;
-                    const marker = document.querySelector('[data-qa-fix-id="' + fixId + '"]');
-                    
-                    if (marker) {
-                        // Entferne vorherige Fix-Pins
-                        document.querySelectorAll('.qa-fix-pin').forEach(pin => pin.remove());
-                        
-                        // Scroll zu Marker
-                        marker.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        
-                        // Erstelle sichtbaren Pin
-                        const pin = document.createElement('div');
-                        pin.className = 'qa-fix-pin';
-                        pin.textContent = fixId;
-                        pin.style.cssText = 'position:absolute;left:0;top:0;background:#ff9800;color:white;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
-                        
-                        // Positioniere Pin relativ zum Marker
-                        const rect = marker.getBoundingClientRect();
-                        pin.style.left = (rect.left + window.scrollX) + 'px';
-                        pin.style.top = (rect.top + window.scrollY - 30) + 'px';
-                        
-                        document.body.appendChild(pin);
-                        
-                        // Entferne Pin nach 3 Sekunden
-                        setTimeout(() => {
-                            pin.remove();
-                        }, 3000);
-                    }
-                }
-            });
-            
-            // Click Handler für Element-Auswahl (Phase 6)
-            document.addEventListener('click', function(event) {
-                // Finde nächstes Element mit data-qa-node-id
-                let target = event.target;
-                let maxDepth = 5;
-                let depth = 0;
-                
-                while (target && depth < maxDepth) {
-                    const qaNodeId = target.getAttribute('data-qa-node-id');
-                    if (qaNodeId) {
-                        // Element gefunden, sende an Parent
-                        const tagName = target.tagName.toLowerCase();
-                        const text = target.textContent ? target.textContent.substring(0, 50) : '';
-                        const href = target.getAttribute('href') || '';
-                        const src = target.getAttribute('src') || '';
-                        
-                        // Entferne vorherige Auswahl-Markierung
-                        document.querySelectorAll('.qa-selected').forEach(el => {
-                            el.classList.remove('qa-selected');
-                        });
-                        
-                        // Markiere ausgewähltes Element
-                        target.classList.add('qa-selected');
-                        
-                        // Sende an Parent
-                        window.parent.postMessage({
-                            type: 'SELECT_ELEMENT',
-                            tagName: tagName,
-                            qaNodeId: qaNodeId,
-                            text: text,
-                            href: href,
-                            src: src
-                        }, '*');
-                        
-                        event.preventDefault();
-                        event.stopPropagation();
-                        break;
-                    }
-                    target = target.parentElement;
-                    depth++;
-                }
-            });
-        `;
+        highlightScript.textContent = 
+            "// Highlight-Script für Inspector Preview (Phase 3 + 4)\n" +
+            "window.addEventListener('message', function(event) {\n" +
+            "    try {\n" +
+            "        // Helper: Zeige Locate-Overlay über Element\n" +
+            "        function showLocateOverlayForElement(element) {\n" +
+            "            document.querySelectorAll('.qa-locate-overlay').forEach(function(o) { o.remove(); });\n" +
+            "            var rect = element.getBoundingClientRect();\n" +
+            "            var overlay = document.createElement('div');\n" +
+            "            overlay.className = 'qa-locate-overlay';\n" +
+            "            overlay.style.cssText = 'position:absolute;' + " +
+            "                'left:' + (rect.left + window.scrollX) + 'px;' + " +
+            "                'top:' + (rect.top + window.scrollY) + 'px;' + " +
+            "                'width:' + rect.width + 'px;' + " +
+            "                'height:' + rect.height + 'px;' + " +
+            "                'border:3px solid #e74c3c;' + " +
+            "                'box-shadow:0 0 0 4px rgba(231,76,60,0.25);' + " +
+            "                'background:rgba(231,76,60,0.06);' + " +
+            "                'border-radius:4px;' + " +
+            "                'z-index:2147483647;' + " +
+            "                'pointer-events:none;';\n" +
+            "            document.body.appendChild(overlay);\n" +
+            "            setTimeout(function() { overlay.remove(); }, 2800);\n" +
+            "        }\n" +
+            "\n" +
+            "        // HIGHLIGHT_LINK (Phase 3)\n" +
+            "        if (event.data.type === 'HIGHLIGHT_LINK') {\n" +
+            "            var linkId = event.data.id;\n" +
+            "            var href = event.data.href;\n" +
+            "            var element = document.querySelector('[data-qa-link-id=\"' + linkId + '\"]');\n" +
+            "            if (!element && href) {\n" +
+            "                var links = Array.from(document.querySelectorAll('a[href]'));\n" +
+            "                element = links.find(function(a) {\n" +
+            "                    var aHref = a.getAttribute('href');\n" +
+            "                    return aHref === href || (aHref && aHref.includes(href));\n" +
+            "                });\n" +
+            "            }\n" +
+            "            if (element) {\n" +
+            "                element.scrollIntoView({ block: 'center', behavior: 'smooth' });\n" +
+            "                setTimeout(function() { showLocateOverlayForElement(element); }, 180);\n" +
+            "            } else {\n" +
+            "                console.warn('[LOCATE] Link not found - ID:', linkId, 'href:', href, 'Total links:', document.querySelectorAll('a[href]').length);\n" +
+            "            }\n" +
+            "        }\n" +
+            "\n" +
+            "        // HIGHLIGHT_IMG (Phase 4)\n" +
+            "        if (event.data.type === 'HIGHLIGHT_IMG') {\n" +
+            "            var imgId = event.data.id;\n" +
+            "            var src = event.data.src;\n" +
+            "            var element = document.querySelector('[data-qa-img-id=\"' + imgId + '\"]');\n" +
+            "            if (!element && src) {\n" +
+            "                var images = Array.from(document.querySelectorAll('img[src]'));\n" +
+            "                element = images.find(function(img) {\n" +
+            "                    var imgSrc = img.getAttribute('src');\n" +
+            "                    return imgSrc === src || (imgSrc && imgSrc.includes(src));\n" +
+            "                });\n" +
+            "            }\n" +
+            "            if (element) {\n" +
+            "                element.scrollIntoView({ block: 'center', behavior: 'smooth' });\n" +
+            "                setTimeout(function() { showLocateOverlayForElement(element); }, 180);\n" +
+            "            } else {\n" +
+            "                console.warn('[LOCATE] Image not found - ID:', imgId, 'src:', src, 'Total images:', document.querySelectorAll('img[src]').length);\n" +
+            "            }\n" +
+            "        }\n" +
+            "\n" +
+            "        // HIGHLIGHT_FIX (Phase 5)\n" +
+            "        if (event.data.type === 'HIGHLIGHT_FIX') {\n" +
+            "            var fixId = event.data.id;\n" +
+            "            var marker = document.querySelector('[data-qa-fix-id=\"' + fixId + '\"]');\n" +
+            "            if (marker) {\n" +
+            "                document.querySelectorAll('.qa-fix-pin').forEach(function(pin) { pin.remove(); });\n" +
+            "                marker.scrollIntoView({ block: 'center', behavior: 'smooth' });\n" +
+            "                var pin = document.createElement('div');\n" +
+            "                pin.className = 'qa-fix-pin';\n" +
+            "                pin.textContent = fixId;\n" +
+            "                pin.style.cssText = 'position:absolute;left:0;top:0;background:#ff9800;color:white;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);';\n" +
+            "                var rect = marker.getBoundingClientRect();\n" +
+            "                pin.style.left = (rect.left + window.scrollX) + 'px';\n" +
+            "                pin.style.top = (rect.top + window.scrollY - 30) + 'px';\n" +
+            "                document.body.appendChild(pin);\n" +
+            "                setTimeout(function() { pin.remove(); }, 3000);\n" +
+            "            }\n" +
+            "        }\n" +
+            "    } catch(e) {\n" +
+            "        console.error('[PREVIEW SCRIPT ERROR]', e);\n" +
+            "    }\n" +
+            "});\n" +
+            "\n" +
+            "// Click Handler für Element-Auswahl (Phase 6)\n" +
+            "document.addEventListener('click', function(event) {\n" +
+            "    try {\n" +
+            "        var target = event.target;\n" +
+            "        var maxDepth = 5;\n" +
+            "        var depth = 0;\n" +
+            "        while (target && depth \u003c maxDepth) {\n" +
+            "            var qaNodeId = target.getAttribute('data-qa-node-id');\n" +
+            "            if (qaNodeId) {\n" +
+            "                var tagName = target.tagName.toLowerCase();\n" +
+            "                var text = target.textContent ? target.textContent.substring(0, 50) : '';\n" +
+            "                var href = target.getAttribute('href') || '';\n" +
+            "                var src = target.getAttribute('src') || '';\n" +
+            "                document.querySelectorAll('.qa-selected').forEach(function(el) {\n" +
+            "                    el.classList.remove('qa-selected');\n" +
+            "                });\n" +
+            "                target.classList.add('qa-selected');\n" +
+            "                window.parent.postMessage({\n" +
+            "                    type: 'SELECT_ELEMENT',\n" +
+            "                    tagName: tagName,\n" +
+            "                    qaNodeId: qaNodeId,\n" +
+            "                    text: text,\n" +
+            "                    href: href,\n" +
+            "                    src: src\n" +
+            "                }, '*');\n" +
+            "                event.preventDefault();\n" +
+            "                event.stopPropagation();\n" +
+            "                break;\n" +
+            "            }\n" +
+            "            target = target.parentElement;\n" +
+            "            depth++;\n" +
+            "        }\n" +
+            "    } catch(e) {\n" +
+            "        console.error('[PREVIEW CLICK ERROR]', e);\n" +
+            "    }\n" +
+            "});";
         
         // Füge Highlight-Style in <head> ein
         const highlightStyle = doc.createElement('style');
@@ -4287,7 +4284,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '<div class="tracking-link-edit-controls">';
                 html += '<input type="text" class="tracking-link-input" placeholder="Neue URL eingeben..." data-link-id="' + link.id + '">';
                 html += '<button class="btn-tracking-apply" data-link-id="' + link.id + '">✓ Anwenden</button>';
-                html += '<button class="btn-tracking-locate" data-link-id="' + link.id + '">👁️ Locate</button>';
+                html += '<button class="btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">👁️ Locate</button>';
                 html += '</div>';
                 html += '</div>';
             });
@@ -4449,7 +4446,8 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const linkId = this.getAttribute('data-link-id');
-                highlightLinkInPreview(linkId);
+                const href = this.getAttribute('data-href');
+                highlightLinkInPreview(linkId, href);
             });
         });
         
@@ -4535,7 +4533,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Highlight Link in Preview
-    function highlightLinkInPreview(linkId) {
+    function highlightLinkInPreview(linkId, href) {
         if (!inspectorPreviewFrame) {
             console.error('[INSPECTOR] Preview iframe not found');
             return;
@@ -4543,7 +4541,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const message = {
             type: 'HIGHLIGHT_LINK',
-            id: linkId
+            id: linkId,
+            href: href || null
         };
         
         // Wenn Preview noch nicht ready, Message in Queue stellen
@@ -5039,7 +5038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '<input type="text" class="image-src-input" placeholder="Neue src URL eingeben..." data-img-id="' + img.id + '">';
                 html += '<button class="btn-image-apply" data-img-id="' + img.id + '">✓ Anwenden</button>';
                 html += '<button class="btn-image-remove" data-img-id="' + img.id + '">🗑️ Entfernen</button>';
-                html += '<button class="btn-image-locate" data-img-id="' + img.id + '">👁️ Locate</button>';
+                html += '<button class="btn-image-locate" data-img-id="' + img.id + '" data-src="' + escapeHtml(img.src) + '">👁️ Locate</button>';
                 html += '</div>';
                 html += '</div>';
             });
@@ -5201,7 +5200,8 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const imgId = this.getAttribute('data-img-id');
-                highlightImageInPreview(imgId);
+                const src = this.getAttribute('data-src');
+                highlightImageInPreview(imgId, src);
             });
         });
         
@@ -5229,7 +5229,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Highlight Image in Preview
-    function highlightImageInPreview(imgId) {
+    function highlightImageInPreview(imgId, src) {
         if (!inspectorPreviewFrame) {
             console.error('[INSPECTOR] Preview iframe not found');
             return;
@@ -5237,7 +5237,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const message = {
             type: 'HIGHLIGHT_IMG',
-            id: imgId
+            id: imgId,
+            src: src || null
         };
         
         // Wenn Preview noch nicht ready, Message in Queue stellen
