@@ -16,116 +16,176 @@
     }
   })();
 </script>
-    <div class="container">
-        <header>
-            <img src="pw-logo.png" alt="PW Logo" style="width: 60px; height: 60px; margin-bottom: 15px;">
-            <h1>HTML Template QA Tool</h1>
-            <p>Automatische Prüfung und Optimierung von E-Mail-Templates</p>
-        </header>
 
-        <main>
-            <!-- Upload Section -->
-            <section class="upload-section">
-                <h2>1. Template hochladen</h2>
-                <div class="upload-box">
-                    <input type="file" id="fileInput" accept=".html,.htm" />
-                    <label for="fileInput" class="upload-label">
-                        <span class="upload-icon">📁</span>
-                        <span>HTML-Datei auswählen</span>
-                    </label>
-                    <div id="fileName" class="file-name"></div>
-                </div>
-            </section>
+    <!-- Header -->
+    <header class="main-header">
+        <img src="pw-logo.png" alt="PW Logo" class="header-logo">
+        <h1>Automatische Prüfung und Optimierung von E-Mail-Templates</h1>
+    </header>
 
-            <!-- Configuration Section -->
-            <section class="config-section">
-                <h2>2. Konfiguration</h2>
-                
-                <div class="form-group">
-                    <label for="checklistType">Checklist-Typ:</label>
-                    <select id="checklistType">
-                        <option value="auto">Auto erkennen</option>
-                        <option value="standard">Standard</option>
-                        <option value="dpl">DPL</option>
-                    </select>
-                </div>
+    <!-- Main Control Panel (gemäß Scribble) -->
+    <div class="control-panel">
+        <!-- Upload Button -->
+        <div class="control-item">
+            <input type="file" id="fileInput" accept=".html,.htm" style="display: none;" />
+            <button id="uploadBtn" class="btn-upload">
+                📁 Upload Template
+            </button>
+            <div id="fileName" class="file-name-display"></div>
+        </div>
 
-                <div class="form-group">
-                    <label for="preheaderText">Preheader-Text (optional):</label>
-                    <input type="text" id="preheaderText" placeholder="z.B. Ihre monatliche Übersicht ist da!" />
-                </div>
+        <!-- Checklist Typ (Radio Buttons) -->
+        <div class="control-item">
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="checklistType" value="standard" id="checklistStandard" checked>
+                    <span>Checklist Typ: Standard</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="checklistType" value="dpl" id="checklistDPL">
+                    <span>Checklist Typ: DPL</span>
+                </label>
+            </div>
+        </div>
 
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" id="removeFonts" checked />
-                    <label for="removeFonts">Externe Fonts entfernen (Google Fonts, @import, @font-face)</label>
-                </div>
+        <!-- Pre-Header + Textfeld -->
+        <div class="control-item control-inline">
+            <label for="preheaderText" class="inline-label">Pre-Header</label>
+            <input type="text" id="preheaderText" class="inline-input" placeholder="Freitextfeld" />
+        </div>
 
-                <button id="processBtn" class="btn-primary" disabled>
-                    <span class="btn-icon">⚙️</span>
-                    Template verarbeiten
-                </button>
-                
-                <div id="uploadHint" class="upload-hint" style="display: block;">
-                    ⚠️ Bitte zuerst eine HTML-Datei auswählen.
-                </div>
-            </section>
+        <!-- Checkbox Externe Fonts -->
+        <div class="control-item">
+            <label class="checkbox-label">
+                <input type="checkbox" id="removeFonts" checked>
+                <span>Externe Fonts entfernen</span>
+            </label>
+        </div>
 
-            <!-- Results Section -->
-            <section id="resultsSection" class="results-section" style="display: none;">
-                <h2>3. Ergebnisse</h2>
-                
-                <div id="statusBadge" class="status-badge"></div>
-                
-                <div class="download-grid">
-                    <button id="downloadOptimized" class="btn-download">
-                        <span class="btn-icon">📄</span>
-                        optimized.html
-                    </button>
-                    <button id="downloadReport" class="btn-download">
-                        <span class="btn-icon">📋</span>
-                        report.txt
-                    </button>
-                    <button id="downloadUnresolved" class="btn-download">
-                        <span class="btn-icon">⚠️</span>
-                        unresolved.txt
-                    </button>
-                    <!-- Phase 11: Final Output Button -->
-                    <button id="downloadFinalOutput" class="btn-download btn-final-output">
-                        <span class="btn-icon">⬇️</span>
-                        Final Output (committed)
-                    </button>
-                    <button id="showDiffBtn" class="btn-diff">
-                        <span class="btn-icon">📊</span>
-                        Änderungen anzeigen (Diff)
-                    </button>
-                    <button id="showTagReviewBtn" class="btn-tag-review">
-                        <span class="btn-icon">🔍</span>
-                        HTML-Tag-Review
-                    </button>
-                    <button id="showAssetReviewBtn" class="btn-asset-review">
-                        <span class="btn-icon">🖼️</span>
-                        Asset und Tracking Review
-                    </button>
-                    <button id="showInspectorBtn" class="btn-inspector">
-                        <span class="btn-icon">🔍</span>
-                        Inspector
-                    </button>
-                </div>
+        <!-- Process Button -->
+        <div class="control-item">
+            <button id="processBtn" class="btn-action" disabled>
+                ⚙️ Template verarbeiten
+            </button>
+        </div>
 
-                <div id="tagReviewHint" class="tag-review-hint" style="display: none;">
-                    ⚠️ Erst Template verarbeiten, bevor Tag-Review genutzt werden kann.
-                </div>
+        <!-- Download Optimized Temp Button -->
+        <div class="control-item">
+            <button id="downloadOptimized" class="btn-action" disabled>
+                ⬇️ Download Optimized Temp.
+            </button>
+        </div>
 
-                <div id="reportPreview" class="report-preview"></div>
-            </section>
-        </main>
-
-        <footer>
-            <p>© 2026 HTML Template QA Tool | Clientseitige Verarbeitung - Keine Daten werden hochgeladen</p>
-        </footer>
+        <!-- Open Inspector Button -->
+        <div class="control-item">
+            <button id="showInspectorBtn" class="btn-action" disabled>
+                🔍 Open Inspector
+            </button>
+        </div>
     </div>
 
-    <!-- Diff Modal -->
+    <!-- Hidden: Upload Hint -->
+    <div id="uploadHint" style="display: none;"></div>
+
+    <!-- Hidden: Old Results Section Elements (für Kompatibilität) -->
+    <div id="resultsSection" style="display: none;">
+        <div id="statusBadge"></div>
+        <button id="downloadReport" style="display: none;"></button>
+        <button id="downloadUnresolved" style="display: none;"></button>
+        <button id="downloadFinalOutput" style="display: none;"></button>
+        <button id="showDiffBtn" style="display: none;"></button>
+        <button id="showTagReviewBtn" style="display: none;"></button>
+        <button id="showAssetReviewBtn" style="display: none;"></button>
+        <div id="tagReviewHint" style="display: none;"></div>
+        <div id="reportPreview" style="display: none;"></div>
+    </div>
+
+    <!-- Inspector Section (gemäß Scribble) -->
+    <section id="inspectorSection" class="inspector-section" style="display: none;">
+        <!-- Tabs -->
+        <div class="inspector-tabs">
+            <button id="trackingTab" class="inspector-tab active" data-tab="tracking">
+                Tracking
+            </button>
+            <button id="imagesTab" class="inspector-tab" data-tab="images">
+                Bilder
+            </button>
+            <button id="tagReviewTab" class="inspector-tab" data-tab="tagreview">
+                Tag-Review
+            </button>
+            <button id="editorTab" class="inspector-tab" data-tab="editor">
+                Editor
+            </button>
+        </div>
+
+        <!-- 2-Spalten-Layout -->
+        <div class="inspector-layout">
+            <!-- Linke Spalte: Quellcode Template -->
+            <div class="inspector-left">
+                <h3>Quellcode Template</h3>
+                
+                <!-- Tracking Panel -->
+                <div id="trackingPanel" class="inspector-panel active">
+                    <div id="trackingContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Images Panel -->
+                <div id="imagesPanel" class="inspector-panel" style="display: none;">
+                    <div id="imagesContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Tag-Review Panel -->
+                <div id="tagreviewPanel" class="inspector-panel" style="display: none;">
+                    <div id="tagreviewContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Editor Panel -->
+                <div id="editorPanel" class="inspector-panel" style="display: none;">
+                    <div id="editorContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rechte Spalte: Webansicht Template (Preview) -->
+            <div class="inspector-right">
+                <h3>Webansicht Template</h3>
+                <div class="preview-container">
+                    <iframe id="inspectorPreviewFrame" sandbox="allow-same-origin" class="inspector-preview-frame"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- Untere Button-Leiste -->
+        <div class="inspector-footer">
+            <button id="commitChangesBtn" class="btn-footer-left">
+                ✅ Anpassungen übernehmen
+            </button>
+            <button id="downloadManualOptimized" class="btn-footer-right" disabled>
+                ⬇️ Download manuell optimized Temp.
+            </button>
+        </div>
+    </section>
+
+    <!-- Hidden: Old Inspector Elements (für Kompatibilität) -->
+    <div style="display: none;">
+        <div id="globalPendingIndicator">
+            <div id="trackingStatusChip"></div>
+            <div id="imagesStatusChip"></div>
+            <div id="tagreviewStatusChip"></div>
+            <div id="editorStatusChip"></div>
+            <div id="pendingWarning"></div>
+        </div>
+        <button id="globalFinalizeBtn"></button>
+    </div>
+
+    <!-- Diff Modal (unverändert für Kompatibilität) -->
     <div id="diffModal" class="diff-modal" style="display: none;">
         <div class="diff-modal-content">
             <div class="diff-modal-header">
@@ -135,7 +195,6 @@
             <div class="diff-info">
                 ℹ️ Diese Ansicht zeigt nur Änderungen. Es werden keine Anpassungen vorgenommen.
             </div>
-            <!-- Phase 11 B4: Pending Hint Box (dynamisch) -->
             <div id="diffPendingHint" class="diff-pending-hint" style="display: none;">
                 <strong>Hinweis:</strong> Es gibt nicht übernommene Änderungen. Diff zeigt den letzten übernommenen Stand.
             </div>
@@ -152,286 +211,12 @@
         </div>
     </div>
 
-    <!-- Inspector Section -->
-    <section id="inspectorSection" class="inspector-section" style="display: none;">
-        <div class="inspector-header">
-            <h2>🔍 Inspector</h2>
-            <!-- Phase 11: Global Finalize Button -->
-            <button id="globalFinalizeBtn" class="btn-global-finalize" disabled title="Keine offenen Änderungen">
-                ✅ Alles finalisieren & Export aktualisieren
-            </button>
-        </div>
-        
-        <!-- Tabs -->
-        <div class="inspector-tabs">
-            <button id="trackingTab" class="inspector-tab active" data-tab="tracking">
-                <span class="tab-icon">📡</span>
-                Tracking
-            </button>
-            <button id="imagesTab" class="inspector-tab" data-tab="images">
-                <span class="tab-icon">🖼️</span>
-                Bilder
-            </button>
-            <button id="tagReviewTab" class="inspector-tab" data-tab="tagreview">
-                <span class="tab-icon">🔍</span>
-                Tag-Review
-            </button>
-            <button id="editorTab" class="inspector-tab" data-tab="editor">
-                <span class="tab-icon">✏️</span>
-                Editor
-            </button>
-        </div>
-        
-        <!-- Phase 9: Global Pending Indicator -->
-        <div id="globalPendingIndicator" class="global-pending-indicator" style="display: none;">
-            <div class="pending-status-chips">
-                <span id="trackingStatusChip" class="status-chip status-committed">Tracking: Committed</span>
-                <span id="imagesStatusChip" class="status-chip status-committed">Bilder: Committed</span>
-                <span id="tagreviewStatusChip" class="status-chip status-committed">Tag-Review: Committed</span>
-                <span id="editorStatusChip" class="status-chip status-committed">Editor: Committed</span>
-            </div>
-            <div id="pendingWarning" class="pending-warning" style="display: none;">
-                ⚠️ <strong>Achtung:</strong> Änderungen sind noch nicht übernommen. Downloads verwenden den letzten übernommenen Stand.
-            </div>
-        </div>
-        
-        <!-- 2-Spalten-Layout -->
-        <div class="inspector-container">
-            <!-- Linke Spalte: Controls -->
-            <div class="inspector-controls">
-                <div id="trackingPanel" class="inspector-panel active">
-                    <h3>📡 Tracking & Öffnerpixel</h3>
-                    <div id="trackingContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
-                    </div>
-                </div>
-                
-                <div id="imagesPanel" class="inspector-panel" style="display: none;">
-                    <h3>🖼️ Bilder</h3>
-                    <div id="imagesContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
-                    </div>
-                </div>
-                
-                <div id="tagreviewPanel" class="inspector-panel" style="display: none;">
-                    <h3>🔍 Tag-Review</h3>
-                    <div id="tagreviewContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
-                    </div>
-                </div>
-                
-                <div id="editorPanel" class="inspector-panel" style="display: none;">
-                    <h3>✏️ Editor</h3>
-                    <div id="editorContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Rechte Spalte: Preview -->
-            <div class="inspector-preview">
-                <div class="preview-header">
-                    <h3>👁️ Vorschau</h3>
-                    <div class="preview-disclaimer">
-                        ⚠️ Web-Preview (nicht identisch mit Gmail/Outlook)
-                    </div>
-                </div>
-                <div class="preview-container">
-                    <iframe id="inspectorPreviewFrame" sandbox="allow-same-origin" class="inspector-preview-frame"></iframe>
-                </div>
-            </div>
-        </div>
-    </section>
+    <!-- Tag-Review Modal (ausgeblendet, für Kompatibilität) -->
+    <div id="tagReviewModal" style="display: none;"></div>
+    <div id="assetReviewModal" style="display: none;"></div>
 
-    <!-- Tag-Review Modal -->
-    <div id="tagReviewModal" class="tag-review-modal" style="display: none;">
-        <div class="tag-review-modal-content">
-            <div class="tag-review-modal-header">
-                <h2>🔍 HTML-Tag-Review</h2>
-                <button id="closeTagReviewModal" class="close-modal">×</button>
-            </div>
-            <div class="tag-review-info">
-                ℹ️ Dieser Modus zeigt nicht geschlossene Tags. Sie entscheiden manuell, ob diese geschlossen werden.
-            </div>
-            <div class="tag-review-container">
-                <div class="tag-review-problems">
-                    <!-- Sticky Header -->
-                    <div class="problems-header">
-                        <div class="problems-header-item">
-                            <h3>🚨 Gefundene Probleme</h3>
-                            <span id="problemsCountBadge" class="count-badge">0</span>
-                        </div>
-                        <div class="problems-header-item">
-                            <h3>🔧 Automatisch geschlossene Tags</h3>
-                            <span id="autoFixesCountBadge" class="count-badge">0</span>
-                        </div>
-                        <div id="manualActionsCounter" class="manual-actions-counter">
-                            Manuelle Aktionen: 0
-                        </div>
-                    </div>
-                    
-                    <!-- Scrollable Content -->
-                    <div class="problems-content">
-                        <div class="problems-section">
-                            <h4 class="section-title">🚨 Gefundene Probleme</h4>
-                            <div id="tagProblemsList" class="problems-list">
-                                <!-- Probleme werden hier dynamisch eingefügt -->
-                            </div>
-                        </div>
-                        
-                        <div class="problems-section">
-                            <h4 class="section-title">🔧 Automatisch geschlossene Tags</h4>
-                            <div id="autoFixesList" class="problems-list">
-                                <!-- Auto-Fixes werden hier dynamisch eingefügt -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="tag-review-preview">
-                    <!-- Sticky Header -->
-                    <div class="preview-header">
-                        <h3>👁️ Vorschau</h3>
-                        <div class="preview-disclaimer">
-                            ⚠️ Web-Preview (nicht identisch mit Gmail/Outlook)
-                        </div>
-                        <div class="preview-tabs">
-                            <button id="showWebPreview" class="preview-tab active">Web-Rendering</button>
-                            <button id="showCodePreview" class="preview-tab">Code-Snippet</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Preview Content -->
-                    <div class="preview-content">
-                        <div id="webPreviewContainer" class="preview-container">
-                            <iframe id="webPreviewFrame" sandbox="allow-same-origin" class="web-preview-frame"></iframe>
-                        </div>
-                        <div id="codePreviewContainer" class="preview-container" style="display: none;">
-                            <pre id="codePreviewContent" class="code-preview-content"></pre>
-                        </div>
-                        <div id="changeSnippet" class="change-snippet" style="display: none;">
-                            <h4>Letzte Änderung:</h4>
-                            <div class="snippet-before">
-                                <strong>Vorher:</strong>
-                                <pre id="snippetBefore"></pre>
-                            </div>
-                            <div class="snippet-after">
-                                <strong>Nachher:</strong>
-                                <pre id="snippetAfter"></pre>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Footer-Leiste mit Aktionen -->
-            <div class="tag-review-footer">
-                <button id="undoLastAction" class="btn-undo" disabled>
-                    <span class="btn-icon">↩️</span>
-                    Letzte Änderung rückgängig machen
-                </button>
-                <button id="commitReviewChanges" class="btn-commit" disabled>
-                    <span class="btn-icon">✅</span>
-                    Änderungen übernehmen
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Asset-Review Modal -->
-    <div id="assetReviewModal" class="tag-review-modal" style="display: none;">
-        <div class="tag-review-modal-content">
-            <div class="tag-review-modal-header">
-                <h2>🖼️ Asset und Tracking Review</h2>
-                <button id="closeAssetReviewModal" class="close-modal">×</button>
-            </div>
-            <div class="tag-review-info">
-                ℹ️ Phase C: Manuelle Überprüfung und kontrolliertes Ersetzen von Assets und Tracking-Elementen.
-            </div>
-            <div class="tag-review-container">
-                <div class="tag-review-problems">
-                    <!-- Sticky Header -->
-                    <div class="problems-header">
-                        <div class="problems-header-item">
-                            <h3>📝 Asset und Tracking Review</h3>
-                        </div>
-                        <div id="assetActionsCounter" class="manual-actions-counter">
-                            Manuelle Aktionen: 0
-                        </div>
-                    </div>
-                    
-                    <!-- Scrollable Content -->
-                    <div class="problems-content">
-                        <!-- Preheader Section -->
-                        <div class="problems-section">
-                            <h4 class="section-title">📨 Preheader</h4>
-                            <div id="preheaderInfo" class="asset-info">
-                                <!-- Preheader Info wird hier dynamisch eingefügt -->
-                            </div>
-                        </div>
-                        
-                        <!-- Bilder Section -->
-                        <div class="problems-section">
-                            <h4 class="section-title">🖼️ Bilder</h4>
-                            <div id="imagesList" class="problems-list">
-                                <!-- Bilder werden hier dynamisch eingefügt -->
-                            </div>
-                        </div>
-                        
-                        <!-- Links Section -->
-                        <div class="problems-section">
-                            <h4 class="section-title">🔗 Links</h4>
-                            <div id="linksList" class="problems-list">
-                                <!-- Links werden hier dynamisch eingefügt -->
-                            </div>
-                        </div>
-                        
-                        <!-- Öffnerpixel/Tracking Section -->
-                        <div class="problems-section">
-                            <h4 class="section-title">📡 Öffnerpixel/Tracking</h4>
-                            <div id="trackingInfo" class="asset-info">
-                                <!-- Tracking Info wird hier dynamisch eingefügt -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="tag-review-preview">
-                    <!-- Sticky Header -->
-                    <div class="preview-header">
-                        <h3>👁️ Vorschau</h3>
-                        <div class="preview-disclaimer">
-                            ⚠️ Web-Preview (nicht identisch mit Gmail/Outlook)
-                        </div>
-                        <div class="preview-tabs">
-                            <button id="showAssetWebPreview" class="preview-tab active">Web-Rendering</button>
-                            <button id="showAssetCodePreview" class="preview-tab">Code-Snippet</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Preview Content -->
-                    <div class="preview-content">
-                        <div id="assetWebPreviewContainer" class="preview-container">
-                            <iframe id="assetWebPreviewFrame" sandbox="allow-same-origin" class="web-preview-frame"></iframe>
-                        </div>
-                        <div id="assetCodePreviewContainer" class="preview-container" style="display: none;">
-                            <pre id="assetCodePreviewContent" class="code-preview-content"></pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Footer-Leiste mit Aktionen -->
-            <div class="tag-review-footer">
-                <button id="assetUndoBtn" class="btn-undo" disabled>
-                    <span class="btn-icon">↩️</span>
-                    Letzte Änderung rückgängig machen
-                </button>
-                <button id="assetCommitBtn" class="btn-commit" disabled>
-                    <span class="btn-icon">✅</span>
-                    Änderungen übernehmen
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- Toast Container (für Phase 12 Toasts) -->
+    <div id="inspectorToast" class="inspector-toast"></div>
 
     <script src="app.js"></script>
 </body>

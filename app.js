@@ -991,7 +991,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadHint = document.getElementById('uploadHint');
     if (!uploadHint) console.error('[INIT] uploadHint not found!');
     
-    const checklistType = document.getElementById('checklistType');
+    // PATCH: checklistType ist jetzt Radio Button Group
+    function getChecklistType() {
+        const radios = document.getElementsByName('checklistType');
+        for (let radio of radios) {
+            if (radio.checked) return radio.value;
+        }
+        return 'standard';
+    }
     const preheaderText = document.getElementById('preheaderText');
     const removeFonts = document.getElementById('removeFonts');
     const resultsSection = document.getElementById('resultsSection');
@@ -1100,10 +1107,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // UI-Update ERST NACH FileReader fertig
                 fileName.textContent = `📄 ${file.name}`;
                 
-                // Button aktivieren
+                // Process Button aktivieren
                 processBtn.disabled = false;
                 processBtn.classList.remove('disabled');
                 processBtn.removeAttribute('aria-disabled');
+                
+                // Download & Inspector Buttons deaktivieren (bis Processing abgeschlossen)
+                if (downloadOptimized) downloadOptimized.disabled = true;
+                if (showInspectorBtn) showInspectorBtn.disabled = true;
                 
                 // Hinweistext ausblenden
                 uploadHint.style.display = 'none';
@@ -1131,6 +1142,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Beide Events registrieren (Browser-Kompatibilität)
     fileInput.addEventListener('change', handleFileSelect);
     fileInput.addEventListener('input', handleFileSelect);
+    
+    // PATCH: uploadBtn triggert fileInput click
+    const uploadBtn = document.getElementById('uploadBtn');
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+    }
 
     // Template verarbeiten
     processBtn.addEventListener('click', async () => {
@@ -1153,7 +1172,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Processor erstellen und ausführen
             const processor = new TemplateProcessor(
                 htmlContent,
-                checklistType.value,
+                getChecklistType(),
                 preheaderText.value,
                 removeFonts.checked
             );
@@ -1213,6 +1232,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showInspectorBtn) {
                 showInspectorBtn.disabled = false;
                 showInspectorBtn.title = 'Inspector öffnen';
+            }
+            
+            // Download Optimized Button aktivieren
+            if (downloadOptimized) {
+                downloadOptimized.disabled = false;
+                downloadOptimized.title = 'Optimiertes Template herunterladen';
             }
 
             // Scroll zu Ergebnissen
@@ -3560,6 +3585,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Update Global Finalize Button (Phase 11 B2)
             updateGlobalFinalizeButton();
+        updateDownloadManualOptimizedButton();
             
             // Lade aktuellen Tab Content
             loadInspectorTabContent(currentInspectorTab);
@@ -3637,6 +3663,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update UI
         updateGlobalPendingIndicator();
         updateGlobalFinalizeButton();
+        updateDownloadManualOptimizedButton();
         
         // Alle Tabs neu rendern
         loadInspectorTabContent('tracking');
@@ -3660,6 +3687,44 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (globalFinalizeBtn) {
         globalFinalizeBtn.addEventListener('click', finalizeAllPendingTabs);
+    }
+    
+    // PATCH: Neue Footer Buttons (Inspector)
+    const commitChangesBtn = document.getElementById('commitChangesBtn');
+    const downloadManualOptimized = document.getElementById('downloadManualOptimized');
+    
+    if (commitChangesBtn) {
+        commitChangesBtn.addEventListener('click', () => {
+            // Trigger globalFinalize
+            if (globalFinalizeBtn) {
+                globalFinalizeBtn.click();
+            }
+        });
+    }
+    
+    if (downloadManualOptimized) {
+        downloadManualOptimized.addEventListener('click', () => {
+            // Trigger downloadFinalOutput
+            const downloadFinalOutput = document.getElementById('downloadFinalOutput');
+            if (downloadFinalOutput) {
+                downloadFinalOutput.click();
+            }
+        });
+    }
+    
+    // PATCH: Update downloadManualOptimized state based on pending changes
+    function updateDownloadManualOptimizedButton() {
+        if (!downloadManualOptimized) return;
+        
+        const anyPending = trackingPending || imagesPending || editorPending;
+        
+        if (anyPending) {
+            downloadManualOptimized.disabled = true;
+            downloadManualOptimized.title = 'Bitte zuerst Änderungen übernehmen';
+        } else {
+            downloadManualOptimized.disabled = false;
+            downloadManualOptimized.title = 'Download manuell optimiertes Template';
+        }
     }
     
     // PostMessage Listener für SELECT_ELEMENT (Phase 6 + Phase 8)
@@ -5941,6 +6006,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update Global Finalize Button (Phase 11 B2)
         updateGlobalFinalizeButton();
+        updateDownloadManualOptimizedButton();
     }
     
     function prepareHighlightAPI() {
