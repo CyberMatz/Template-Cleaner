@@ -211,9 +211,84 @@
         </div>
     </div>
 
-    <!-- Tag-Review Modal (ausgeblendet, für Kompatibilität) -->
-    <div id="tagReviewModal" style="display: none;"></div>
-    <div id="assetReviewModal" style="display: none;"></div>
+    <!-- ===== LEGACY COMPATIBILITY BLOCK ===== -->
+    <!-- Alle DOM-Elemente, die app.js erwartet, aber im neuen UI nicht sichtbar sind -->
+    <div id="legacyCompat" style="display: none;">
+        <!-- Old Results Section Elements -->
+        <section id="resultsSection">
+            <div id="statusBadge"></div>
+            <div id="uploadHint"></div>
+            <div id="reportPreview"></div>
+            <button id="downloadReport"></button>
+            <button id="downloadUnresolved"></button>
+            <button id="downloadFinalOutput"></button>
+            <button id="showDiffBtn"></button>
+            <button id="showTagReviewBtn"></button>
+        </section>
+        
+        <!-- Diff Modal -->
+        <div id="diffModal">
+            <button id="closeDiffModal"></button>
+            <div id="diffPendingHint"></div>
+            <pre id="diffOriginal"></pre>
+            <pre id="diffOptimized"></pre>
+        </div>
+        
+        <!-- Tag-Review Modal -->
+        <div id="tagReviewModal">
+            <button id="closeTagReviewModal"></button>
+            <div id="tagProblemsList"></div>
+            <button id="undoLastAction"></button>
+            <iframe id="webPreviewFrame"></iframe>
+            <pre id="codePreviewContent"></pre>
+            <button id="showWebPreview"></button>
+            <button id="showCodePreview"></button>
+            <div id="webPreviewContainer"></div>
+            <div id="codePreviewContainer"></div>
+            <div id="changeSnippet">
+                <pre id="snippetBefore"></pre>
+                <pre id="snippetAfter"></pre>
+            </div>
+            <div id="tagReviewHint"></div>
+            <span id="problemsCountBadge"></span>
+            <span id="autoFixesCountBadge"></span>
+            <button id="commitReviewChanges"></button>
+            <div id="reviewHint"></div>
+            <div id="autoFixesList"></div>
+            <div id="manualActionsCounter"></div>
+        </div>
+        
+        <!-- Asset-Review Modal -->
+        <div id="assetReviewModal">
+            <button id="closeAssetReviewModal"></button>
+            <button id="assetUndoBtn"></button>
+            <button id="assetCommitBtn"></button>
+            <iframe id="assetWebPreviewFrame"></iframe>
+            <pre id="assetCodePreviewContent"></pre>
+            <button id="showAssetWebPreview"></button>
+            <button id="showAssetCodePreview"></button>
+            <div id="assetWebPreviewContainer"></div>
+            <div id="assetCodePreviewContainer"></div>
+            <div id="assetActionsCounter"></div>
+            <div id="preheaderInfo"></div>
+            <div id="imagesList"></div>
+            <div id="linksList"></div>
+            <div id="trackingInfo"></div>
+        </div>
+        
+        <!-- Global Finalize Button (jetzt in Footer) -->
+        <button id="globalFinalizeBtn"></button>
+        
+        <!-- Global Pending Indicator -->
+        <div id="globalPendingIndicator">
+            <span id="trackingStatusChip"></span>
+            <span id="imagesStatusChip"></span>
+            <span id="tagreviewStatusChip"></span>
+            <span id="editorStatusChip"></span>
+            <div id="pendingWarning"></div>
+        </div>
+    </div>
+    <!-- ===== END LEGACY COMPATIBILITY BLOCK ===== -->
 
     <!-- Toast Container (für Phase 12 Toasts) -->
     <div id="inspectorToast" class="inspector-toast"></div>
