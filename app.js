@@ -1,3 +1,5 @@
+console.log("APP VERSION LOCATE FIX FINAL 1");
+
 // HTML Template QA Tool - Client-Side Processing
 // Keine Server-Komponenten - Alles läuft im Browser
 
