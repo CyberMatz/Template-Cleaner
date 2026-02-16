@@ -54,6 +54,19 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
+/* Action Buttons Container (links nebeneinander) */
+.control-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Inspector Button Container (rechts separat) */
+.control-inspector {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .control-item {
     display: flex;
     flex-direction: column;
@@ -170,6 +183,60 @@ body {
 
 .btn-action:disabled {
     background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Download Button (inherits from btn-action) */
+.btn-download {
+    background: #f2a93b;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+}
+
+.btn-download:hover:not(:disabled) {
+    background: #e09930;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-download:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Inspector Button (light style) */
+.btn-inspector {
+    background: #f4f4f4;
+    color: #333;
+    border: 1px solid #ccc;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+}
+
+.btn-inspector:hover:not(:disabled) {
+    background: #e8e8e8;
+    border-color: #999;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-inspector:disabled {
+    background: #f9f9f9;
+    color: #999;
     cursor: not-allowed;
     opacity: 0.6;
 }
