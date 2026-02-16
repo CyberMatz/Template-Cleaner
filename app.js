@@ -3952,7 +3952,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[PREVIEW_SECURITY] Removed ${scripts.length} script tags from preview`);
         }
         
-        // Annotiere alle <a> Tags with data-qa-link-id        const anchors = doc.querySelectorAll('a[href]');
+        // Annotiere alle <a> Tags mit data-qa-link-id
+        const anchors = doc.querySelectorAll('a[href]');
         anchors.forEach((anchor, index) => {
             const id = 'L' + String(index + 1).padStart(3, '0');
             anchor.setAttribute('data-qa-link-id', id);
