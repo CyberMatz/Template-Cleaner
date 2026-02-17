@@ -4082,7 +4082,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('    if (event.data.type === "HIGHLIGHT_LINK") {');
         scriptLines.push('      var linkId = event.data.id;');
         scriptLines.push('      var href = event.data.href;');
-        scriptLines.push('      var element = document.querySelector('[data-qa-link-id="' + linkId + '"]');');
+        scriptLines.push('      var element = document.querySelector(\'[data-qa-link-id="\' + linkId + \'"]\');');
         scriptLines.push('      if (!element && href) {');
         scriptLines.push('        var links = Array.from(document.querySelectorAll("a[href]"));');
         scriptLines.push('        element = links.find(function(a) {');
@@ -4102,7 +4102,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('    if (event.data.type === "HIGHLIGHT_IMG") {');
         scriptLines.push('      var imgId = event.data.id;');
         scriptLines.push('      var src = event.data.src;');
-        scriptLines.push('      var element = document.querySelector('[data-qa-img-id="' + imgId + '"]');');
+        scriptLines.push('      var element = document.querySelector(\'[data-qa-img-id="\' + imgId + \'"]\');');
         scriptLines.push('      if (!element && src) {');
         scriptLines.push('        var images = Array.from(document.querySelectorAll("img[src]"));');
         scriptLines.push('        element = images.find(function(img) {');
@@ -4121,7 +4121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('    // HIGHLIGHT_FIX');
         scriptLines.push('    if (event.data.type === "HIGHLIGHT_FIX") {');
         scriptLines.push('      var fixId = event.data.id;');
-        scriptLines.push('      var marker = document.querySelector('[data-qa-fix-id="' + fixId + '"]');');
+        scriptLines.push('      var marker = document.querySelector(\'[data-qa-fix-id="\' + fixId + \'"]\');');
         scriptLines.push('      if (marker) {');
         scriptLines.push('        document.querySelectorAll(".qa-fix-pin").forEach(function(pin) { pin.remove(); });');
         scriptLines.push('        marker.scrollIntoView({ block: "center", behavior: "smooth" });');
