@@ -3933,6 +3933,20 @@ document.addEventListener('DOMContentLoaded', () => {
             previewReady = false;
             pendingPreviewMessage = null;
             
+            // Debug-Guard: Prüfe ob Script escaped wurde BEVOR srcdoc gesetzt wird
+            if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
+                console.error('[PREVIEW] Script got escaped - aborting!');
+                console.error('[PREVIEW] contains &amp;&amp;:', annotatedHtml.includes('&amp;&amp;'));
+                console.error('[PREVIEW] contains &lt;:', annotatedHtml.includes('&lt;'));
+                console.error('[PREVIEW] First 500 chars of annotatedHtml:', annotatedHtml.substring(0, 500));
+                showPreviewFallback();
+                return;
+            }
+            
+            console.log('[PREVIEW] Script is NOT escaped - setting srcdoc');
+            console.log('[PREVIEW] contains &amp;&amp;:', annotatedHtml.includes('&amp;&amp;'));
+            console.log('[PREVIEW] contains &lt;:', annotatedHtml.includes('&lt;'));
+            
             // Setze srcdoc mit annotiertem HTML
             inspectorPreviewFrame.srcdoc = annotatedHtml;
             
@@ -4030,130 +4044,144 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Füge Highlight-Script in <head> ein
         const highlightScript = doc.createElement('script');
-        highlightScript.textContent = 
-            "// Highlight-Script für Inspector Preview (Phase 3 + 4)\n" +
-            "window.addEventListener('message', function(event) {\n" +
-            "    try {\n" +
-            "        // Helper: Zeige Locate-Overlay über Element\n" +
-            "        function showLocateOverlayForElement(element) {\n" +
-            "            document.querySelectorAll('.qa-locate-overlay').forEach(function(o) { o.remove(); });\n" +
-            "            var rect = element.getBoundingClientRect();\n" +
-            "            var overlay = document.createElement('div');\n" +
-            "            overlay.className = 'qa-locate-overlay';\n" +
-            "            overlay.style.cssText = 'position:absolute;' + " +
-            "                'left:' + (rect.left + window.scrollX) + 'px;' + " +
-            "                'top:' + (rect.top + window.scrollY) + 'px;' + " +
-            "                'width:' + rect.width + 'px;' + " +
-            "                'height:' + rect.height + 'px;' + " +
-            "                'border:3px solid #e74c3c;' + " +
-            "                'box-shadow:0 0 0 4px rgba(231,76,60,0.25);' + " +
-            "                'background:rgba(231,76,60,0.06);' + " +
-            "                'border-radius:4px;' + " +
-            "                'z-index:2147483647;' + " +
-            "                'pointer-events:none;';\n" +
-            "            document.body.appendChild(overlay);\n" +
-            "            setTimeout(function() { overlay.remove(); }, 2800);\n" +
-            "        }\n" +
-            "\n" +
-            "        // HIGHLIGHT_LINK (Phase 3)\n" +
-            "        if (event.data.type === 'HIGHLIGHT_LINK') {\n" +
-            "            var linkId = event.data.id;\n" +
-            "            var href = event.data.href;\n" +
-            "            var element = document.querySelector('[data-qa-link-id=\"' + linkId + '\"]');\n" +
-            "            if (!element && href) {\n" +
-            "                var links = Array.from(document.querySelectorAll('a[href]'));\n" +
-            "                element = links.find(function(a) {\n" +
-            "                    var aHref = a.getAttribute('href');\n" +
-            "                    return aHref === href || (aHref && aHref.includes(href));\n" +
-            "                });\n" +
-            "            }\n" +
-            "            if (element) {\n" +
-            "                element.scrollIntoView({ block: 'center', behavior: 'smooth' });\n" +
-            "                setTimeout(function() { showLocateOverlayForElement(element); }, 180);\n" +
-            "            } else {\n" +
-            "                console.warn('[LOCATE] Link not found - ID:', linkId, 'href:', href, 'Total links:', document.querySelectorAll('a[href]').length);\n" +
-            "            }\n" +
-            "        }\n" +
-            "\n" +
-            "        // HIGHLIGHT_IMG (Phase 4)\n" +
-            "        if (event.data.type === 'HIGHLIGHT_IMG') {\n" +
-            "            var imgId = event.data.id;\n" +
-            "            var src = event.data.src;\n" +
-            "            var element = document.querySelector('[data-qa-img-id=\"' + imgId + '\"]');\n" +
-            "            if (!element && src) {\n" +
-            "                var images = Array.from(document.querySelectorAll('img[src]'));\n" +
-            "                element = images.find(function(img) {\n" +
-            "                    var imgSrc = img.getAttribute('src');\n" +
-            "                    return imgSrc === src || (imgSrc && imgSrc.includes(src));\n" +
-            "                });\n" +
-            "            }\n" +
-            "            if (element) {\n" +
-            "                element.scrollIntoView({ block: 'center', behavior: 'smooth' });\n" +
-            "                setTimeout(function() { showLocateOverlayForElement(element); }, 180);\n" +
-            "            } else {\n" +
-            "                console.warn('[LOCATE] Image not found - ID:', imgId, 'src:', src, 'Total images:', document.querySelectorAll('img[src]').length);\n" +
-            "            }\n" +
-            "        }\n" +
-            "\n" +
-            "        // HIGHLIGHT_FIX (Phase 5)\n" +
-            "        if (event.data.type === 'HIGHLIGHT_FIX') {\n" +
-            "            var fixId = event.data.id;\n" +
-            "            var marker = document.querySelector('[data-qa-fix-id=\"' + fixId + '\"]');\n" +
-            "            if (marker) {\n" +
-            "                document.querySelectorAll('.qa-fix-pin').forEach(function(pin) { pin.remove(); });\n" +
-            "                marker.scrollIntoView({ block: 'center', behavior: 'smooth' });\n" +
-            "                var pin = document.createElement('div');\n" +
-            "                pin.className = 'qa-fix-pin';\n" +
-            "                pin.textContent = fixId;\n" +
-            "                pin.style.cssText = 'position:absolute;left:0;top:0;background:#ff9800;color:white;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);';\n" +
-            "                var rect = marker.getBoundingClientRect();\n" +
-            "                pin.style.left = (rect.left + window.scrollX) + 'px';\n" +
-            "                pin.style.top = (rect.top + window.scrollY - 30) + 'px';\n" +
-            "                document.body.appendChild(pin);\n" +
-            "                setTimeout(function() { pin.remove(); }, 3000);\n" +
-            "            }\n" +
-            "        }\n" +
-            "    } catch(e) {\n" +
-            "        console.error('[PREVIEW SCRIPT ERROR]', e);\n" +
-            "    }\n" +
-            "});\n" +
-            "\n" +
-            "// Click Handler für Element-Auswahl (Phase 6)\n" +
-            "document.addEventListener('click', function(event) {\n" +
-            "    try {\n" +
-            "        var target = event.target;\n" +
-            "        var maxDepth = 5;\n" +
-            "        var depth = 0;\n" +
-            "        while (target && depth \u003c maxDepth) {\n" +
-            "            var qaNodeId = target.getAttribute('data-qa-node-id');\n" +
-            "            if (qaNodeId) {\n" +
-            "                var tagName = target.tagName.toLowerCase();\n" +
-            "                var text = target.textContent ? target.textContent.substring(0, 50) : '';\n" +
-            "                var href = target.getAttribute('href') || '';\n" +
-            "                var src = target.getAttribute('src') || '';\n" +
-            "                document.querySelectorAll('.qa-selected').forEach(function(el) {\n" +
-            "                    el.classList.remove('qa-selected');\n" +
-            "                });\n" +
-            "                target.classList.add('qa-selected');\n" +
-            "                window.parent.postMessage({\n" +
-            "                    type: 'SELECT_ELEMENT',\n" +
-            "                    tagName: tagName,\n" +
-            "                    qaNodeId: qaNodeId,\n" +
-            "                    text: text,\n" +
-            "                    href: href,\n" +
-            "                    src: src\n" +
-            "                }, '*');\n" +
-            "                event.preventDefault();\n" +
-            "                event.stopPropagation();\n" +
-            "                break;\n" +
-            "            }\n" +
-            "            target = target.parentElement;\n" +
-            "            depth++;\n" +
-            "        }\n" +
-            "    } catch(e) {\n" +
-            "        console.error('[PREVIEW CLICK ERROR]', e);\n" +
-            "    }\n" +
-            "});";
+        
+        // Baue Script als Array von Zeilen (verhindert Syntax-Fehler)
+        const scriptLines = [];
+        scriptLines.push('// Highlight-Script für Inspector Preview');
+        scriptLines.push('window.addEventListener("message", function(event) {');
+        scriptLines.push('  try {');
+        scriptLines.push('    // Helper: Zeige Locate-Overlay über Element');
+        scriptLines.push('    function showLocateOverlayForElement(element) {');
+        scriptLines.push('      document.querySelectorAll(".qa-locate-overlay").forEach(function(o) { o.remove(); });');
+        scriptLines.push('      var rect = element.getBoundingClientRect();');
+        scriptLines.push('      var overlay = document.createElement("div");');
+        scriptLines.push('      overlay.className = "qa-locate-overlay";');
+        scriptLines.push('      overlay.style.cssText = "position:absolute;" +');
+        scriptLines.push('        "left:" + (rect.left + window.scrollX) + "px;" +');
+        scriptLines.push('        "top:" + (rect.top + window.scrollY) + "px;" +');
+        scriptLines.push('        "width:" + rect.width + "px;" +');
+        scriptLines.push('        "height:" + rect.height + "px;" +');
+        scriptLines.push('        "border:3px solid #e74c3c;" +');
+        scriptLines.push('        "box-shadow:0 0 0 4px rgba(231,76,60,0.25);" +');
+        scriptLines.push('        "background:rgba(231,76,60,0.06);" +');
+        scriptLines.push('        "border-radius:4px;" +');
+        scriptLines.push('        "z-index:2147483647;" +');
+        scriptLines.push('        "pointer-events:none;";');
+        scriptLines.push('      document.body.appendChild(overlay);');
+        scriptLines.push('      setTimeout(function() { overlay.remove(); }, 2800);');
+        scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // HIGHLIGHT_LINK');
+        scriptLines.push('    if (event.data.type === "HIGHLIGHT_LINK") {');
+        scriptLines.push('      var linkId = event.data.id;');
+        scriptLines.push('      var href = event.data.href;');
+        scriptLines.push('      var element = document.querySelector("[data-qa-link-id=\"" + linkId + "\"]");');
+        scriptLines.push('      if (!element && href) {');
+        scriptLines.push('        var links = Array.from(document.querySelectorAll("a[href]"));');
+        scriptLines.push('        element = links.find(function(a) {');
+        scriptLines.push('          var aHref = a.getAttribute("href");');
+        scriptLines.push('          return aHref === href || (aHref && aHref.includes(href));');
+        scriptLines.push('        });');
+        scriptLines.push('      }');
+        scriptLines.push('      if (element) {');
+        scriptLines.push('        element.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(element); }, 180);');
+        scriptLines.push('      } else {');
+        scriptLines.push('        console.warn("[LOCATE] Link not found - ID:", linkId, "href:", href, "Total links:", document.querySelectorAll("a[href]").length);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // HIGHLIGHT_IMG');
+        scriptLines.push('    if (event.data.type === "HIGHLIGHT_IMG") {');
+        scriptLines.push('      var imgId = event.data.id;');
+        scriptLines.push('      var src = event.data.src;');
+        scriptLines.push('      var element = document.querySelector("[data-qa-img-id=\"" + imgId + "\"]");');
+        scriptLines.push('      if (!element && src) {');
+        scriptLines.push('        var images = Array.from(document.querySelectorAll("img[src]"));');
+        scriptLines.push('        element = images.find(function(img) {');
+        scriptLines.push('          var imgSrc = img.getAttribute("src");');
+        scriptLines.push('          return imgSrc === src || (imgSrc && imgSrc.includes(src));');
+        scriptLines.push('        });');
+        scriptLines.push('      }');
+        scriptLines.push('      if (element) {');
+        scriptLines.push('        element.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(element); }, 180);');
+        scriptLines.push('      } else {');
+        scriptLines.push('        console.warn("[LOCATE] Image not found - ID:", imgId, "src:", src, "Total images:", document.querySelectorAll("img[src]").length);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // HIGHLIGHT_FIX');
+        scriptLines.push('    if (event.data.type === "HIGHLIGHT_FIX") {');
+        scriptLines.push('      var fixId = event.data.id;');
+        scriptLines.push('      var marker = document.querySelector("[data-qa-fix-id=\"" + fixId + "\"]");');
+        scriptLines.push('      if (marker) {');
+        scriptLines.push('        document.querySelectorAll(".qa-fix-pin").forEach(function(pin) { pin.remove(); });');
+        scriptLines.push('        marker.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        var pin = document.createElement("div");');
+        scriptLines.push('        pin.className = "qa-fix-pin";');
+        scriptLines.push('        pin.textContent = fixId;');
+        scriptLines.push('        pin.style.cssText = "position:absolute;left:0;top:0;background:#ff9800;color:white;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);";');
+        scriptLines.push('        var rect = marker.getBoundingClientRect();');
+        scriptLines.push('        pin.style.left = (rect.left + window.scrollX) + "px";');
+        scriptLines.push('        pin.style.top = (rect.top + window.scrollY - 30) + "px";');
+        scriptLines.push('        document.body.appendChild(pin);');
+        scriptLines.push('        setTimeout(function() { pin.remove(); }, 3000);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
+        scriptLines.push('  } catch(e) {');
+        scriptLines.push('    console.error("[PREVIEW SCRIPT ERROR]", e);');
+        scriptLines.push('  }');
+        scriptLines.push('});');
+        scriptLines.push('');
+        scriptLines.push('// Click Handler für Element-Auswahl');
+        scriptLines.push('document.addEventListener("click", function(event) {');
+        scriptLines.push('  try {');
+        scriptLines.push('    var target = event.target;');
+        scriptLines.push('    var maxDepth = 5;');
+        scriptLines.push('    var depth = 0;');
+        scriptLines.push('    while (target && depth < maxDepth) {');
+        scriptLines.push('      var qaNodeId = target.getAttribute("data-qa-node-id");');
+        scriptLines.push('      if (qaNodeId) {');
+        scriptLines.push('        var tagName = target.tagName.toLowerCase();');
+        scriptLines.push('        var text = target.textContent ? target.textContent.substring(0, 50) : "";');
+        scriptLines.push('        var href = target.getAttribute("href") || "";');
+        scriptLines.push('        var src = target.getAttribute("src") || "";');
+        scriptLines.push('        document.querySelectorAll(".qa-selected").forEach(function(el) {');
+        scriptLines.push('          el.classList.remove("qa-selected");');
+        scriptLines.push('        });');
+        scriptLines.push('        target.classList.add("qa-selected");');
+        scriptLines.push('        window.parent.postMessage({');
+        scriptLines.push('          type: "SELECT_ELEMENT",');
+        scriptLines.push('          tagName: tagName,');
+        scriptLines.push('          qaNodeId: qaNodeId,');
+        scriptLines.push('          text: text,');
+        scriptLines.push('          href: href,');
+        scriptLines.push('          src: src');
+        scriptLines.push('        }, "*");');
+        scriptLines.push('        event.preventDefault();');
+        scriptLines.push('        event.stopPropagation();');
+        scriptLines.push('        break;');
+        scriptLines.push('      }');
+        scriptLines.push('      target = target.parentElement;');
+        scriptLines.push('      depth++;');
+        scriptLines.push('    }');
+        scriptLines.push('  } catch(e) {');
+        scriptLines.push('    console.error("[PREVIEW CLICK ERROR]", e);');
+        scriptLines.push('  }');
+        scriptLines.push('});');
+        
+        highlightScript.textContent = scriptLines.join('\n');
+        
+        // Syntax-Test vor dem Einfügen
+        try {
+            new Function(highlightScript.textContent);
+            console.log('[INSPECTOR] Preview script syntax valid');
+        } catch(e) {
+            console.error('[INSPECTOR] PREVIEW SCRIPT SYNTAX INVALID', e);
+            console.error('[INSPECTOR] Script content:', highlightScript.textContent);
+            return null; // Abbruch wenn Syntax kaputt
+        }
         
         // Füge Highlight-Style in <head> ein
         const highlightStyle = doc.createElement('style');
@@ -4184,9 +4212,18 @@ document.addEventListener('DOMContentLoaded', () => {
             head.appendChild(highlightStyle);
         }
         
-        // Serialisiere zurück zu HTML
-        const serializer = new XMLSerializer();
-        const annotatedHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+        // Serialisiere zurück zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
+        const annotatedHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+        
+        // Debug-Guard: Prüfe ob Script escaped wurde
+        if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
+            console.error('[PREVIEW] Script was HTML-escaped! This will cause SyntaxError.');
+            console.error('[PREVIEW] Found entities in srcdoc:', {
+                hasAmpAmp: annotatedHtml.includes('&amp;&amp;'),
+                hasLt: annotatedHtml.includes('&lt;')
+            });
+            // Trotzdem zurückgeben, aber mit Warning
+        }
         
         console.log('[INSPECTOR] Generated annotated preview with ' + anchors.length + ' link annotations and ' + images.length + ' image annotations');
         return annotatedHtml;
