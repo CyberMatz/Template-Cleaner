@@ -4960,10 +4960,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Commit: editorTabHtml → currentWorkingHtml
-        currentWorkingHtml = editorTabHtml;
+        // KERN-BUG FIX: qa-node-ids entfernen bevor ins finale HTML gespeichert wird
+        currentWorkingHtml = stripQaNodeIds(editorTabHtml);
         
-        // Sync: editorTabHtml = currentWorkingHtml
-        editorTabHtml = currentWorkingHtml;
+        // Sync: editorTabHtml neu mit IDs initialisieren (fuer weitere Aenderungen)
+        editorTabHtml = injectQaNodeIds(currentWorkingHtml);
         
         // Reset Editor State
         editorHistory = [];
@@ -5786,14 +5787,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================
     
     // Zeige Editor Tab Content
+    // KERN-BUG FIX: qa-node-ids in Arbeits-HTML einbetten damit alle Handlers Elemente finden koennen
+    function injectQaNodeIds(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const selectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div'];
+        let counter = 0;
+        selectors.forEach(selector => {
+            doc.querySelectorAll(selector).forEach(el => {
+                counter++;
+                el.setAttribute('data-qa-node-id', 'N' + String(counter).padStart(4, '0'));
+            });
+        });
+        return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    }
+
+    // Entferne data-qa-node-id Attribute vor Commit/Download (kommen nicht ins finale HTML)
+    function stripQaNodeIds(html) {
+        return html.replace(/\s*data-qa-node-id="[^"]*"/g, '');
+    }
+
     function showEditorTab(editorContent) {
         if (!editorContent) return;
         
         console.log('[INSPECTOR] Rendering Editor Tab...');
         
-        // Initialisiere editorTabHtml beim ersten Aufruf
+        // KERN-BUG FIX: Beim ersten Aufruf qa-node-ids ins Arbeits-HTML einbetten.
+        // Nur so koennen alle Handlers (Loeschen, Platzhalter, Link etc.) die Elemente finden.
         if (!editorTabHtml) {
-            editorTabHtml = currentWorkingHtml;
+            editorTabHtml = injectQaNodeIds(currentWorkingHtml);
             editorHistory = [];
             editorSelectedElement = null;
             editorPending = false;
@@ -6136,7 +6158,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Phase 10: Check if editor tab has pending changes
     function checkEditorPending() {
-        const isPending = editorTabHtml !== currentWorkingHtml;
+        // KERN-BUG FIX: qa-node-ids beim Vergleich ignorieren,
+        // sonst ist immer "pending" weil editorTabHtml IDs hat und currentWorkingHtml nicht
+        const isPending = stripQaNodeIds(editorTabHtml) !== currentWorkingHtml;
         if (editorPending !== isPending) {
             editorPending = isPending;
             updateGlobalPendingIndicator();
@@ -6150,13 +6174,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const blockSnippet = editorSelectedElement.blockSnippet;
         
-        // Bestätigung mit Vorher/Nachher
-        const confirmed = confirm(
-            'Block löschen?\n\n' +
-            'VORHER:\n' + blockSnippet.substring(0, 200) + '...\n\n' +
-            'NACHHER: (Block wird entfernt)\n\n' +
-            'Bestätigen?'
-        );
+        // Bestätigung (einfach und klar, kein langer Popup-Text)
+        const confirmed = confirm('Block löschen? Diese Aktion kann mit Undo rückgängig gemacht werden.');
         
         if (!confirmed) return;
         
@@ -6221,7 +6240,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement.href = newUrl;
             
             // Re-render
-            showEditorTab(document.getElementById('inspectorContent'));
+            showEditorTab(document.getElementById('editorContent'));
             
             // Selective update: Send message to iframe
             updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
@@ -6256,7 +6275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement.href = '';
             
             // Re-render
-            showEditorTab(document.getElementById('inspectorContent'));
+            showEditorTab(document.getElementById('editorContent'));
             
             // Selective update
             updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
@@ -6293,7 +6312,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement = null;
             
             // Re-render
-            showEditorTab(document.getElementById('inspectorContent'));
+            showEditorTab(document.getElementById('editorContent'));
             
             // Full preview reload (structure changed)
             updateInspectorPreview();
@@ -6339,7 +6358,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement.src = newSrc;
             
             // Re-render
-            showEditorTab(document.getElementById('inspectorContent'));
+            showEditorTab(document.getElementById('editorContent'));
             
             // Selective update
             updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
@@ -6375,7 +6394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement = null;
             
             // Re-render
-            showEditorTab(document.getElementById('inspectorContent'));
+            showEditorTab(document.getElementById('editorContent'));
             
             // Full preview reload (structure changed)
             updateInspectorPreview();
@@ -6421,7 +6440,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkEditorPending();
             
             // Re-render
-            showEditorTab(document.getElementById('inspectorContent'));
+            showEditorTab(document.getElementById('editorContent'));
             
             // Selective update
             updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
