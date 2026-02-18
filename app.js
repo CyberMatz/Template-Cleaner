@@ -3767,6 +3767,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // Gespeicherte Cursor-Position aus dem iframe (für Platzhalter-Einfügung)
+    let savedCursorNodeId = null;
+
     // PostMessage Listener für SELECT_ELEMENT (Phase 6 + Phase 8)
     window.addEventListener('message', function(event) {
         if (event.data.type === 'SELECT_ELEMENT') {
@@ -3783,6 +3786,26 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.data.type === 'EDITOR_UPDATE_TEXT') {
             if (currentInspectorTab === 'editor') {
                 handleEditorTextUpdate(event.data);
+            }
+        }
+        // CURSOR_SAVED: iframe meldet aktuelle Cursor-Position
+        else if (event.data.type === 'CURSOR_SAVED') {
+            savedCursorNodeId = event.data.nodeId;
+        }
+        // PLACEHOLDER_INSERTED: iframe hat Platzhalter eingefügt, HTML synchronisieren
+        else if (event.data.type === 'PLACEHOLDER_INSERTED') {
+            if (currentInspectorTab === 'editor' && editorTabHtml) {
+                // editorTabHtml mit dem neuen Element-HTML synchronisieren
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(editorTabHtml, 'text/html');
+                const el = doc.querySelector('[data-qa-node-id="' + event.data.qaNodeId + '"]');
+                if (el) {
+                    el.outerHTML = event.data.outerHTML;
+                    editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+                }
+                checkEditorPending();
+                showEditorTab(document.getElementById('editorContent'));
+                showInspectorToast('✅ Platzhalter eingefügt: ' + event.data.placeholder);
             }
         }
     });
@@ -4140,6 +4163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Baue Script als Array von Zeilen (verhindert Syntax-Fehler)
         const scriptLines = [];
         scriptLines.push('// Highlight-Script für Inspector Preview');
+        scriptLines.push('var _savedRange = null; var _savedNodeId = null; // Cursor-Tracking');
         scriptLines.push('window.addEventListener("message", function(event) {');
         scriptLines.push('  try {');
         scriptLines.push('    // Helper: Zeige Locate-Overlay über Element');
@@ -4267,6 +4291,79 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('  }');
         scriptLines.push('});');
         scriptLines.push('');
+        // ── Cursor-Tracking: merkt sich wo der Cursor zuletzt war ──────────
+        if (tabName === 'editor') {
+            scriptLines.push('// Cursor-Position speichern wenn User in contenteditable tippt/klickt');
+            // (Variablen bereits global deklariert)
+            scriptLines.push('document.addEventListener("selectionchange", function() {');
+            scriptLines.push('  var sel = window.getSelection();');
+            scriptLines.push('  if (!sel || sel.rangeCount === 0) return;');
+            scriptLines.push('  var range = sel.getRangeAt(0);');
+            scriptLines.push('  var node = range.startContainer;');
+            scriptLines.push('  // Suche das contenteditable parent-Element');
+            scriptLines.push('  while (node && node !== document.body) {');
+            scriptLines.push('    if (node.getAttribute && node.getAttribute("contenteditable") === "true") {');
+            scriptLines.push('      _savedRange = range.cloneRange();');
+            scriptLines.push('      _savedNodeId = node.getAttribute("data-qa-node-id-ref");');
+            scriptLines.push('      // Eltern-Element mitteilen');
+            scriptLines.push('      window.parent.postMessage({ type: "CURSOR_SAVED", nodeId: _savedNodeId }, "*");');
+            scriptLines.push('      return;');
+            scriptLines.push('    }');
+            scriptLines.push('    node = node.parentElement;');
+            scriptLines.push('  }');
+            scriptLines.push('});');
+            scriptLines.push('');
+        }
+
+        // ── INSERT_AT_CURSOR Handler im iframe ───────────────────────────
+        scriptLines.push('// INSERT_AT_CURSOR: Platzhalter an Cursor-Position einfügen');
+        scriptLines.push('if (event.data.type === "INSERT_AT_CURSOR") {');
+        scriptLines.push('  var ph = event.data.placeholder;');
+        scriptLines.push('  var targetId = event.data.targetNodeId;');
+        scriptLines.push('  var inserted = false;');
+        scriptLines.push('  // Versuche an gespeicherter Cursor-Position einzufügen');
+        scriptLines.push('  if (_savedRange && _savedNodeId === targetId) {');
+        scriptLines.push('    try {');
+        scriptLines.push('      var sel2 = window.getSelection();');
+        scriptLines.push('      sel2.removeAllRanges();');
+        scriptLines.push('      sel2.addRange(_savedRange);');
+        scriptLines.push('      var textNode = document.createTextNode(ph);');
+        scriptLines.push('      _savedRange.deleteContents();');
+        scriptLines.push('      _savedRange.insertNode(textNode);');
+        scriptLines.push('      // Cursor hinter den eingefügten Text setzen');
+        scriptLines.push('      var afterRange = document.createRange();');
+        scriptLines.push('      afterRange.setStartAfter(textNode);');
+        scriptLines.push('      afterRange.collapse(true);');
+        scriptLines.push('      sel2.removeAllRanges();');
+        scriptLines.push('      sel2.addRange(afterRange);');
+        scriptLines.push('      _savedRange = afterRange.cloneRange();');
+        scriptLines.push('      inserted = true;');
+        scriptLines.push('    } catch(e) { console.warn("[INSERT_AT_CURSOR] Range insert failed:", e); }');
+        scriptLines.push('  }');
+        scriptLines.push('  // Fallback: ans Ende des Ziel-Elements anfügen');
+        scriptLines.push('  if (!inserted) {');
+        scriptLines.push('    var targetEl = document.querySelector('[data-qa-node-id="' + targetId + '"]')');
+        scriptLines.push('               || document.querySelector('[data-qa-node-id-ref="' + targetId + '"]');');
+        scriptLines.push('    if (targetEl) {');
+        scriptLines.push('      targetEl.appendChild(document.createTextNode(ph));');
+        scriptLines.push('      inserted = true;');
+        scriptLines.push('    }');
+        scriptLines.push('  }');
+        scriptLines.push('  // HTML zurück an Parent melden');
+        scriptLines.push('  if (inserted) {');
+        scriptLines.push('    var outerEl = document.querySelector('[data-qa-node-id="' + targetId + '"]')');
+        scriptLines.push('              || document.querySelector('[data-qa-node-id-ref="' + targetId + '"]');');
+        scriptLines.push('    var parentEl = outerEl ? (outerEl.closest('[data-qa-node-id]') || outerEl) : null;');
+        scriptLines.push('    window.parent.postMessage({');
+        scriptLines.push('      type: "PLACEHOLDER_INSERTED",');
+        scriptLines.push('      placeholder: ph,');
+        scriptLines.push('      qaNodeId: parentEl ? parentEl.getAttribute("data-qa-node-id") : targetId,');
+        scriptLines.push('      outerHTML: parentEl ? parentEl.outerHTML : ""');
+        scriptLines.push('    }, "*");');
+        scriptLines.push('  }');
+        scriptLines.push('}');
+        scriptLines.push('');
+
         scriptLines.push('// Click Handler für Element-Auswahl');
         scriptLines.push('document.addEventListener("click", function(event) {');
         scriptLines.push('  try {');
@@ -6393,35 +6490,25 @@ document.addEventListener('DOMContentLoaded', () => {
             showInspectorToast('⚠️ Bitte einen Platzhalter auswählen.');
             return;
         }
+
+        // Ziel-Node-ID: entweder gespeicherte Cursor-Position oder ausgewähltes Element
+        const targetNodeId = savedCursorNodeId || editorSelectedElement.qaNodeId;
         
-        // Save to history
+        // Save to history (für Undo)
         editorHistory.push(editorTabHtml);
-        
-        // Parse editorTabHtml
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element
-        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        
-        if (element) {
-            // Insert as TextNode (no HTML escaping)
-            const textNode = doc.createTextNode(' ' + placeholder);
-            element.appendChild(textNode);
-            
-            // Serialize
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            
-            // Mark pending
-            checkEditorPending();
-            
-            // Re-render
-            showEditorTab(document.getElementById('editorContent'));
-            
-            // Selective update
-            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
-            
-            console.log('[EDITOR] Platzhalter inserted:', placeholder);
+
+        // Sende INSERT_AT_CURSOR ans iframe – das iframe fügt an der echten Cursor-Position ein
+        // und schickt danach PLACEHOLDER_INSERTED zurück mit dem aktualisierten HTML
+        const iframe = document.getElementById('inspectorPreviewFrame');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'INSERT_AT_CURSOR',
+                placeholder: placeholder,
+                targetNodeId: targetNodeId
+            }, '*');
+        } else {
+            showInspectorToast('❌ Vorschau nicht bereit. Bitte Inspector neu öffnen.');
+            editorHistory.pop(); // Undo history rollback
         }
     }
     
