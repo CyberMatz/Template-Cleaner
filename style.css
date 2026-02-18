@@ -827,3 +827,151 @@ body {
     background: #ccc;
     cursor: not-allowed;
 }
+
+/* ── Neue visuelle Editor-UI (kein Quellcode) ───────────────────── */
+
+.editor-hint-idle {
+    text-align: center;
+    padding: 40px 20px;
+    color: #555;
+}
+
+.editor-selection-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 4px 0;
+}
+
+.editor-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #6c3483;
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    width: fit-content;
+}
+
+.editor-preview-text {
+    background: #f8f9fa;
+    border-left: 3px solid #6c3483;
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    color: #333;
+    word-break: break-word;
+}
+
+.editor-action-group {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.editor-action-group h4 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    color: #333;
+    font-weight: 600;
+}
+
+.editor-action-danger-zone {
+    border-color: #ffcdd2;
+    background: #fff8f8;
+}
+
+.editor-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+    margin-bottom: 4px;
+}
+
+.editor-input:focus {
+    outline: none;
+    border-color: #6c3483;
+    box-shadow: 0 0 0 2px rgba(108,52,131,0.15);
+}
+
+.editor-btn-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.btn-editor-primary {
+    padding: 8px 16px;
+    background: #6c3483;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.btn-editor-primary:hover { background: #512c62; }
+
+.btn-editor-secondary {
+    padding: 8px 14px;
+    background: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+.btn-editor-secondary:hover { background: #e0e0e0; }
+
+.btn-editor-danger {
+    padding: 8px 16px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.btn-editor-danger:hover { background: #c0392b; }
+
+.btn-editor-commit {
+    padding: 10px 20px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    width: 100%;
+    transition: background 0.2s;
+}
+.btn-editor-commit:hover { background: #219a52; }
+
+.editor-footer-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+}
+
+.editor-saved-badge {
+    text-align: center;
+    color: #27ae60;
+    font-size: 13px;
+    padding: 8px;
+}

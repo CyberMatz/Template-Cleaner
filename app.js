@@ -5809,143 +5809,121 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showEditorTab(editorContent) {
         if (!editorContent) return;
-        
+
         console.log('[INSPECTOR] Rendering Editor Tab...');
-        
-        // KERN-BUG FIX: Beim ersten Aufruf qa-node-ids ins Arbeits-HTML einbetten.
-        // Nur so koennen alle Handlers (Loeschen, Platzhalter, Link etc.) die Elemente finden.
+
+        // Initialisiere editorTabHtml beim ersten Aufruf
         if (!editorTabHtml) {
             editorTabHtml = injectQaNodeIds(currentWorkingHtml);
-            editorHistory = [];
+            editorHistory   = [];
             editorSelectedElement = null;
-            editorPending = false;
+            editorPending   = false;
         }
-        
-        // Render Editor Tab
+
         let html = '<div class="editor-tab-content">';
-        
-        // Hinweis
-        html += '<div class="editor-hint">';
-        html += '<p>👆 Klicken Sie auf ein Element in der Preview rechts, um es zu bearbeiten.</p>';
-        html += '</div>';
-        
-        // PHASE 2: Platzhalter-Dropdown (always visible)
-        html += '<div class="editor-placeholder-panel">';
-        html += '<h4>🎯 Platzhalter einfügen</h4>';
-        html += '<p class="editor-placeholder-hint">';
-        if (editorSelectedElement) {
-            html += 'Wählen Sie einen Platzhalter und klicken Sie "Einfügen", um ihn im ausgewählten Element einzufügen.';
-        } else {
-            html += 'Wählen Sie zuerst ein Element in der Preview aus.';
-        }
-        html += '</p>';
-        html += '<select id="editorPlaceholderSelect" class="editor-placeholder-select">';
-        html += '<option value="">-- Platzhalter auswählen --</option>';
-        // Liste der 23 Platzhalter
-        const placeholders = [
-            '%anrede%', '%titel%', '%vorname%', '%nachname%', '%firma%',
-            '%strasse%', '%plz%', '%ort%', '%land%', '%email%',
-            '%telefon%', '%geburtsdatum%', '%kundennummer%', '%vertragsnummer%',
-            '%rechnungsnummer%', '%datum%', '%betrag%', '%waehrung%',
-            '%produkt%', '%menge%', '%lieferdatum%', '%tracking%', '%link%'
-        ];
-        placeholders.forEach(function(ph) {
-            html += '<option value="' + escapeHtml(ph) + '">' + escapeHtml(ph) + '</option>';
-        });
-        html += '</select>';
-        html += '<button id="editorInsertPlaceholder" class="btn-editor-action" ' + (editorSelectedElement ? '' : 'disabled') + '>➕ Einfügen</button>';
-        html += '</div>';
-        
-        // Ausgewähltes Element
-        if (editorSelectedElement) {
-            html += '<div class="editor-selection">';
-            html += '<h3>🎯 Ausgewähltes Element</h3>';
-            html += '<div class="editor-selection-info">';
-            html += '<strong>Typ:</strong> &lt;' + escapeHtml(editorSelectedElement.tagName) + '&gt;<br>';
-            if (editorSelectedElement.text) {
-                html += '<strong>Text:</strong> ' + escapeHtml(editorSelectedElement.text) + '<br>';
-            }
-            if (editorSelectedElement.href) {
-                html += '<strong>href:</strong> ' + escapeHtml(editorSelectedElement.href) + '<br>';
-            }
-            if (editorSelectedElement.src) {
-                html += '<strong>src:</strong> ' + escapeHtml(editorSelectedElement.src) + '<br>';
-            }
-            html += '</div>';
-            
-            // PHASE 2: Link Editor Panel (only for <a> tags)
-            if (editorSelectedElement.tagName === 'a' && editorSelectedElement.href) {
-                html += '<div class="editor-link-panel">';
-                html += '<h4>🔗 Link bearbeiten</h4>';
-                html += '<label>URL:</label>';
-                html += '<input type="text" id="editorLinkUrl" value="' + escapeHtml(editorSelectedElement.href) + '" placeholder="https://example.com" />';
-                html += '<div class="editor-link-actions">';
-                html += '<button id="editorUpdateLink" class="btn-editor-action">✓ URL ändern</button>';
-                html += '<button id="editorClearLink" class="btn-editor-action">∅ href leeren</button>';
-                html += '<button id="editorRemoveLink" class="btn-editor-action">🗑️ Link entfernen (Text behalten)</button>';
-                html += '</div>';
-                html += '</div>';
-            }
-            
-            // PHASE 2: Image Editor Panel (only for <img> tags)
-            if (editorSelectedElement.tagName === 'img' && editorSelectedElement.src) {
-                html += '<div class="editor-image-panel">';
-                html += '<h4>🖼️ Bild bearbeiten</h4>';
-                html += '<label>Bild-URL:</label>';
-                html += '<input type="text" id="editorImageSrc" value="' + escapeHtml(editorSelectedElement.src) + '" placeholder="https://example.com/image.jpg" />';
-                html += '<div class="editor-image-actions">';
-                html += '<button id="editorUpdateImage" class="btn-editor-action">✓ src ändern</button>';
-                html += '<button id="editorRemoveImage" class="btn-editor-action">🗑️ Bild entfernen</button>';
-                html += '</div>';
-                html += '</div>';
-            }
-            
-            // Block Snippet
-            html += '<div class="editor-block-snippet">';
-            html += '<h4>Block-Snippet (±30 Zeilen)</h4>';
-            html += '<pre>' + escapeHtml(editorSelectedElement.blockSnippet) + '</pre>';
-            html += '</div>';
-            
-            // Aktionen
-            html += '<div class="editor-actions">';
-            html += '<button id="editorDeleteBlock" class="btn-editor-delete">🗑️ Block löschen</button>';
-            html += '<button id="editorReplaceBlock" class="btn-editor-replace">✏️ Block ersetzen</button>';
-            html += '</div>';
-            
-            html += '</div>';
-        } else {
-            html += '<div class="editor-no-selection">';
-            html += '<p>ℹ️ Kein Element ausgewählt. Klicken Sie in der Preview auf ein Element.</p>';
+
+        // ── Kopfbereich ───────────────────────────────────────────────
+        if (!editorSelectedElement) {
+            html += '<div class="editor-hint editor-hint-idle">';
+            html += '<span style="font-size:28px">👆</span>';
+            html += '<p><strong>Element anklicken</strong></p>';
+            html += '<p style="color:#888;font-size:13px">Klicke in der Vorschau rechts auf einen Text, ein Bild oder einen Button – dann erscheinen hier die Bearbeitungsoptionen.</p>';
             html += '</div>';
         }
-        
-        // Undo Button
+
+        // ── Ausgewähltes Element ──────────────────────────────────────
+        if (editorSelectedElement) {
+            const tagIcons = { a:'🔗', img:'🖼️', button:'🔘', div:'📦', td:'📋', table:'📊', tr:'↔️' };
+            const icon = tagIcons[editorSelectedElement.tagName] || '🏷️';
+
+            html += '<div class="editor-selection-card">';
+
+            // Typ-Badge
+            html += '<div class="editor-type-badge">' + icon + ' <strong>' + escapeHtml(editorSelectedElement.tagName.toUpperCase()) + '</strong> ausgewählt</div>';
+
+            // Textvorschau (wenn vorhanden)
+            if (editorSelectedElement.text && editorSelectedElement.text.trim()) {
+                const preview = editorSelectedElement.text.substring(0, 80) + (editorSelectedElement.text.length > 80 ? '…' : '');
+                html += '<div class="editor-preview-text">📝 ' + escapeHtml(preview) + '</div>';
+            }
+
+            // ── Link-Editor ──────────────────────────────────────────
+            if (editorSelectedElement.tagName === 'a') {
+                html += '<div class="editor-action-group">';
+                html += '<h4>🔗 Link-URL ändern</h4>';
+                html += '<input type="text" id="editorLinkUrl" class="editor-input" value="' + escapeHtml(editorSelectedElement.href) + '" placeholder="https://example.com" />';
+                html += '<div class="editor-btn-row">';
+                html += '<button id="editorUpdateLink" class="btn-editor-primary">✓ Speichern</button>';
+                html += '<button id="editorClearLink" class="btn-editor-secondary">∅ URL leeren</button>';
+                html += '<button id="editorRemoveLink" class="btn-editor-secondary">Link entfernen</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+
+            // ── Bild-Editor ──────────────────────────────────────────
+            if (editorSelectedElement.tagName === 'img') {
+                html += '<div class="editor-action-group">';
+                html += '<h4>🖼️ Bild-URL ändern</h4>';
+                html += '<input type="text" id="editorImageSrc" class="editor-input" value="' + escapeHtml(editorSelectedElement.src) + '" placeholder="https://example.com/bild.jpg" />';
+                html += '<div class="editor-btn-row">';
+                html += '<button id="editorUpdateImage" class="btn-editor-primary">✓ Speichern</button>';
+                html += '<button id="editorRemoveImage" class="btn-editor-danger">🗑️ Bild löschen</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+
+            // ── Platzhalter einfügen ──────────────────────────────────
+            html += '<div class="editor-action-group">';
+            html += '<h4>🎯 Platzhalter einfügen</h4>';
+            html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Wird an das ausgewählte Element angehängt.</p>';
+            const placeholders = [
+                '%anrede%','%titel%','%vorname%','%nachname%','%firma%',
+                '%strasse%','%plz%','%ort%','%land%','%email%',
+                '%telefon%','%geburtsdatum%','%kundennummer%','%vertragsnummer%',
+                '%rechnungsnummer%','%datum%','%betrag%','%waehrung%',
+                '%produkt%','%menge%','%lieferdatum%','%tracking%','%link%'
+            ];
+            html += '<select id="editorPlaceholderSelect" class="editor-input">';
+            html += '<option value="">-- Platzhalter auswählen --</option>';
+            placeholders.forEach(function(ph) {
+                html += '<option value="' + escapeHtml(ph) + '">' + escapeHtml(ph) + '</option>';
+            });
+            html += '</select>';
+            html += '<button id="editorInsertPlaceholder" class="btn-editor-primary" style="margin-top:8px;width:100%">➕ Einfügen</button>';
+            html += '</div>';
+
+            // ── Block löschen ─────────────────────────────────────────
+            html += '<div class="editor-action-group editor-action-danger-zone">';
+            html += '<h4>⚠️ Element entfernen</h4>';
+            html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Löscht das angeklickte Element komplett aus dem Template. Kann mit Undo rückgängig gemacht werden.</p>';
+            html += '<button id="editorDeleteBlock" class="btn-editor-danger" style="width:100%">🗑️ Element löschen</button>';
+            html += '</div>';
+
+            html += '</div>'; // end editor-selection-card
+        }
+
+        // ── Undo / Commit ─────────────────────────────────────────────
+        html += '<div class="editor-footer-actions">';
         if (editorHistory.length > 0) {
-            html += '<div class="editor-undo-section">';
-            html += '<button id="editorUndo" class="btn-editor-undo">↶ Undo (' + editorHistory.length + ')</button>';
-            html += '</div>';
+            html += '<button id="editorUndo" class="btn-editor-secondary">↶ Rückgängig (' + editorHistory.length + ')</button>';
         }
-        
-        // Commit Button (nur wenn pending)
         if (editorPending) {
-            html += '<div class="editor-commit-section">';
-            html += '<button id="editorCommit" class="btn-editor-commit">✓ Änderungen in diesem Tab übernehmen</button>';
-            html += '<p class="editor-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
-            html += '</div>';
+            html += '<button id="editorCommit" class="btn-editor-commit">✅ Änderungen übernehmen</button>';
+        } else if (editorHistory.length === 0 && !editorSelectedElement) {
+            // nothing
+        } else if (!editorPending) {
+            html += '<div class="editor-saved-badge">✅ Alles gespeichert</div>';
         }
-        
         html += '</div>';
-        
+
+        html += '</div>';
+
         editorContent.innerHTML = html;
-        
-        // Event Listener
         attachEditorActionListeners();
     }
-    
     // Event Listener für Editor Aktionen
     function attachEditorActionListeners() {
         const deleteBtn = document.getElementById('editorDeleteBlock');
-        const replaceBtn = document.getElementById('editorReplaceBlock');
         const undoBtn = document.getElementById('editorUndo');
         const commitBtn = document.getElementById('editorCommit');
         
@@ -5965,9 +5943,7 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteBtn.addEventListener('click', handleEditorDeleteBlock);
         }
         
-        if (replaceBtn) {
-            replaceBtn.addEventListener('click', handleEditorReplaceBlock);
-        }
+        // replaceBtn entfernt - kein Quellcode-Editing mehr fuer den User
         
         if (undoBtn) {
             undoBtn.addEventListener('click', handleEditorUndo);
