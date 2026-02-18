@@ -6139,30 +6139,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Handle Element Selection from Preview
     function handleEditorElementSelection(data) {
         console.log('[INSPECTOR] Element selected:', data);
-        
-        // Finde Element in editorTabHtml via qaNodeId
-        const block = extractBlockFromHtml(editorTabHtml, data.qaNodeId);
-        
-        if (!block) {
-            console.error('[INSPECTOR] Block not found for qaNodeId:', data.qaNodeId);
-            return;
-        }
-        
-        // Speichere Auswahl
+
+        // editorTabHtml hat keine IDs – wir brauchen nur qaNodeId + Metadaten aus der Preview
         editorSelectedElement = {
             tagName: data.tagName,
             text: data.text || '',
             href: data.href || '',
             src: data.src || '',
-            qaNodeId: data.qaNodeId,
-            blockSnippet: block.snippet,
-            blockStart: block.start,
-            blockEnd: block.end
+            qaNodeId: data.qaNodeId
         };
-        
-        // Re-render Editor Tab
-        // editorContent bereits oben deklariert
-        showEditorTab(editorContent);
+
+        // Re-render Editor Tab – zeigt jetzt Aktionsbereich für das gewählte Element
+        const ec = document.getElementById('editorContent');
+        showEditorTab(ec);
     }
     
     // Extrahiere Block (±30 Zeilen) aus HTML
@@ -6241,35 +6230,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleEditorDeleteBlock() {
         if (!editorSelectedElement) return;
         
-        const blockSnippet = editorSelectedElement.blockSnippet;
-        
-        // Bestätigung (einfach und klar, kein langer Popup-Text)
-        const confirmed = confirm('Block löschen? Diese Aktion kann mit Undo rückgängig gemacht werden.');
-        
+        const confirmed = confirm('Element löschen? Kann mit Rückgängig wiederhergestellt werden.');
         if (!confirmed) return;
         
-        // Speichere in History
         editorHistory.push(editorTabHtml);
         
-        // Lösche Block
-        const before = editorTabHtml.substring(0, editorSelectedElement.blockStart);
-        const after = editorTabHtml.substring(editorSelectedElement.blockEnd);
-        editorTabHtml = before + after;
-        
-        // Check Pending (Phase 10)
-        setEditorPending(true);
-        
-        // Auswahl zurücksetzen
-        editorSelectedElement = null;
-        
-        // Update Preview
-        updateInspectorPreview();
-        
-        // Re-render Editor Tab
-        // editorContent bereits oben deklariert
-        showEditorTab(editorContent);
-        
-        console.log('[INSPECTOR] Block deleted');
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r) {
+            r.element.parentNode.removeChild(r.element);
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+            setEditorPending(true);
+            editorSelectedElement = null;
+            updateInspectorPreview();
+            showEditorTab(document.getElementById('editorContent'));
+            showInspectorToast('✅ Element gelöscht');
+            console.log('[INSPECTOR] Block deleted');
+        } else {
+            editorHistory.pop();
+            showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
+        }
     }
     
     // ============================================
