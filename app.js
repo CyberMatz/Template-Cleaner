@@ -3775,7 +3775,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.data.type === 'SELECT_ELEMENT') {
             // Editor Tab: Element-Auswahl für Block-Editing
             if (currentInspectorTab === 'editor') {
-                showInspectorToast('🔵 Klick erkannt: <' + (event.data.tagName||'?') + '> ID=' + (event.data.qaNodeId||'?'));
                 handleEditorElementSelection(event.data);
             }
             // Tracking Tab: Element-Auswahl für Link-Insert (Phase 8B)
@@ -3783,7 +3782,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 handleTrackingElementSelection(event.data);
             }
             else {
-                showInspectorToast('⚠️ Klick ignoriert – Tab ist: ' + currentInspectorTab);
             }
         }
         // EDITOR MODE: Handle text updates from contenteditable elements
@@ -3796,7 +3794,26 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.data.type === 'CURSOR_SAVED') {
             savedCursorNodeId = event.data.nodeId;
         }
-        // PLACEHOLDER_INSERTED: nicht mehr verwendet (Platzhalter wird direkt in editorTabHtml eingefügt)
+        // PLACEHOLDER_DONE: iframe hat Platzhalter an Cursor-Position eingefügt
+        else if (event.data.type === 'PLACEHOLDER_DONE') {
+            if (currentInspectorTab === 'editor' && editorTabHtml) {
+                const r = findElementByQaNodeId(editorTabHtml, event.data.qaNodeId);
+                if (r) {
+                    // Ersetze das Element mit dem aktualisierten HTML aus dem iframe
+                    const tmp = new DOMParser().parseFromString(event.data.outerHTML, 'text/html');
+                    const updatedEl = tmp.body.firstChild;
+                    if (updatedEl) {
+                        // Übertrage den neuen innerHTML (ohne qa-node-id Manipulationen)
+                        r.element.innerHTML = updatedEl.innerHTML;
+                        editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+                    }
+                }
+                setEditorPending(true);
+                // NUR linke Seite neu rendern, NICHT die Vorschau!
+                showEditorTab(document.getElementById('editorContent'));
+                showInspectorToast('✅ Platzhalter eingefügt: ' + event.data.placeholder);
+            }
+        }
     });
     
     // Tab Switching
@@ -4274,6 +4291,40 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('        console.warn("[PREVIEW] UPDATE_ELEMENT failed - element not found:", qaNodeId);');
         scriptLines.push('      }');
         scriptLines.push('    }');
+        scriptLines.push('    // INSERT_AT_CURSOR: Platzhalter an Cursor-Position einfügen');
+        scriptLines.push('    if (event.data.type === "INSERT_AT_CURSOR") {');
+        scriptLines.push('      var ph = event.data.placeholder;');
+        scriptLines.push('      var targetId = event.data.targetNodeId;');
+        scriptLines.push('      var sel = window.getSelection();');
+        scriptLines.push('      var inserted = false;');
+        scriptLines.push('      // An gespeicherter Cursor-Position einfügen wenn möglich');
+        scriptLines.push('      if (_cursorRange && _cursorNodeId === targetId && sel) {');
+        scriptLines.push('        try {');
+        scriptLines.push('          sel.removeAllRanges();');
+        scriptLines.push('          sel.addRange(_cursorRange);');
+        scriptLines.push('          var tn = document.createTextNode(ph);');
+        scriptLines.push('          _cursorRange.deleteContents();');
+        scriptLines.push('          _cursorRange.insertNode(tn);');
+        scriptLines.push('          var r2 = document.createRange();');
+        scriptLines.push('          r2.setStartAfter(tn); r2.collapse(true);');
+        scriptLines.push('          sel.removeAllRanges(); sel.addRange(r2);');
+        scriptLines.push('          _cursorRange = r2.cloneRange();');
+        scriptLines.push('          inserted = true;');
+        scriptLines.push('        } catch(ex) {}');
+        scriptLines.push('      }');
+        scriptLines.push('      // Fallback: ans Ende des Elements');
+        scriptLines.push('      if (!inserted) {');
+        scriptLines.push('        var fallbackEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']");');
+        scriptLines.push('        if (fallbackEl) { fallbackEl.appendChild(document.createTextNode(" " + ph)); inserted = true; }');
+        scriptLines.push('      }');
+        scriptLines.push('      // Aktualisiertes HTML zurückmelden');
+        scriptLines.push('      if (inserted) {');
+        scriptLines.push('        var updEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']");');
+        scriptLines.push('        if (updEl) {');
+        scriptLines.push('          window.parent.postMessage({ type: "PLACEHOLDER_DONE", qaNodeId: targetId, outerHTML: updEl.outerHTML, placeholder: ph }, "*");');
+        scriptLines.push('        }');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
         scriptLines.push('  } catch(e) {');
         scriptLines.push('    console.error("[PREVIEW SCRIPT ERROR]", e);');
         scriptLines.push('  }');
@@ -4316,7 +4367,27 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('    console.error("[PREVIEW CLICK ERROR]", e);');
         scriptLines.push('  }');
         scriptLines.push('});');
-        
+
+        // Cursor-Tracking: Position merken wenn in contenteditable geklickt/getippt
+        if (tabName === 'editor') {
+            scriptLines.push('var _cursorRange = null; var _cursorNodeId = null;');
+            scriptLines.push('document.addEventListener("selectionchange", function() {');
+            scriptLines.push('  var s = window.getSelection();');
+            scriptLines.push('  if (!s || s.rangeCount === 0) return;');
+            scriptLines.push('  var rng = s.getRangeAt(0);');
+            scriptLines.push('  var node = rng.startContainer;');
+            scriptLines.push('  while (node && node !== document.body) {');
+            scriptLines.push('    if (node.getAttribute && node.getAttribute("contenteditable") === "true") {');
+            scriptLines.push('      _cursorRange = rng.cloneRange();');
+            scriptLines.push('      _cursorNodeId = node.getAttribute("data-qa-node-id-ref") || node.getAttribute("data-qa-node-id");');
+            scriptLines.push('      window.parent.postMessage({ type: "CURSOR_SAVED", nodeId: _cursorNodeId }, "*");');
+            scriptLines.push('      return;');
+            scriptLines.push('    }');
+            scriptLines.push('    node = node.parentElement;');
+            scriptLines.push('  }');
+            scriptLines.push('});');
+        }
+
         // EDITOR MODE: Add blur handler for contenteditable elements
         if (tabName === 'editor') {
             scriptLines.push('');
@@ -6090,7 +6161,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showInspectorToast('❌ DEBUG: editorContent nicht gefunden!');
             return;
         }
-        showInspectorToast('✅ Element gespeichert: <' + data.tagName + '> – Panel wird gezeigt');
         showEditorTab(ec);
     }
     
@@ -6163,7 +6233,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateGlobalFinalizeButton();
             updateDownloadManualOptimizedButton();
             console.log('[INSPECTOR] Editor pending status:', isPending);
-            showInspectorToast('🔵 DEBUG editorPending = ' + isPending);
         }
     }
     
@@ -6309,20 +6378,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Speichere in History (für Undo)
         editorHistory.push(editorTabHtml);
 
-        const _doc6 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
-        const _el6 = _doc6.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        if (_el6) {
-            _el6.appendChild(_doc6.createTextNode(' ' + placeholder));
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc6.documentElement.outerHTML;
-            setEditorPending(true);
-            updateElementInPreview(editorSelectedElement.qaNodeId, _el6.outerHTML);
-            showEditorTab(document.getElementById('editorContent'));
-            showInspectorToast('✅ Platzhalter eingefügt: ' + placeholder);
+        // Sende an iframe – der fügt an der echten Cursor-Position ein
+        // und meldet per PLACEHOLDER_DONE das aktualisierte HTML zurück
+        const iframe = document.getElementById('inspectorPreviewFrame');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'INSERT_AT_CURSOR',
+                placeholder: placeholder,
+                targetNodeId: editorSelectedElement.qaNodeId
+            }, '*');
         } else {
             editorHistory.pop();
-            showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
+            showInspectorToast('❌ Vorschau nicht bereit.');
         }
     }
     
