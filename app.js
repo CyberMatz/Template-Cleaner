@@ -4342,8 +4342,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('  }');
         scriptLines.push('  // Fallback: ans Ende des Ziel-Elements anfügen');
         scriptLines.push('  if (!inserted) {');
-        scriptLines.push('    var targetEl = document.querySelector('[data-qa-node-id="' + targetId + '"]')');
-        scriptLines.push('               || document.querySelector('[data-qa-node-id-ref="' + targetId + '"]');');
+        scriptLines.push('    var targetEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']") || document.querySelector("[data-qa-node-id-ref=\'" + targetId + "\']");');
         scriptLines.push('    if (targetEl) {');
         scriptLines.push('      targetEl.appendChild(document.createTextNode(ph));');
         scriptLines.push('      inserted = true;');
@@ -4351,9 +4350,8 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('  }');
         scriptLines.push('  // HTML zurück an Parent melden');
         scriptLines.push('  if (inserted) {');
-        scriptLines.push('    var outerEl = document.querySelector('[data-qa-node-id="' + targetId + '"]')');
-        scriptLines.push('              || document.querySelector('[data-qa-node-id-ref="' + targetId + '"]');');
-        scriptLines.push('    var parentEl = outerEl ? (outerEl.closest('[data-qa-node-id]') || outerEl) : null;');
+        scriptLines.push('    var outerEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']") || document.querySelector("[data-qa-node-id-ref=\'" + targetId + "\']");');
+        scriptLines.push('    var parentEl = outerEl ? (outerEl.closest("[data-qa-node-id]") || outerEl) : null;');
         scriptLines.push('    window.parent.postMessage({');
         scriptLines.push('      type: "PLACEHOLDER_INSERTED",');
         scriptLines.push('      placeholder: ph,');
