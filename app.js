@@ -3761,6 +3761,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 handleTrackingElementSelection(event.data);
             }
         }
+        // EDITOR MODE: Handle text updates from contenteditable elements
+        else if (event.data.type === 'EDITOR_UPDATE_TEXT') {
+            if (currentInspectorTab === 'editor') {
+                handleEditorTextUpdate(event.data);
+            }
+        }
     });
     
     // Tab Switching
@@ -3927,7 +3933,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             // Erzeuge annotierte Preview-Version (nur für iframe, nicht für Downloads)
-            const annotatedHtml = generateAnnotatedPreview(sourceHtml);
+            const annotatedHtml = generateAnnotatedPreview(sourceHtml, currentInspectorTab);
             
             // Null-Check: Falls Script-Syntax kaputt ist, gibt generateAnnotatedPreview null zurück
             if (!annotatedHtml) {
@@ -3981,7 +3987,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Erzeuge annotierte Preview-Version mit data-qa-link-id und data-qa-img-id
-    function generateAnnotatedPreview(html) {
+    function generateAnnotatedPreview(html, tabName) {
         const parser = new DOMParser();
         let doc = parser.parseFromString(html, 'text/html');  // FIX: let statt const (wird später neu zugewiesen)
         
@@ -4048,6 +4054,51 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
+        
+        // EDITOR MODE: Inject editable wrappers (Phase 1)
+        if (tabName === 'editor') {
+            const textSelectors = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'];
+            textSelectors.forEach(selector => {
+                const elements = doc.querySelectorAll(selector + '[data-qa-node-id]');
+                elements.forEach(el => {
+                    const tagName = el.tagName.toLowerCase();
+                    // Skip links and images
+                    if (tagName === 'a' || el.querySelector('img')) return;
+                    
+                    // Skip if already wrapped
+                    if (el.querySelector('.qa-editable')) return;
+                    
+                    // Wrap innerHTML in editable span
+                    const wrapper = doc.createElement('span');
+                    wrapper.className = 'qa-editable';
+                    wrapper.setAttribute('contenteditable', 'true');
+                    wrapper.setAttribute('data-qa-node-id-ref', el.getAttribute('data-qa-node-id'));
+                    wrapper.innerHTML = el.innerHTML;
+                    el.innerHTML = '';
+                    el.appendChild(wrapper);
+                });
+            });
+            
+            // Special handling for <td> elements
+            const tdElements = doc.querySelectorAll('td[data-qa-node-id]');
+            tdElements.forEach(td => {
+                // Skip if already wrapped
+                if (td.querySelector('.qa-editable')) return;
+                
+                // Only wrap if td contains text (not nested tables)
+                if (td.querySelector('table')) return;
+                
+                const wrapper = doc.createElement('span');
+                wrapper.className = 'qa-editable';
+                wrapper.setAttribute('contenteditable', 'true');
+                wrapper.setAttribute('data-qa-node-id-ref', td.getAttribute('data-qa-node-id'));
+                wrapper.innerHTML = td.innerHTML;
+                td.innerHTML = '';
+                td.appendChild(wrapper);
+            });
+            
+            console.log('[EDITOR] Injected editable wrappers');
+        }
         
         // Füge Highlight-Script in <head> ein
         const highlightScript = doc.createElement('script');
@@ -4178,6 +4229,27 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('  }');
         scriptLines.push('});');
         
+        // EDITOR MODE: Add blur handler for contenteditable elements
+        if (tabName === 'editor') {
+            scriptLines.push('');
+            scriptLines.push('// Editor Mode: Blur handler for text updates');
+            scriptLines.push('document.addEventListener("DOMContentLoaded", function() {');
+            scriptLines.push('  var editableElements = document.querySelectorAll(".qa-editable[contenteditable]");');
+            scriptLines.push('  editableElements.forEach(function(el) {');
+            scriptLines.push('    el.addEventListener("blur", function() {');
+            scriptLines.push('      var qaNodeIdRef = el.getAttribute("data-qa-node-id-ref");');
+            scriptLines.push('      if (qaNodeIdRef) {');
+            scriptLines.push('        window.parent.postMessage({');
+            scriptLines.push('          type: "EDITOR_UPDATE_TEXT",');
+            scriptLines.push('          qaNodeId: qaNodeIdRef,');
+            scriptLines.push('          html: el.innerHTML');
+            scriptLines.push('        }, "*");');
+            scriptLines.push('      }');
+            scriptLines.push('    });');
+            scriptLines.push('  });');
+            scriptLines.push('});');
+        }
+        
         highlightScript.textContent = scriptLines.join('\n');
         
         // Syntax-Test vor dem Einfügen
@@ -4210,6 +4282,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 outline-offset: 2px !important;
                 background: rgba(156, 39, 176, 0.1) !important;
                 transition: all 0.3s ease !important;
+            }
+            .qa-editable {
+                outline: 1px dashed rgba(255, 152, 0, 0.4) !important;
+                outline-offset: 1px !important;
+                cursor: text !important;
+                min-height: 1em !important;
+                display: inline-block !important;
+            }
+            .qa-editable:focus {
+                outline: 2px solid rgba(255, 152, 0, 0.8) !important;
+                background: rgba(255, 152, 0, 0.05) !important;
             }
         `;
         
@@ -5730,6 +5813,51 @@ document.addEventListener('DOMContentLoaded', () => {
         if (commitBtn) {
             commitBtn.addEventListener('click', handleEditorCommit);
         }
+    }
+    
+    // Handle Text Update from contenteditable elements (Phase 1)
+    function handleEditorTextUpdate(data) {
+        console.log('[EDITOR] Text updated:', data.qaNodeId);
+        
+        if (!editorTabHtml || !data.qaNodeId || typeof data.html === 'undefined') {
+            console.warn('[EDITOR] Invalid text update data');
+            return;
+        }
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element by data-qa-node-id
+        const element = doc.querySelector('[data-qa-node-id="' + data.qaNodeId + '"]');
+        
+        if (element) {
+            // Find wrapper inside element
+            const wrapper = element.querySelector('.qa-editable');
+            
+            if (wrapper) {
+                // Update wrapper innerHTML (this is what user edited)
+                wrapper.innerHTML = data.html;
+            } else {
+                // Fallback: update element innerHTML directly
+                element.innerHTML = data.html;
+            }
+            
+            // Serialize back to HTML
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark as pending
+            checkEditorPending();
+            
+            console.log('[EDITOR] Text updated successfully');
+        } else {
+            console.warn('[EDITOR] Element not found:', data.qaNodeId);
+        }
+        
+        // NO PREVIEW RELOAD - user sees changes live in iframe
     }
     
     // Handle Element Selection from Preview
