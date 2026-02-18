@@ -3775,11 +3775,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.data.type === 'SELECT_ELEMENT') {
             // Editor Tab: Element-Auswahl für Block-Editing
             if (currentInspectorTab === 'editor') {
+                showInspectorToast('🔵 Klick erkannt: <' + (event.data.tagName||'?') + '> ID=' + (event.data.qaNodeId||'?'));
                 handleEditorElementSelection(event.data);
             }
             // Tracking Tab: Element-Auswahl für Link-Insert (Phase 8B)
             else if (currentInspectorTab === 'tracking' && trackingInsertMode) {
                 handleTrackingElementSelection(event.data);
+            }
+            else {
+                showInspectorToast('⚠️ Klick ignoriert – Tab ist: ' + currentInspectorTab);
             }
         }
         // EDITOR MODE: Handle text updates from contenteditable elements
@@ -4148,7 +4152,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Baue Script als Array von Zeilen (verhindert Syntax-Fehler)
         const scriptLines = [];
         scriptLines.push('// Highlight-Script für Inspector Preview');
-        scriptLines.push('var _savedRange = null; var _savedNodeId = null; // Cursor-Tracking');
         scriptLines.push('window.addEventListener("message", function(event) {');
         scriptLines.push('  try {');
         scriptLines.push('    // Helper: Zeige Locate-Overlay über Element');
@@ -4275,76 +4278,6 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('    console.error("[PREVIEW SCRIPT ERROR]", e);');
         scriptLines.push('  }');
         scriptLines.push('});');
-        scriptLines.push('');
-        // ── Cursor-Tracking: merkt sich wo der Cursor zuletzt war ──────────
-        if (tabName === 'editor') {
-            scriptLines.push('// Cursor-Position speichern wenn User in contenteditable tippt/klickt');
-            // (Variablen bereits global deklariert)
-            scriptLines.push('document.addEventListener("selectionchange", function() {');
-            scriptLines.push('  var sel = window.getSelection();');
-            scriptLines.push('  if (!sel || sel.rangeCount === 0) return;');
-            scriptLines.push('  var range = sel.getRangeAt(0);');
-            scriptLines.push('  var node = range.startContainer;');
-            scriptLines.push('  // Suche das contenteditable parent-Element');
-            scriptLines.push('  while (node && node !== document.body) {');
-            scriptLines.push('    if (node.getAttribute && node.getAttribute("contenteditable") === "true") {');
-            scriptLines.push('      _savedRange = range.cloneRange();');
-            scriptLines.push('      _savedNodeId = node.getAttribute("data-qa-node-id-ref");');
-            scriptLines.push('      // Eltern-Element mitteilen');
-            scriptLines.push('      window.parent.postMessage({ type: "CURSOR_SAVED", nodeId: _savedNodeId }, "*");');
-            scriptLines.push('      return;');
-            scriptLines.push('    }');
-            scriptLines.push('    node = node.parentElement;');
-            scriptLines.push('  }');
-            scriptLines.push('});');
-            scriptLines.push('');
-        }
-
-        // ── INSERT_AT_CURSOR Handler im iframe ───────────────────────────
-        scriptLines.push('// INSERT_AT_CURSOR: Platzhalter an Cursor-Position einfügen');
-        scriptLines.push('if (event.data.type === "INSERT_AT_CURSOR") {');
-        scriptLines.push('  var ph = event.data.placeholder;');
-        scriptLines.push('  var targetId = event.data.targetNodeId;');
-        scriptLines.push('  var inserted = false;');
-        scriptLines.push('  // Versuche an gespeicherter Cursor-Position einzufügen');
-        scriptLines.push('  if (_savedRange && _savedNodeId === targetId) {');
-        scriptLines.push('    try {');
-        scriptLines.push('      var sel2 = window.getSelection();');
-        scriptLines.push('      sel2.removeAllRanges();');
-        scriptLines.push('      sel2.addRange(_savedRange);');
-        scriptLines.push('      var textNode = document.createTextNode(ph);');
-        scriptLines.push('      _savedRange.deleteContents();');
-        scriptLines.push('      _savedRange.insertNode(textNode);');
-        scriptLines.push('      // Cursor hinter den eingefügten Text setzen');
-        scriptLines.push('      var afterRange = document.createRange();');
-        scriptLines.push('      afterRange.setStartAfter(textNode);');
-        scriptLines.push('      afterRange.collapse(true);');
-        scriptLines.push('      sel2.removeAllRanges();');
-        scriptLines.push('      sel2.addRange(afterRange);');
-        scriptLines.push('      _savedRange = afterRange.cloneRange();');
-        scriptLines.push('      inserted = true;');
-        scriptLines.push('    } catch(e) { console.warn("[INSERT_AT_CURSOR] Range insert failed:", e); }');
-        scriptLines.push('  }');
-        scriptLines.push('  // Fallback: ans Ende des Ziel-Elements anfügen');
-        scriptLines.push('  if (!inserted) {');
-        scriptLines.push('    var targetEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']") || document.querySelector("[data-qa-node-id-ref=\'" + targetId + "\']");');
-        scriptLines.push('    if (targetEl) {');
-        scriptLines.push('      targetEl.appendChild(document.createTextNode(ph));');
-        scriptLines.push('      inserted = true;');
-        scriptLines.push('    }');
-        scriptLines.push('  }');
-        scriptLines.push('  // HTML zurück an Parent melden');
-        scriptLines.push('  if (inserted) {');
-        scriptLines.push('    var outerEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']") || document.querySelector("[data-qa-node-id-ref=\'" + targetId + "\']");');
-        scriptLines.push('    var parentEl = outerEl ? (outerEl.closest("[data-qa-node-id]") || outerEl) : null;');
-        scriptLines.push('    window.parent.postMessage({');
-        scriptLines.push('      type: "PLACEHOLDER_INSERTED",');
-        scriptLines.push('      placeholder: ph,');
-        scriptLines.push('      qaNodeId: parentEl ? parentEl.getAttribute("data-qa-node-id") : targetId,');
-        scriptLines.push('      outerHTML: parentEl ? parentEl.outerHTML : ""');
-        scriptLines.push('    }, "*");');
-        scriptLines.push('  }');
-        scriptLines.push('}');
         scriptLines.push('');
 
         scriptLines.push('// Click Handler für Element-Auswahl');
@@ -5868,28 +5801,32 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Zeige Editor Tab Content
     // KERN-BUG FIX: qa-node-ids in Arbeits-HTML einbetten damit alle Handlers Elemente finden koennen
-    // IDs werden NUR von generateAnnotatedPreview in der Preview vergeben.
-    // editorTabHtml bleibt sauber – kein injectQaNodeIds mehr nötig.
-    function injectQaNodeIds(html) { return html; } // no-op, nur für Kompatibilität
-    function stripQaNodeIds(html)  { return html; } // no-op, editorTabHtml hat keine IDs
-
-    // Hilfsfunktion: Finde Element in HTML per qaNodeId (gleiche Zähl-Logik wie generateAnnotatedPreview)
-    function findElementByQaNodeId(html, qaNodeId) {
+    // Inject data-qa-node-id in editorTabHtml (gleiche Reihenfolge wie generateAnnotatedPreview)
+    function injectQaNodeIds(html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const selectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div'];
         let counter = 0;
-        let found = null;
-        for (const selector of selectors) {
-            const elements = doc.querySelectorAll(selector);
-            for (const el of elements) {
+        selectors.forEach(sel => {
+            doc.querySelectorAll(sel).forEach(el => {
                 counter++;
-                const id = 'N' + String(counter).padStart(4, '0');
-                if (id === qaNodeId) { found = el; break; }
-            }
-            if (found) break;
-        }
-        return found ? { doc, element: found } : null;
+                el.setAttribute('data-qa-node-id', 'N' + String(counter).padStart(4, '0'));
+            });
+        });
+        return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    }
+
+    // Entferne data-qa-node-id vor Commit (kommen nicht ins finale HTML)
+    function stripQaNodeIds(html) {
+        return html.replace(/\s*data-qa-node-id="[^"]*"/g, '');
+    }
+
+    // Finde Element in editorTabHtml per qaNodeId (editorTabHtml hat bereits IDs durch injectQaNodeIds)
+    function findElementByQaNodeId(html, qaNodeId) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const element = doc.querySelector('[data-qa-node-id="' + qaNodeId + '"]');
+        return element ? { doc, element } : null;
     }
 
     function showEditorTab(editorContent) {
@@ -6075,14 +6012,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save to history
         editorHistory.push(editorTabHtml);
         
-        // Finde Element per Position (gleiche Zähl-Logik wie generateAnnotatedPreview)
-        const result = findElementByQaNodeId(editorTabHtml, data.qaNodeId);
-        if (!result) {
-            console.warn('[EDITOR] Element nicht gefunden für:', data.qaNodeId);
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        const element = doc.querySelector('[data-qa-node-id="' + data.qaNodeId + '"]');
+        if (!element) {
+            console.warn('[EDITOR] Element nicht gefunden:', data.qaNodeId);
             editorHistory.pop();
             return;
         }
-        const { doc, element } = result;
         
         if (element) {
             const tagName = element.tagName.toLowerCase();
@@ -6140,7 +6077,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleEditorElementSelection(data) {
         console.log('[INSPECTOR] Element selected:', data);
 
-        // editorTabHtml hat keine IDs – wir brauchen nur qaNodeId + Metadaten aus der Preview
         editorSelectedElement = {
             tagName: data.tagName,
             text: data.text || '',
@@ -6149,8 +6085,12 @@ document.addEventListener('DOMContentLoaded', () => {
             qaNodeId: data.qaNodeId
         };
 
-        // Re-render Editor Tab – zeigt jetzt Aktionsbereich für das gewählte Element
         const ec = document.getElementById('editorContent');
+        if (!ec) {
+            showInspectorToast('❌ DEBUG: editorContent nicht gefunden!');
+            return;
+        }
+        showInspectorToast('✅ Element gespeichert: <' + data.tagName + '> – Panel wird gezeigt');
         showEditorTab(ec);
     }
     
@@ -6223,6 +6163,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateGlobalFinalizeButton();
             updateDownloadManualOptimizedButton();
             console.log('[INSPECTOR] Editor pending status:', isPending);
+            showInspectorToast('🔵 DEBUG editorPending = ' + isPending);
         }
     }
     
@@ -6235,16 +6176,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         editorHistory.push(editorTabHtml);
         
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r) {
-            r.element.parentNode.removeChild(r.element);
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc7 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el7 = _doc7.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el7) {
+            _el7.parentNode.removeChild(_el7);
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc7.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement = null;
             updateInspectorPreview();
             showEditorTab(document.getElementById('editorContent'));
             showInspectorToast('✅ Element gelöscht');
-            console.log('[INSPECTOR] Block deleted');
         } else {
             editorHistory.pop();
             showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
@@ -6267,51 +6208,46 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Save to history
         editorHistory.push(editorTabHtml);
-        
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r && r.element.tagName.toLowerCase() === 'a') {
-            r.element.setAttribute('href', newUrl);
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc1 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el1 = _doc1.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el1 && _el1.tagName.toLowerCase() === 'a') {
+            _el1.setAttribute('href', newUrl);
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc1.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement.href = newUrl;
             showEditorTab(document.getElementById('editorContent'));
-            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
-            console.log('[EDITOR] Link URL updated');
-        } else {
-            editorHistory.pop();
-            showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
-        }
+            updateElementInPreview(editorSelectedElement.qaNodeId, _el1.outerHTML);
+        } else { editorHistory.pop(); showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.'); }
     }
     
     function handleEditorClearLink() {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
         
         editorHistory.push(editorTabHtml);
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r && r.element.tagName.toLowerCase() === 'a') {
-            r.element.setAttribute('href', '');
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc2 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el2 = _doc2.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el2 && _el2.tagName.toLowerCase() === 'a') {
+            _el2.setAttribute('href', '');
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc2.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement.href = '';
             showEditorTab(document.getElementById('editorContent'));
-            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
-            console.log('[EDITOR] Link href cleared');
+            updateElementInPreview(editorSelectedElement.qaNodeId, _el2.outerHTML);
         } else { editorHistory.pop(); }
     }
     
     function handleEditorRemoveLink() {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
         editorHistory.push(editorTabHtml);
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r && r.element.tagName.toLowerCase() === 'a') {
-            const textNode = r.doc.createTextNode(r.element.textContent);
-            r.element.parentNode.replaceChild(textNode, r.element);
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc3 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el3 = _doc3.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el3 && _el3.tagName.toLowerCase() === 'a') {
+            _el3.parentNode.replaceChild(_doc3.createTextNode(_el3.textContent), _el3);
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc3.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement = null;
             showEditorTab(document.getElementById('editorContent'));
             updateInspectorPreview();
-            console.log('[EDITOR] Link removed, text kept');
         } else { editorHistory.pop(); }
     }
     
@@ -6330,15 +6266,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         editorHistory.push(editorTabHtml);
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r && r.element.tagName.toLowerCase() === 'img') {
-            r.element.setAttribute('src', newSrc);
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc4 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el4 = _doc4.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el4 && _el4.tagName.toLowerCase() === 'img') {
+            _el4.setAttribute('src', newSrc);
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc4.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement.src = newSrc;
             showEditorTab(document.getElementById('editorContent'));
-            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
-            console.log('[EDITOR] Image src updated');
+            updateElementInPreview(editorSelectedElement.qaNodeId, _el4.outerHTML);
         } else { editorHistory.pop(); }
     }
     
@@ -6346,15 +6282,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'img') return;
         
         editorHistory.push(editorTabHtml);
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r && r.element.tagName.toLowerCase() === 'img') {
-            r.element.parentNode.removeChild(r.element);
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc5 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el5 = _doc5.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el5 && _el5.tagName.toLowerCase() === 'img') {
+            _el5.parentNode.removeChild(_el5);
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc5.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement = null;
             showEditorTab(document.getElementById('editorContent'));
             updateInspectorPreview();
-            console.log('[EDITOR] Image removed');
         } else { editorHistory.pop(); }
     }
     
@@ -6375,18 +6311,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         editorHistory.push(editorTabHtml);
 
-        // Direkt ins editorTabHtml einfügen (kein iframe nötig)
-        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
-        if (r) {
-            // Platzhalter ans Ende des Elements anfügen
-            r.element.appendChild(r.doc.createTextNode(' ' + placeholder));
-            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+        const _doc6 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _el6 = _doc6.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        if (_el6) {
+            _el6.appendChild(_doc6.createTextNode(' ' + placeholder));
+            editorTabHtml = '<!DOCTYPE html>\n' + _doc6.documentElement.outerHTML;
             setEditorPending(true);
-            // Vorschau aktualisieren
-            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
+            updateElementInPreview(editorSelectedElement.qaNodeId, _el6.outerHTML);
             showEditorTab(document.getElementById('editorContent'));
             showInspectorToast('✅ Platzhalter eingefügt: ' + placeholder);
-            console.log('[EDITOR] Platzhalter inserted:', placeholder);
         } else {
             editorHistory.pop();
             showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
@@ -6409,8 +6342,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Handle Replace Block
+    // Handle Replace Block (deaktiviert - Button wurde aus UI entfernt)
     function handleEditorReplaceBlock() {
+        showInspectorToast('ℹ️ Funktion nicht verfügbar.');
+        return;
+        // eslint-disable-next-line no-unreachable
+        
         if (!editorSelectedElement) return;
         
         const blockSnippet = editorSelectedElement.blockSnippet;
