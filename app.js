@@ -3792,22 +3792,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.data.type === 'CURSOR_SAVED') {
             savedCursorNodeId = event.data.nodeId;
         }
-        // PLACEHOLDER_INSERTED: iframe hat Platzhalter eingefügt, HTML synchronisieren
-        else if (event.data.type === 'PLACEHOLDER_INSERTED') {
-            if (currentInspectorTab === 'editor' && editorTabHtml) {
-                // editorTabHtml mit dem neuen Element-HTML synchronisieren
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(editorTabHtml, 'text/html');
-                const el = doc.querySelector('[data-qa-node-id="' + event.data.qaNodeId + '"]');
-                if (el) {
-                    el.outerHTML = event.data.outerHTML;
-                    editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-                }
-                setEditorPending(true);
-                showEditorTab(document.getElementById('editorContent'));
-                showInspectorToast('✅ Platzhalter eingefügt: ' + event.data.placeholder);
-            }
-        }
+        // PLACEHOLDER_INSERTED: nicht mehr verwendet (Platzhalter wird direkt in editorTabHtml eingefügt)
     });
     
     // Tab Switching
@@ -5883,23 +5868,28 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Zeige Editor Tab Content
     // KERN-BUG FIX: qa-node-ids in Arbeits-HTML einbetten damit alle Handlers Elemente finden koennen
-    function injectQaNodeIds(html) {
+    // IDs werden NUR von generateAnnotatedPreview in der Preview vergeben.
+    // editorTabHtml bleibt sauber – kein injectQaNodeIds mehr nötig.
+    function injectQaNodeIds(html) { return html; } // no-op, nur für Kompatibilität
+    function stripQaNodeIds(html)  { return html; } // no-op, editorTabHtml hat keine IDs
+
+    // Hilfsfunktion: Finde Element in HTML per qaNodeId (gleiche Zähl-Logik wie generateAnnotatedPreview)
+    function findElementByQaNodeId(html, qaNodeId) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const selectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div'];
         let counter = 0;
-        selectors.forEach(selector => {
-            doc.querySelectorAll(selector).forEach(el => {
+        let found = null;
+        for (const selector of selectors) {
+            const elements = doc.querySelectorAll(selector);
+            for (const el of elements) {
                 counter++;
-                el.setAttribute('data-qa-node-id', 'N' + String(counter).padStart(4, '0'));
-            });
-        });
-        return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-    }
-
-    // Entferne data-qa-node-id Attribute vor Commit/Download (kommen nicht ins finale HTML)
-    function stripQaNodeIds(html) {
-        return html.replace(/\s*data-qa-node-id="[^"]*"/g, '');
+                const id = 'N' + String(counter).padStart(4, '0');
+                if (id === qaNodeId) { found = el; break; }
+            }
+            if (found) break;
+        }
+        return found ? { doc, element: found } : null;
     }
 
     function showEditorTab(editorContent) {
@@ -6085,12 +6075,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save to history
         editorHistory.push(editorTabHtml);
         
-        // Parse editorTabHtml (does NOT contain wrappers - wrappers are preview-only)
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element by data-qa-node-id
-        const element = doc.querySelector('[data-qa-node-id="' + data.qaNodeId + '"]');
+        // Finde Element per Position (gleiche Zähl-Logik wie generateAnnotatedPreview)
+        const result = findElementByQaNodeId(editorTabHtml, data.qaNodeId);
+        if (!result) {
+            console.warn('[EDITOR] Element nicht gefunden für:', data.qaNodeId);
+            editorHistory.pop();
+            return;
+        }
+        const { doc, element } = result;
         
         if (element) {
             const tagName = element.tagName.toLowerCase();
@@ -6297,105 +6289,51 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save to history
         editorHistory.push(editorTabHtml);
         
-        // Parse editorTabHtml
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element
-        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        
-        if (element && element.tagName.toLowerCase() === 'a') {
-            element.setAttribute('href', newUrl);
-            
-            // Serialize
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            
-            // Mark pending
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r && r.element.tagName.toLowerCase() === 'a') {
+            r.element.setAttribute('href', newUrl);
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
             setEditorPending(true);
-            
-            // Update selection
             editorSelectedElement.href = newUrl;
-            
-            // Re-render
             showEditorTab(document.getElementById('editorContent'));
-            
-            // Selective update: Send message to iframe
-            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
-            
+            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
             console.log('[EDITOR] Link URL updated');
+        } else {
+            editorHistory.pop();
+            showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
         }
     }
     
     function handleEditorClearLink() {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
         
-        // Save to history
         editorHistory.push(editorTabHtml);
-        
-        // Parse editorTabHtml
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element
-        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        
-        if (element && element.tagName.toLowerCase() === 'a') {
-            element.setAttribute('href', '');
-            
-            // Serialize
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            
-            // Mark pending
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r && r.element.tagName.toLowerCase() === 'a') {
+            r.element.setAttribute('href', '');
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
             setEditorPending(true);
-            
-            // Update selection
             editorSelectedElement.href = '';
-            
-            // Re-render
             showEditorTab(document.getElementById('editorContent'));
-            
-            // Selective update
-            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
-            
+            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
             console.log('[EDITOR] Link href cleared');
-        }
+        } else { editorHistory.pop(); }
     }
     
     function handleEditorRemoveLink() {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
-        
-        // Save to history
         editorHistory.push(editorTabHtml);
-        
-        // Parse editorTabHtml
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element
-        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        
-        if (element && element.tagName.toLowerCase() === 'a') {
-            // Replace <a> with its text content
-            const textNode = doc.createTextNode(element.textContent);
-            element.parentNode.replaceChild(textNode, element);
-            
-            // Serialize
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            
-            // Mark pending
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r && r.element.tagName.toLowerCase() === 'a') {
+            const textNode = r.doc.createTextNode(r.element.textContent);
+            r.element.parentNode.replaceChild(textNode, r.element);
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
             setEditorPending(true);
-            
-            // Reset selection
             editorSelectedElement = null;
-            
-            // Re-render
             showEditorTab(document.getElementById('editorContent'));
-            
-            // Full preview reload (structure changed)
             updateInspectorPreview();
-            
             console.log('[EDITOR] Link removed, text kept');
-        }
+        } else { editorHistory.pop(); }
     }
     
     // ============================================
@@ -6412,72 +6350,33 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Save to history
         editorHistory.push(editorTabHtml);
-        
-        // Parse editorTabHtml
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element
-        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        
-        if (element && element.tagName.toLowerCase() === 'img') {
-            element.setAttribute('src', newSrc);
-            
-            // Serialize
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            
-            // Mark pending
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r && r.element.tagName.toLowerCase() === 'img') {
+            r.element.setAttribute('src', newSrc);
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
             setEditorPending(true);
-            
-            // Update selection
             editorSelectedElement.src = newSrc;
-            
-            // Re-render
             showEditorTab(document.getElementById('editorContent'));
-            
-            // Selective update
-            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
-            
+            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
             console.log('[EDITOR] Image src updated');
-        }
+        } else { editorHistory.pop(); }
     }
     
     function handleEditorRemoveImage() {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'img') return;
         
-        // Save to history
         editorHistory.push(editorTabHtml);
-        
-        // Parse editorTabHtml
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
-        
-        // Find element
-        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
-        
-        if (element && element.tagName.toLowerCase() === 'img') {
-            // Remove img element
-            element.parentNode.removeChild(element);
-            
-            // Serialize
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            
-            // Mark pending
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r && r.element.tagName.toLowerCase() === 'img') {
+            r.element.parentNode.removeChild(r.element);
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
             setEditorPending(true);
-            
-            // Reset selection
             editorSelectedElement = null;
-            
-            // Re-render
             showEditorTab(document.getElementById('editorContent'));
-            
-            // Full preview reload (structure changed)
             updateInspectorPreview();
-            
             console.log('[EDITOR] Image removed');
-        }
+        } else { editorHistory.pop(); }
     }
     
     // ============================================
@@ -6495,24 +6394,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Ziel-Node-ID: entweder gespeicherte Cursor-Position oder ausgewähltes Element
-        const targetNodeId = savedCursorNodeId || editorSelectedElement.qaNodeId;
-        
-        // Save to history (für Undo)
         editorHistory.push(editorTabHtml);
 
-        // Sende INSERT_AT_CURSOR ans iframe – das iframe fügt an der echten Cursor-Position ein
-        // und schickt danach PLACEHOLDER_INSERTED zurück mit dem aktualisierten HTML
-        const iframe = document.getElementById('inspectorPreviewFrame');
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({
-                type: 'INSERT_AT_CURSOR',
-                placeholder: placeholder,
-                targetNodeId: targetNodeId
-            }, '*');
+        // Direkt ins editorTabHtml einfügen (kein iframe nötig)
+        const r = findElementByQaNodeId(editorTabHtml, editorSelectedElement.qaNodeId);
+        if (r) {
+            // Platzhalter ans Ende des Elements anfügen
+            r.element.appendChild(r.doc.createTextNode(' ' + placeholder));
+            editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+            setEditorPending(true);
+            // Vorschau aktualisieren
+            updateElementInPreview(editorSelectedElement.qaNodeId, r.element.outerHTML);
+            showEditorTab(document.getElementById('editorContent'));
+            showInspectorToast('✅ Platzhalter eingefügt: ' + placeholder);
+            console.log('[EDITOR] Platzhalter inserted:', placeholder);
         } else {
-            showInspectorToast('❌ Vorschau nicht bereit. Bitte Inspector neu öffnen.');
-            editorHistory.pop(); // Undo history rollback
+            editorHistory.pop();
+            showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
         }
     }
     
