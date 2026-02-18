@@ -4056,19 +4056,30 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
         
         // EDITOR MODE: Inject editable wrappers (Phase 1)
+        // IMPORTANT: Wrappers are PREVIEW-ONLY artifacts, never persisted to editorTabHtml
         if (tabName === 'editor') {
             const textSelectors = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'];
+            const structuralTags = ['table', 'tr', 'td', 'tbody', 'thead', 'tfoot'];
+            
             textSelectors.forEach(selector => {
                 const elements = doc.querySelectorAll(selector + '[data-qa-node-id]');
                 elements.forEach(el => {
                     const tagName = el.tagName.toLowerCase();
+                    
                     // Skip links and images
                     if (tagName === 'a' || el.querySelector('img')) return;
                     
                     // Skip if already wrapped
                     if (el.querySelector('.qa-editable')) return;
                     
-                    // Wrap innerHTML in editable span
+                    // Skip if contains structural elements
+                    let hasStructural = false;
+                    structuralTags.forEach(tag => {
+                        if (el.querySelector(tag)) hasStructural = true;
+                    });
+                    if (hasStructural) return;
+                    
+                    // Wrap innerHTML in editable span (PREVIEW-ONLY)
                     const wrapper = doc.createElement('span');
                     wrapper.className = 'qa-editable';
                     wrapper.setAttribute('contenteditable', 'true');
@@ -4085,8 +4096,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Skip if already wrapped
                 if (td.querySelector('.qa-editable')) return;
                 
-                // Only wrap if td contains text (not nested tables)
-                if (td.querySelector('table')) return;
+                // Only wrap if td contains simple text (not nested tables/structural elements)
+                if (td.querySelector('table') || td.querySelector('tr') || td.querySelector('tbody')) return;
                 
                 const wrapper = doc.createElement('span');
                 wrapper.className = 'qa-editable';
@@ -4097,7 +4108,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 td.appendChild(wrapper);
             });
             
-            console.log('[EDITOR] Injected editable wrappers');
+            console.log('[EDITOR] Injected editable wrappers (preview-only, not persisted)');
         }
         
         // Füge Highlight-Script in <head> ein
@@ -5827,7 +5838,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save to history
         editorHistory.push(editorTabHtml);
         
-        // Parse editorTabHtml
+        // Parse editorTabHtml (does NOT contain wrappers - wrappers are preview-only)
         const parser = new DOMParser();
         const doc = parser.parseFromString(editorTabHtml, 'text/html');
         
@@ -5835,16 +5846,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const element = doc.querySelector('[data-qa-node-id="' + data.qaNodeId + '"]');
         
         if (element) {
-            // Find wrapper inside element
-            const wrapper = element.querySelector('.qa-editable');
+            const tagName = element.tagName.toLowerCase();
+            // Structural tags that are NEVER editable (td is allowed)
+            const forbiddenTags = ['table', 'tr', 'tbody', 'thead', 'tfoot'];
             
-            if (wrapper) {
-                // Update wrapper innerHTML (this is what user edited)
-                wrapper.innerHTML = data.html;
-            } else {
-                // Fallback: update element innerHTML directly
-                element.innerHTML = data.html;
+            // Protection: Never allow forbidden structural tags to be edited
+            if (forbiddenTags.includes(tagName)) {
+                console.warn('[EDITOR] Cannot edit structural element:', tagName);
+                return;
             }
+            
+            // Validation: Check if user input contains forbidden structural tags
+            const tempDiv = doc.createElement('div');
+            tempDiv.innerHTML = data.html;
+            
+            // Check if forbidden structural tags were introduced (should not happen in text editing)
+            let hasForbiddenTags = false;
+            forbiddenTags.forEach(tag => {
+                if (tempDiv.querySelector(tag)) hasForbiddenTags = true;
+            });
+            
+            if (hasForbiddenTags) {
+                console.warn('[EDITOR] User input contains forbidden structural tags - rejecting');
+                return;
+            }
+            
+            // Special protection for td: ensure no nested tables
+            if (tagName === 'td') {
+                if (tempDiv.querySelector('table')) {
+                    console.warn('[EDITOR] Cannot nest tables inside td - rejecting');
+                    return;
+                }
+            }
+            
+            // Update element innerHTML directly (NO wrapper persistence)
+            // editorTabHtml never contains .qa-editable wrappers
+            element.innerHTML = data.html;
             
             // Serialize back to HTML
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
@@ -5852,7 +5889,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Mark as pending
             checkEditorPending();
             
-            console.log('[EDITOR] Text updated successfully');
+            console.log('[EDITOR] Text updated successfully (no wrapper persisted)');
         } else {
             console.warn('[EDITOR] Element not found:', data.qaNodeId);
         }
