@@ -3803,7 +3803,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     el.outerHTML = event.data.outerHTML;
                     editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
                 }
-                checkEditorPending();
+                setEditorPending(true);
                 showEditorTab(document.getElementById('editorContent'));
                 showInspectorToast('✅ Platzhalter eingefügt: ' + event.data.placeholder);
             }
@@ -5049,7 +5049,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function commitEditorChanges() {
-        if (!editorTabHtml || editorTabHtml === currentWorkingHtml) {
+        if (!editorTabHtml || !editorPending) {
             console.log('[COMMIT] Editor: Nothing to commit');
             return false;
         }
@@ -5065,8 +5065,8 @@ document.addEventListener('DOMContentLoaded', () => {
         editorHistory = [];
         editorSelectedElement = null;
         
-        // Pending neu berechnen
-        checkEditorPending();
+        // Pending zurücksetzen
+        setEditorPending(false);
         
         // Log Commit (Phase 11 B6)
         const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
@@ -6134,7 +6134,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Mark as pending
-            checkEditorPending();
+            setEditorPending(true);
             
             console.log('[EDITOR] Text updated successfully (no wrapper persisted)');
         } else {
@@ -6229,13 +6229,19 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Phase 10: Check if editor tab has pending changes
     function checkEditorPending() {
-        // KERN-BUG FIX: qa-node-ids beim Vergleich ignorieren,
-        // sonst ist immer "pending" weil editorTabHtml IDs hat und currentWorkingHtml nicht
-        const isPending = stripQaNodeIds(editorTabHtml) !== currentWorkingHtml;
+        // editorPending wird direkt als Flag gesetzt (nicht per String-Vergleich),
+        // weil der DOMParser HTML beim Parsen normalisiert und der Vergleich
+        // dadurch immer "pending" liefern würde - auch ohne echte Änderung.
+        // Aufruf mit setEditorPending(true/false) statt checkEditorPending().
+    }
+
+    function setEditorPending(isPending) {
         if (editorPending !== isPending) {
             editorPending = isPending;
             updateGlobalPendingIndicator();
-            console.log('[INSPECTOR] Editor pending status updated:', isPending);
+            updateGlobalFinalizeButton();
+            updateDownloadManualOptimizedButton();
+            console.log('[INSPECTOR] Editor pending status:', isPending);
         }
     }
     
@@ -6259,7 +6265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editorTabHtml = before + after;
         
         // Check Pending (Phase 10)
-        checkEditorPending();
+        setEditorPending(true);
         
         // Auswahl zurücksetzen
         editorSelectedElement = null;
@@ -6305,7 +6311,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Mark pending
-            checkEditorPending();
+            setEditorPending(true);
             
             // Update selection
             editorSelectedElement.href = newUrl;
@@ -6340,7 +6346,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Mark pending
-            checkEditorPending();
+            setEditorPending(true);
             
             // Update selection
             editorSelectedElement.href = '';
@@ -6377,7 +6383,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Mark pending
-            checkEditorPending();
+            setEditorPending(true);
             
             // Reset selection
             editorSelectedElement = null;
@@ -6423,7 +6429,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Mark pending
-            checkEditorPending();
+            setEditorPending(true);
             
             // Update selection
             editorSelectedElement.src = newSrc;
@@ -6459,7 +6465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Mark pending
-            checkEditorPending();
+            setEditorPending(true);
             
             // Reset selection
             editorSelectedElement = null;
@@ -6561,7 +6567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editorTabHtml = before + newBlock + after;
         
         // Check Pending (Phase 10)
-        checkEditorPending();
+        setEditorPending(true);
         
         // Auswahl zurücksetzen
         editorSelectedElement = null;
@@ -6583,8 +6589,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore previous state
         editorTabHtml = editorHistory.pop();
         
-        // Check Pending (Phase 10: might be false now if identical to currentWorkingHtml)
-        checkEditorPending();
+        // Wenn keine History mehr → zurück auf committed Stand
+        setEditorPending(editorHistory.length > 0);
         
         // Auswahl zurücksetzen
         editorSelectedElement = null;
