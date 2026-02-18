@@ -4198,6 +4198,47 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('        setTimeout(function() { pin.remove(); }, 3000);');
         scriptLines.push('      }');
         scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // PHASE 2: UPDATE_ELEMENT (selective update)');
+        scriptLines.push('    if (event.data.type === "UPDATE_ELEMENT") {');
+        scriptLines.push('      var qaNodeId = event.data.qaNodeId;');
+        scriptLines.push('      var newOuterHTML = event.data.outerHTML;');
+        scriptLines.push("      var element = document.querySelector('[data-qa-node-id=\"' + qaNodeId + '\"]');");
+        scriptLines.push('      if (element && newOuterHTML) {');
+        scriptLines.push('        // Replace element with new HTML');
+        scriptLines.push('        var tempDiv = document.createElement("div");');
+        scriptLines.push('        tempDiv.innerHTML = newOuterHTML;');
+        scriptLines.push('        var newElement = tempDiv.firstChild;');
+        scriptLines.push('        if (newElement) {');
+        scriptLines.push('          var parent = element.parentNode;');
+        scriptLines.push('          parent.replaceChild(newElement, element);');
+        scriptLines.push('          ');
+        scriptLines.push('          // Restore editable wrapper if in editor tab');
+        scriptLines.push('          var editableTags = ["p", "span", "h1", "h2", "h3", "h4", "h5", "h6", "div", "td"];');
+        scriptLines.push('          var tagName = newElement.tagName ? newElement.tagName.toLowerCase() : "";');
+        scriptLines.push('          if (editableTags.indexOf(tagName) !== -1 && !newElement.querySelector(".qa-editable")) {');
+        scriptLines.push('            var wrapper = document.createElement("span");');
+        scriptLines.push('            wrapper.className = "qa-editable";');
+        scriptLines.push('            wrapper.setAttribute("contenteditable", "true");');
+        scriptLines.push('            wrapper.setAttribute("data-qa-node-id-ref", qaNodeId);');
+        scriptLines.push('            wrapper.innerHTML = newElement.innerHTML;');
+        scriptLines.push('            newElement.innerHTML = "";');
+        scriptLines.push('            newElement.appendChild(wrapper);');
+        scriptLines.push('            ');
+        scriptLines.push('            // Re-attach blur handler');
+        scriptLines.push('            wrapper.addEventListener("blur", function() {');
+        scriptLines.push('              var nodeId = wrapper.getAttribute("data-qa-node-id-ref");');
+        scriptLines.push('              var html = wrapper.innerHTML;');
+        scriptLines.push('              window.parent.postMessage({ type: "EDITOR_UPDATE_TEXT", qaNodeId: nodeId, html: html }, "*");');
+        scriptLines.push('            });');
+        scriptLines.push('          }');
+        scriptLines.push('          ');
+        scriptLines.push('          console.log("[PREVIEW] Element updated:", qaNodeId);');
+        scriptLines.push('        }');
+        scriptLines.push('      } else {');
+        scriptLines.push('        console.warn("[PREVIEW] UPDATE_ELEMENT failed - element not found:", qaNodeId);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
         scriptLines.push('  } catch(e) {');
         scriptLines.push('    console.error("[PREVIEW SCRIPT ERROR]", e);');
         scriptLines.push('  }');
@@ -5743,6 +5784,33 @@ document.addEventListener('DOMContentLoaded', () => {
         html += '<p>👆 Klicken Sie auf ein Element in der Preview rechts, um es zu bearbeiten.</p>';
         html += '</div>';
         
+        // PHASE 2: Platzhalter-Dropdown (always visible)
+        html += '<div class="editor-placeholder-panel">';
+        html += '<h4>🎯 Platzhalter einfügen</h4>';
+        html += '<p class="editor-placeholder-hint">';
+        if (editorSelectedElement) {
+            html += 'Wählen Sie einen Platzhalter und klicken Sie "Einfügen", um ihn im ausgewählten Element einzufügen.';
+        } else {
+            html += 'Wählen Sie zuerst ein Element in der Preview aus.';
+        }
+        html += '</p>';
+        html += '<select id="editorPlaceholderSelect" class="editor-placeholder-select">';
+        html += '<option value="">-- Platzhalter auswählen --</option>';
+        // Liste der 23 Platzhalter
+        const placeholders = [
+            '%anrede%', '%titel%', '%vorname%', '%nachname%', '%firma%',
+            '%strasse%', '%plz%', '%ort%', '%land%', '%email%',
+            '%telefon%', '%geburtsdatum%', '%kundennummer%', '%vertragsnummer%',
+            '%rechnungsnummer%', '%datum%', '%betrag%', '%waehrung%',
+            '%produkt%', '%menge%', '%lieferdatum%', '%tracking%', '%link%'
+        ];
+        placeholders.forEach(function(ph) {
+            html += '<option value="' + escapeHtml(ph) + '">' + escapeHtml(ph) + '</option>';
+        });
+        html += '</select>';
+        html += '<button id="editorInsertPlaceholder" class="btn-editor-action" ' + (editorSelectedElement ? '' : 'disabled') + '>➕ Einfügen</button>';
+        html += '</div>';
+        
         // Ausgewähltes Element
         if (editorSelectedElement) {
             html += '<div class="editor-selection">';
@@ -5759,6 +5827,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '<strong>src:</strong> ' + escapeHtml(editorSelectedElement.src) + '<br>';
             }
             html += '</div>';
+            
+            // PHASE 2: Link Editor Panel (only for <a> tags)
+            if (editorSelectedElement.tagName === 'a' && editorSelectedElement.href) {
+                html += '<div class="editor-link-panel">';
+                html += '<h4>🔗 Link bearbeiten</h4>';
+                html += '<label>URL:</label>';
+                html += '<input type="text" id="editorLinkUrl" value="' + escapeHtml(editorSelectedElement.href) + '" placeholder="https://example.com" />';
+                html += '<div class="editor-link-actions">';
+                html += '<button id="editorUpdateLink" class="btn-editor-action">✓ URL ändern</button>';
+                html += '<button id="editorClearLink" class="btn-editor-action">∅ href leeren</button>';
+                html += '<button id="editorRemoveLink" class="btn-editor-action">🗑️ Link entfernen (Text behalten)</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            // PHASE 2: Image Editor Panel (only for <img> tags)
+            if (editorSelectedElement.tagName === 'img' && editorSelectedElement.src) {
+                html += '<div class="editor-image-panel">';
+                html += '<h4>🖼️ Bild bearbeiten</h4>';
+                html += '<label>Bild-URL:</label>';
+                html += '<input type="text" id="editorImageSrc" value="' + escapeHtml(editorSelectedElement.src) + '" placeholder="https://example.com/image.jpg" />';
+                html += '<div class="editor-image-actions">';
+                html += '<button id="editorUpdateImage" class="btn-editor-action">✓ src ändern</button>';
+                html += '<button id="editorRemoveImage" class="btn-editor-action">🗑️ Bild entfernen</button>';
+                html += '</div>';
+                html += '</div>';
+            }
             
             // Block Snippet
             html += '<div class="editor-block-snippet">';
@@ -5809,6 +5904,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const undoBtn = document.getElementById('editorUndo');
         const commitBtn = document.getElementById('editorCommit');
         
+        // PHASE 2: Link Editor Buttons
+        const updateLinkBtn = document.getElementById('editorUpdateLink');
+        const clearLinkBtn = document.getElementById('editorClearLink');
+        const removeLinkBtn = document.getElementById('editorRemoveLink');
+        
+        // PHASE 2: Image Editor Buttons
+        const updateImageBtn = document.getElementById('editorUpdateImage');
+        const removeImageBtn = document.getElementById('editorRemoveImage');
+        
+        // PHASE 2: Platzhalter Button
+        const insertPlaceholderBtn = document.getElementById('editorInsertPlaceholder');
+        
         if (deleteBtn) {
             deleteBtn.addEventListener('click', handleEditorDeleteBlock);
         }
@@ -5823,6 +5930,30 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (commitBtn) {
             commitBtn.addEventListener('click', handleEditorCommit);
+        }
+        
+        // PHASE 2: Link Editor Listeners
+        if (updateLinkBtn) {
+            updateLinkBtn.addEventListener('click', handleEditorUpdateLink);
+        }
+        if (clearLinkBtn) {
+            clearLinkBtn.addEventListener('click', handleEditorClearLink);
+        }
+        if (removeLinkBtn) {
+            removeLinkBtn.addEventListener('click', handleEditorRemoveLink);
+        }
+        
+        // PHASE 2: Image Editor Listeners
+        if (updateImageBtn) {
+            updateImageBtn.addEventListener('click', handleEditorUpdateImage);
+        }
+        if (removeImageBtn) {
+            removeImageBtn.addEventListener('click', handleEditorRemoveImage);
+        }
+        
+        // PHASE 2: Platzhalter Listener
+        if (insertPlaceholderBtn) {
+            insertPlaceholderBtn.addEventListener('click', handleEditorInsertPlaceholder);
         }
     }
     
@@ -6028,6 +6159,268 @@ document.addEventListener('DOMContentLoaded', () => {
         showEditorTab(editorContent);
         
         console.log('[INSPECTOR] Block deleted');
+    }
+    
+    // ============================================
+    // PHASE 2: LINK EDITOR HANDLERS
+    // ============================================
+    
+    function handleEditorUpdateLink() {
+        if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
+        
+        const newUrl = document.getElementById('editorLinkUrl').value;
+        
+        if (!newUrl) {
+            alert('⚠️ Bitte geben Sie eine URL ein.');
+            return;
+        }
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element
+        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        
+        if (element && element.tagName.toLowerCase() === 'a') {
+            element.setAttribute('href', newUrl);
+            
+            // Serialize
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark pending
+            checkEditorPending();
+            
+            // Update selection
+            editorSelectedElement.href = newUrl;
+            
+            // Re-render
+            showEditorTab(document.getElementById('inspectorContent'));
+            
+            // Selective update: Send message to iframe
+            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
+            
+            console.log('[EDITOR] Link URL updated');
+        }
+    }
+    
+    function handleEditorClearLink() {
+        if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element
+        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        
+        if (element && element.tagName.toLowerCase() === 'a') {
+            element.setAttribute('href', '');
+            
+            // Serialize
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark pending
+            checkEditorPending();
+            
+            // Update selection
+            editorSelectedElement.href = '';
+            
+            // Re-render
+            showEditorTab(document.getElementById('inspectorContent'));
+            
+            // Selective update
+            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
+            
+            console.log('[EDITOR] Link href cleared');
+        }
+    }
+    
+    function handleEditorRemoveLink() {
+        if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element
+        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        
+        if (element && element.tagName.toLowerCase() === 'a') {
+            // Replace <a> with its text content
+            const textNode = doc.createTextNode(element.textContent);
+            element.parentNode.replaceChild(textNode, element);
+            
+            // Serialize
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark pending
+            checkEditorPending();
+            
+            // Reset selection
+            editorSelectedElement = null;
+            
+            // Re-render
+            showEditorTab(document.getElementById('inspectorContent'));
+            
+            // Full preview reload (structure changed)
+            updateInspectorPreview();
+            
+            console.log('[EDITOR] Link removed, text kept');
+        }
+    }
+    
+    // ============================================
+    // PHASE 2: IMAGE EDITOR HANDLERS
+    // ============================================
+    
+    function handleEditorUpdateImage() {
+        if (!editorSelectedElement || editorSelectedElement.tagName !== 'img') return;
+        
+        const newSrc = document.getElementById('editorImageSrc').value;
+        
+        if (!newSrc) {
+            alert('⚠️ Bitte geben Sie eine Bild-URL ein.');
+            return;
+        }
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element
+        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        
+        if (element && element.tagName.toLowerCase() === 'img') {
+            element.setAttribute('src', newSrc);
+            
+            // Serialize
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark pending
+            checkEditorPending();
+            
+            // Update selection
+            editorSelectedElement.src = newSrc;
+            
+            // Re-render
+            showEditorTab(document.getElementById('inspectorContent'));
+            
+            // Selective update
+            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
+            
+            console.log('[EDITOR] Image src updated');
+        }
+    }
+    
+    function handleEditorRemoveImage() {
+        if (!editorSelectedElement || editorSelectedElement.tagName !== 'img') return;
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element
+        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        
+        if (element && element.tagName.toLowerCase() === 'img') {
+            // Remove img element
+            element.parentNode.removeChild(element);
+            
+            // Serialize
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark pending
+            checkEditorPending();
+            
+            // Reset selection
+            editorSelectedElement = null;
+            
+            // Re-render
+            showEditorTab(document.getElementById('inspectorContent'));
+            
+            // Full preview reload (structure changed)
+            updateInspectorPreview();
+            
+            console.log('[EDITOR] Image removed');
+        }
+    }
+    
+    // ============================================
+    // PHASE 2: PLATZHALTER HANDLER
+    // ============================================
+    
+    function handleEditorInsertPlaceholder() {
+        if (!editorSelectedElement) return;
+        
+        const select = document.getElementById('editorPlaceholderSelect');
+        const placeholder = select.value;
+        
+        if (!placeholder) {
+            alert('⚠️ Bitte wählen Sie einen Platzhalter aus.');
+            return;
+        }
+        
+        // Save to history
+        editorHistory.push(editorTabHtml);
+        
+        // Parse editorTabHtml
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        
+        // Find element
+        const element = doc.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
+        
+        if (element) {
+            // Insert as TextNode (no HTML escaping)
+            const textNode = doc.createTextNode(' ' + placeholder);
+            element.appendChild(textNode);
+            
+            // Serialize
+            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Mark pending
+            checkEditorPending();
+            
+            // Re-render
+            showEditorTab(document.getElementById('inspectorContent'));
+            
+            // Selective update
+            updateElementInPreview(editorSelectedElement.qaNodeId, element.outerHTML);
+            
+            console.log('[EDITOR] Platzhalter inserted:', placeholder);
+        }
+    }
+    
+    // ============================================
+    // PHASE 2: SELECTIVE PREVIEW UPDATE
+    // ============================================
+    
+    function updateElementInPreview(qaNodeId, newOuterHTML) {
+        // Send message to iframe to update specific element
+        const iframe = document.getElementById('inspectorPreviewFrame');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'UPDATE_ELEMENT',
+                qaNodeId: qaNodeId,
+                outerHTML: newOuterHTML
+            }, '*');
+        }
     }
     
     // Handle Replace Block
