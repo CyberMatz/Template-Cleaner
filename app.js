@@ -1201,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             reader.onerror = () => {
                 console.error('[UPLOAD] FileReader error');
-                alert('Fehler beim Lesen der Datei.');
+                showInspectorToast('❌ Fehler beim Lesen der Datei.');
                 selectedHtml = null;
                 selectedFilename = null;
                 processBtn.disabled = true;
@@ -1235,7 +1235,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('PROCESS_CLICK', 'selectedHtml=', selectedHtml ? selectedHtml.length + ' chars' : 'null', 'disabled=', processBtn.disabled);
         
         if (!selectedHtml) {
-            alert('Bitte zuerst eine HTML-Datei auswählen.');
+            showInspectorToast('⚠️ Bitte zuerst eine HTML-Datei auswählen.');
             uploadHint.style.display = 'block';
             return;
         }
@@ -1322,7 +1322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
 
         } catch (error) {
-            alert('Fehler bei der Verarbeitung: ' + error.message);
+            showInspectorToast('❌ Fehler bei der Verarbeitung: ' + error.message);
         } finally {
             processBtn.disabled = false;
             processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
@@ -1645,7 +1645,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 3000);
             } else {
                 console.warn('[DEBUG] reviewHint Element nicht gefunden');
-                alert('✅ Übernommen. Downloads nutzen jetzt den neuen Stand.');
+                showInspectorToast('✅ Übernommen. Downloads nutzen jetzt den neuen Stand.');
             }
             
             // Button deaktivieren bis zur nächsten Änderung
@@ -1951,7 +1951,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (index === -1) {
             // Nicht gefunden
-            alert('⚠️ Undo nicht eindeutig möglich - Pattern nicht gefunden');
+            showInspectorToast('⚠️ Undo nicht eindeutig möglich - Pattern nicht gefunden');
             return;
         }
         
@@ -1959,7 +1959,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastIndex = currentReviewHtml.lastIndexOf(searchPattern);
         if (index !== lastIndex) {
             // Mehrfach gefunden
-            alert('⚠️ Undo nicht eindeutig möglich - Pattern mehrfach vorhanden');
+            showInspectorToast('⚠️ Undo nicht eindeutig möglich - Pattern mehrfach vorhanden');
             return;
         }
         
@@ -2080,7 +2080,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (lastOpenPos === -1 || depth <= 0) {
-            alert('⚠️ Kein offenes Tag gefunden.');
+            showInspectorToast('⚠️ Kein offenes Tag gefunden.');
             return;
         }
         
@@ -2099,7 +2099,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (boundaryPos === -1) {
             // Kein sicherer Einfügepunkt gefunden
-            alert(`⚠️ Kein sicherer Einfügepunkt gefunden für <${tagType}>. Bitte "Ignorieren" wählen.`);
+            showInspectorToast(`⚠️ Kein sicherer Einfügepunkt für <${tagType}>. Bitte "Ignorieren" wählen.`);
             return;
         }
         
@@ -2109,7 +2109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (existingClose) {
             // Nicht eindeutig
-            alert(`⚠️ Nicht eindeutig: Es existiert bereits ein </${tagType}> zwischen dem offenen Tag und der Boundary. Bitte "Ignorieren" wählen.`);
+            showInspectorToast(`⚠️ Nicht eindeutig: </${tagType}> bereits vorhanden. Bitte "Ignorieren" wählen.`);
             return;
         }
         
@@ -2169,8 +2169,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_TAG_IGNORED - <${tagType}> ignoriert (User Action)`;
         manualActionLog.push(logEntry);
         
-        // Update Aktions-Counter
-        updateActionCounter();
+        // BUG #8 FIX: updateActionCounter() NICHT aufrufen und Undo-Button NICHT aktivieren.
+        // "Ignorieren" ändert nichts am HTML – es gibt also nichts rückgängig zu machen.
+        // Nur den Commit-Button updaten falls nötig (zählt nicht als echte Aktion).
+        if (commitReviewChangesBtn) {
+            // Commit nur aktivieren wenn echte HTML-Änderungen vorhanden (History > 0)
+            commitReviewChangesBtn.disabled = tagReviewHistory.length === 0;
+        }
     }
     
     // Aktions-Counter aktualisieren
@@ -2421,7 +2426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Asset-Review öffnen
     showAssetReviewBtn.addEventListener('click', () => {
         if (!processingResult) {
-            alert('⚠️ Bitte erst Template verarbeiten.');
+            showInspectorToast('⚠️ Bitte erst Template verarbeiten.');
             return;
         }
         
@@ -3025,7 +3030,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const url = urlInput.value.trim();
             if (!url) {
-                alert('⚠️ Bitte eine Pixel-URL eingeben.');
+                showInspectorToast('⚠️ Bitte eine Pixel-URL eingeben.');
                 return;
             }
             // Minimaler Pixel-Tag
@@ -3039,7 +3044,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const tag = tagTextarea.value.trim();
             if (!tag) {
-                alert('⚠️ Bitte einen img-Tag eingeben.');
+                showInspectorToast('⚠️ Bitte einen img-Tag eingeben.');
                 return;
             }
             pixelToInsert = tag;
@@ -3062,7 +3067,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Finde Einfügepunkt: direkt nach <body> oder nach Preheader
         const bodyMatch = assetReviewStagedHtml.match(/<body[^>]*>/i);
         if (!bodyMatch) {
-            alert('⚠️ Kein <body> Tag gefunden. Einfügung nicht möglich.');
+            showInspectorToast('❌ Kein <body> Tag gefunden. Einfügung nicht möglich.');
             return;
         }
         
@@ -3149,7 +3154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const targetUrl = urlInput.value.trim();
         if (!targetUrl) {
-            alert('⚠️ Bitte eine Ziel-URL eingeben.');
+            showInspectorToast('⚠️ Bitte eine Ziel-URL eingeben.');
             return;
         }
         
@@ -3160,7 +3165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!allowPlaceholder) {
             // Prüfe ob URL Platzhalter enthält
             if (targetUrl.includes('%') || targetUrl.includes('{{') || targetUrl.includes('}}')) {
-                alert('⚠️ Platzhalter deaktiviert. Die URL enthält Platzhalter (%, {{ oder }}).');
+                showInspectorToast('⚠️ URL enthält Platzhalter (%, {{ oder }}). Bitte ersetzen.');
                 console.warn('[ASSET] Placeholder detected but not allowed:', targetUrl);
                 return;
             }
@@ -3172,7 +3177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLinked = /<a[^>]*>\s*$/i.test(beforeImg) && /^\s*<\/a>/i.test(afterImg);
         
         if (isLinked) {
-            alert('⚠️ Warnung: Bild ist möglicherweise bereits verlinkt. Änderung wird nicht durchgeführt.');
+            showInspectorToast('⚠️ Bild möglicherweise bereits verlinkt. Änderung abgebrochen.');
             console.warn('[ASSET] Image appears to be already linked, aborting');
             return;
         }
@@ -3258,7 +3263,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             newValue = newSrcInput.value.trim();
             if (!newValue) {
-                alert('⚠️ Bitte einen neuen src-Wert eingeben.');
+                showInspectorToast('⚠️ Bitte einen neuen src-Wert eingeben.');
                 return;
             }
             actionType = 'src';
@@ -3270,7 +3275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             newValue = newTagTextarea.value.trim();
             if (!newValue) {
-                alert('⚠️ Bitte einen neuen img-Tag eingeben.');
+                showInspectorToast('⚠️ Bitte einen neuen img-Tag eingeben.');
                 return;
             }
             actionType = 'tag';
@@ -3447,7 +3452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         extendReportWithPhaseC();
         
         // Bestätigung
-        alert('✅ Änderungen übernommen. Downloads nutzen jetzt den neuen Stand.');
+        showInspectorToast('✅ Änderungen übernommen.');
         
         // Reset dirty flag
         assetReviewDirty = false;
@@ -3585,7 +3590,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (showInspectorBtn) {
         showInspectorBtn.addEventListener('click', () => {
             if (!processingResult) {
-                alert('⚠️ Bitte erst Template verarbeiten.');
+                showInspectorToast('⚠️ Bitte erst Template verarbeiten.');
                 return;
             }
             
@@ -3830,6 +3835,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             updateGlobalPendingIndicator();
+            // BUG #7 FIX: Klares Feedback dass Änderungen verworfen wurden
+            const tabNames = { tracking: 'Tracking', images: 'Bilder', editor: 'Editor' };
+            showInspectorToast(`⚠️ Änderungen in "${tabNames[fromTab] || fromTab}" verworfen`);
             console.log('[INSPECTOR] Pending changes discarded for:', fromTab);
         }
         
@@ -4611,7 +4619,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 const href = this.getAttribute('data-href');
                 navigator.clipboard.writeText(href).then(() => {
-                    alert('✓ URL in Zwischenablage kopiert!');
+                    showInspectorToast('✅ URL in Zwischenablage kopiert!');
                 }).catch(err => {
                     console.error('Copy failed:', err);
                 });
@@ -4627,7 +4635,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newHref = input ? input.value.trim() : '';
                 
                 if (!newHref) {
-                    alert('⚠️ Bitte neue URL eingeben.');
+                    showInspectorToast('⚠️ Bitte neue URL eingeben.');
                     return;
                 }
                 
@@ -4653,7 +4661,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newUrl = input ? input.value.trim() : '';
                 
                 if (!newUrl) {
-                    alert('⚠️ Bitte neue Pixel-URL eingeben.');
+                    showInspectorToast('⚠️ Bitte neue Pixel-URL eingeben.');
                     return;
                 }
                 
@@ -4681,7 +4689,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const pixelUrl = input ? input.value.trim() : '';
                 
                 if (!pixelUrl) {
-                    alert('⚠️ Bitte Pixel-URL eingeben.');
+                    showInspectorToast('⚠️ Bitte Pixel-URL eingeben.');
                     return;
                 }
                 
@@ -4717,7 +4725,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const targetUrl = input ? input.value.trim() : '';
                 
                 if (!targetUrl) {
-                    alert('⚠️ Bitte Ziel-URL eingeben.');
+                    showInspectorToast('⚠️ Bitte Ziel-URL eingeben.');
                     return;
                 }
                 
@@ -4784,8 +4792,9 @@ document.addEventListener('DOMContentLoaded', () => {
             anchor.setAttribute('href', newHref);
             
             // Serialisiere zurück
-            const serializer = new XMLSerializer();
-            trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+            // BUG #4 FIX: outerHTML statt XMLSerializer – verhindert dass E-Mail-spezifisches
+            // HTML (MSO-Comments, self-closing Tags, Attribute) verändert wird
+            trackingTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Check Pending (Phase 10)
             checkTrackingPending();
@@ -4837,9 +4846,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Ersetze src
                 img.setAttribute('src', newUrl);
                 
-                // Serialisiere zurück
-                const serializer = new XMLSerializer();
-                trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+                // BUG #4 FIX: outerHTML statt XMLSerializer
+                trackingTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
                 
                 // Check Pending (Phase 10)
                 checkTrackingPending();
@@ -5029,7 +5037,7 @@ document.addEventListener('DOMContentLoaded', () => {
                           style.includes('height:1px');
             
             if (is1x1) {
-                alert('⚠️ Es existiert bereits ein 1x1 Pixel. Bitte verwenden Sie "Ersetzen" statt "Einfügen".');
+                showInspectorToast('⚠️ 1x1 Pixel existiert bereits. Bitte "Ersetzen" verwenden.');
                 trackingHistory.pop(); // Entferne History-Eintrag
                 return;
             }
@@ -5038,7 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Finde <body> Tag
         const body = doc.querySelector('body');
         if (!body) {
-            alert('⚠️ Kein <body> Tag gefunden.');
+            showInspectorToast('❌ Kein <body> Tag gefunden.');
             trackingHistory.pop();
             return;
         }
@@ -5064,8 +5072,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Serialisiere zurück
-        const serializer = new XMLSerializer();
-        trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+        // BUG #4 FIX: outerHTML statt XMLSerializer
+        trackingTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         
         // Check Pending (Phase 10)
         checkTrackingPending();
@@ -5083,7 +5091,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Handle Link Insert (Phase 8B)
     function handleTrackingLinkInsert(targetUrl) {
         if (!trackingSelectedElement) {
-            alert('⚠️ Kein Element ausgewählt.');
+            showInspectorToast('⚠️ Kein Element ausgewählt.');
             return;
         }
         
@@ -5104,7 +5112,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const clickableElements = doc.querySelectorAll('a, img, button, table, td, tr, div');
         
         if (nodeIndex < 0 || nodeIndex >= clickableElements.length) {
-            alert('⚠️ Element nicht gefunden.');
+            showInspectorToast('⚠️ Element nicht gefunden.');
             trackingHistory.pop();
             return;
         }
@@ -5115,7 +5123,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let parent = element.parentElement;
         while (parent) {
             if (parent.tagName.toLowerCase() === 'a') {
-                alert('⚠️ Element ist bereits verlinkt (innerhalb eines <a> Tags).');
+                showInspectorToast('⚠️ Element ist bereits verlinkt.');
                 trackingHistory.pop();
                 return;
             }
@@ -5133,14 +5141,14 @@ document.addEventListener('DOMContentLoaded', () => {
             parent2.insertBefore(link, element);
             link.appendChild(element);
         } else {
-            alert('⚠️ Element hat kein Parent-Element.');
+            showInspectorToast('⚠️ Element hat kein Parent-Element.');
             trackingHistory.pop();
             return;
         }
         
         // Serialisiere zurück
-        const serializer = new XMLSerializer();
-        trackingTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+        // BUG #4 FIX: outerHTML statt XMLSerializer
+        trackingTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         
         // Check Pending (Phase 10)
         checkTrackingPending();
@@ -5368,7 +5376,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newSrc = input ? input.value.trim() : '';
                 
                 if (!newSrc) {
-                    alert('⚠️ Bitte neue src URL eingeben.');
+                    showInspectorToast('⚠️ Bitte neue src URL eingeben.');
                     return;
                 }
                 
@@ -5470,8 +5478,8 @@ document.addEventListener('DOMContentLoaded', () => {
             img.setAttribute('src', newSrc);
             
             // Serialisiere zurück
-            const serializer = new XMLSerializer();
-            imagesTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+            // BUG #4 FIX: outerHTML statt XMLSerializer
+            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -5511,8 +5519,8 @@ document.addEventListener('DOMContentLoaded', () => {
             img.remove();
             
             // Serialisiere zurück
-            const serializer = new XMLSerializer();
-            imagesTabHtml = '<!DOCTYPE html>\n' + serializer.serializeToString(doc.documentElement);
+            // BUG #4 FIX: outerHTML statt XMLSerializer
+            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -5702,7 +5710,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const index = currentWorkingHtml.indexOf(searchPattern);
         
         if (index === -1) {
-            alert('Fehler: Fix konnte nicht rückgängig gemacht werden (Pattern nicht gefunden)');
+            showInspectorToast('❌ Fehler: Fix konnte nicht rückgängig gemacht werden.');
             return;
         }
         
@@ -6186,7 +6194,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newUrl = document.getElementById('editorLinkUrl').value;
         
         if (!newUrl) {
-            alert('⚠️ Bitte geben Sie eine URL ein.');
+            showInspectorToast('⚠️ Bitte eine URL eingeben.');
             return;
         }
         
@@ -6304,7 +6312,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSrc = document.getElementById('editorImageSrc').value;
         
         if (!newSrc) {
-            alert('⚠️ Bitte geben Sie eine Bild-URL ein.');
+            showInspectorToast('⚠️ Bitte eine Bild-URL eingeben.');
             return;
         }
         
@@ -6387,7 +6395,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const placeholder = select.value;
         
         if (!placeholder) {
-            alert('⚠️ Bitte wählen Sie einen Platzhalter aus.');
+            showInspectorToast('⚠️ Bitte einen Platzhalter auswählen.');
             return;
         }
         
@@ -6576,10 +6584,17 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(toastContainer);
         }
         
+        // BUG #5 FIX: Farbe je nach Nachrichtentyp bestimmen
+        // ❌ = Fehler (rot), ⚠️ = Warnung (orange), ℹ️ = Info (blau), alles andere = Erfolg (grün)
+        let bgColor = '#2ecc71'; // Standard: grün (Erfolg)
+        if (message.startsWith('❌')) bgColor = '#e74c3c';      // rot
+        else if (message.startsWith('⚠️')) bgColor = '#e67e22'; // orange
+        else if (message.startsWith('ℹ️')) bgColor = '#3498db'; // blau
+        
         // Erstelle Toast
         const toast = document.createElement('div');
         toast.style.cssText = `
-            background: #2ecc71;
+            background: ${bgColor};
             color: white;
             padding: 12px 20px;
             border-radius: 6px;
