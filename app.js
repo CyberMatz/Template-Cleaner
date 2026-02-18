@@ -4302,9 +4302,9 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('// Click Handler für Element-Auswahl');
         scriptLines.push('document.addEventListener("click", function(event) {');
         scriptLines.push('  try {');
-        scriptLines.push('    // Klick in editierbares Element: nicht als Auswahl werten');
-        scriptLines.push('    if (event.target.getAttribute("data-qa-editable") === "true") return;');
-        scriptLines.push('    if (event.target.closest("[data-qa-editable=true]")) return;');
+        scriptLines.push('    // Bei Klick in editierbares Element: Auswahl senden OHNE preventDefault');
+        scriptLines.push('    var isEditable = event.target.getAttribute("data-qa-editable") === "true"');
+        scriptLines.push('                  || !!(event.target.closest && event.target.closest("[data-qa-editable]"));');
         scriptLines.push('    var target = event.target;');
         scriptLines.push('    var maxDepth = 5;');
         scriptLines.push('    var depth = 0;');
@@ -4327,7 +4327,8 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('          href: href,');
         scriptLines.push('          src: src');
         scriptLines.push('        }, "*");');
-        scriptLines.push('        event.preventDefault();');
+        scriptLines.push('        // Nur preventDefault wenn NICHT editierbar (sonst kein Cursor-Setzen möglich)');
+        scriptLines.push('        if (!isEditable) { event.preventDefault(); }');
         scriptLines.push('        event.stopPropagation();');
         scriptLines.push('        break;');
         scriptLines.push('      }');
