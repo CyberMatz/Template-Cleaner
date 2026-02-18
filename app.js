@@ -4093,7 +4093,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Annotiere klickbare Elemente mit data-qa-node-id (Phase 6)
-        const clickableSelectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div'];
+        const clickableSelectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'];
         let nodeIdCounter = 0;
         
         clickableSelectors.forEach(selector => {
@@ -4107,60 +4107,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
         
-        // EDITOR MODE: Inject editable wrappers (Phase 1)
-        // IMPORTANT: Wrappers are PREVIEW-ONLY artifacts, never persisted to editorTabHtml
+        // EDITOR MODE: Direkt editierbare Textelemente (Preview-only)
         if (tabName === 'editor') {
-            const textSelectors = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div'];
+            // Alle Textelemente direkt contenteditable machen (kein Wrapper nötig)
+            const editableSelectors = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'span'];
             const structuralTags = ['table', 'tr', 'td', 'tbody', 'thead', 'tfoot'];
             
-            textSelectors.forEach(selector => {
-                const elements = doc.querySelectorAll(selector + '[data-qa-node-id]');
-                elements.forEach(el => {
-                    const tagName = el.tagName.toLowerCase();
+            editableSelectors.forEach(selector => {
+                doc.querySelectorAll(selector + '[data-qa-node-id]').forEach(el => {
+                    // Nicht editierbar wenn strukturelle Kindelemente enthalten
+                    if (el.querySelector(structuralTags.join(','))) return;
+                    // Nicht editierbar wenn schon contenteditable
+                    if (el.getAttribute('contenteditable') === 'true') return;
                     
-                    // Skip links and images
-                    if (tagName === 'a' || el.querySelector('img')) return;
-                    
-                    // Skip if already wrapped
-                    if (el.querySelector('.qa-editable')) return;
-                    
-                    // Skip if contains structural elements
-                    let hasStructural = false;
-                    structuralTags.forEach(tag => {
-                        if (el.querySelector(tag)) hasStructural = true;
-                    });
-                    if (hasStructural) return;
-                    
-                    // Wrap innerHTML in editable span (PREVIEW-ONLY)
-                    const wrapper = doc.createElement('span');
-                    wrapper.className = 'qa-editable';
-                    wrapper.setAttribute('contenteditable', 'true');
-                    wrapper.setAttribute('data-qa-node-id-ref', el.getAttribute('data-qa-node-id'));
-                    wrapper.innerHTML = el.innerHTML;
-                    el.innerHTML = '';
-                    el.appendChild(wrapper);
+                    el.setAttribute('contenteditable', 'true');
+                    el.setAttribute('data-qa-editable', 'true');
+                    el.style.cursor = 'text';
+                    el.style.outline = '1px dashed rgba(108,52,131,0.35)';
+                    el.style.minHeight = '1em';
                 });
             });
             
-            // Special handling for <td> elements
-            const tdElements = doc.querySelectorAll('td[data-qa-node-id]');
-            tdElements.forEach(td => {
-                // Skip if already wrapped
-                if (td.querySelector('.qa-editable')) return;
-                
-                // Only wrap if td contains simple text (not nested tables/structural elements)
-                if (td.querySelector('table') || td.querySelector('tr') || td.querySelector('tbody')) return;
-                
-                const wrapper = doc.createElement('span');
-                wrapper.className = 'qa-editable';
-                wrapper.setAttribute('contenteditable', 'true');
-                wrapper.setAttribute('data-qa-node-id-ref', td.getAttribute('data-qa-node-id'));
-                wrapper.innerHTML = td.innerHTML;
-                td.innerHTML = '';
-                td.appendChild(wrapper);
-            });
-            
-            console.log('[EDITOR] Injected editable wrappers (preview-only, not persisted)');
+            console.log('[EDITOR] Made text elements directly editable');
         }
         
         // Füge Highlight-Script in <head> ein
@@ -4334,6 +4302,9 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('// Click Handler für Element-Auswahl');
         scriptLines.push('document.addEventListener("click", function(event) {');
         scriptLines.push('  try {');
+        scriptLines.push('    // Klick in editierbares Element: nicht als Auswahl werten');
+        scriptLines.push('    if (event.target.getAttribute("data-qa-editable") === "true") return;');
+        scriptLines.push('    if (event.target.closest("[data-qa-editable=true]")) return;');
         scriptLines.push('    var target = event.target;');
         scriptLines.push('    var maxDepth = 5;');
         scriptLines.push('    var depth = 0;');
@@ -4388,25 +4359,23 @@ document.addEventListener('DOMContentLoaded', () => {
             scriptLines.push('});');
         }
 
-        // EDITOR MODE: Add blur handler for contenteditable elements
+        // EDITOR MODE: Blur handler - sendet geänderten Text ans Elternfenster
         if (tabName === 'editor') {
             scriptLines.push('');
-            scriptLines.push('// Editor Mode: Blur handler for text updates');
-            scriptLines.push('document.addEventListener("DOMContentLoaded", function() {');
-            scriptLines.push('  var editableElements = document.querySelectorAll(".qa-editable[contenteditable]");');
-            scriptLines.push('  editableElements.forEach(function(el) {');
-            scriptLines.push('    el.addEventListener("blur", function() {');
-            scriptLines.push('      var qaNodeIdRef = el.getAttribute("data-qa-node-id-ref");');
-            scriptLines.push('      if (qaNodeIdRef) {');
-            scriptLines.push('        window.parent.postMessage({');
-            scriptLines.push('          type: "EDITOR_UPDATE_TEXT",');
-            scriptLines.push('          qaNodeId: qaNodeIdRef,');
-            scriptLines.push('          html: el.innerHTML');
-            scriptLines.push('        }, "*");');
-            scriptLines.push('      }');
-            scriptLines.push('    });');
-            scriptLines.push('  });');
-            scriptLines.push('});');
+            scriptLines.push('// Editor Mode: Text-Änderungen per blur übertragen');
+            scriptLines.push('document.addEventListener("blur", function(e) {');
+            scriptLines.push('  var el = e.target;');
+            scriptLines.push('  if (el && el.getAttribute("data-qa-editable") === "true") {');
+            scriptLines.push('    var nodeId = el.getAttribute("data-qa-node-id");');
+            scriptLines.push('    if (nodeId) {');
+            scriptLines.push('      window.parent.postMessage({');
+            scriptLines.push('        type: "EDITOR_UPDATE_TEXT",');
+            scriptLines.push('        qaNodeId: nodeId,');
+            scriptLines.push('        html: el.innerHTML');
+            scriptLines.push('      }, "*");');
+            scriptLines.push('    }');
+            scriptLines.push('  }');
+            scriptLines.push('}, true);'); // true = capture phase
         }
         
         highlightScript.textContent = scriptLines.join('\n');
@@ -5876,7 +5845,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function injectQaNodeIds(html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const selectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div'];
+        const selectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'];
         let counter = 0;
         selectors.forEach(sel => {
             doc.querySelectorAll(sel).forEach(el => {
