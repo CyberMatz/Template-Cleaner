@@ -882,61 +882,14 @@ class TemplateProcessor {
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
         
-        // Schritt 1: Finde alle CTA-artigen Buttons im HTML
-        // Ein CTA ist ein <a>-Tag mit background-color im inline style (= sieht aus wie Button)
-        const ctaRegex = /<a\b[^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
-        const ctaMatches = this.html.match(ctaRegex) || [];
-        
-        // Auch Table-basierte Buttons erkennen: <td> mit bgcolor + <a> drin
-        const tdButtonRegex = /<td\b[^>]*(?:bgcolor\s*=\s*["']#?[a-fA-F0-9]{3,6}["']|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*>[\s\S]*?<a\b[^>]*>[\s\S]*?<\/a>[\s\S]*?<\/td>/gi;
-        const tdMatches = this.html.match(tdButtonRegex) || [];
-        
-        // Vorhandene VML-Buttons erkennen
-        const vmlBlockRegex = /<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
-        const vmlBlocks = this.html.match(vmlBlockRegex) || [];
-        
-        // Zähle CTAs die KEINEN VML-Block in der Nähe haben
-        let ctasWithoutVml = 0;
-        let ctasFixed = 0;
-        let ctasMismatched = 0;
-        
-        // Für jeden CTA prüfen ob ein VML-Block davor existiert
-        // Strategie: Suche nach <a> Tags mit background-color die NICHT
-        // innerhalb von 500 Zeichen nach einem <!--[if mso]> Block stehen
-        
-        // Sammle alle CTA-Positionen
-        const allCtaPositions = [];
-        let match;
-        
-        // Reset regex
-        const ctaRegex2 = /<a\b[^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
-        while ((match = ctaRegex2.exec(this.html)) !== null) {
-            // Prüfe ob dies ein echtes Button-Styling hat (padding, display block/inline-block)
-            const fullMatch = match[0];
-            const style = fullMatch.match(/style\s*=\s*["']([^"']*)["']/i);
-            if (style && style[1]) {
-                const styleStr = style[1].toLowerCase();
-                const hasPadding = /padding/.test(styleStr);
-                const hasDisplay = /display\s*:\s*(block|inline-block)/.test(styleStr);
-                const hasBgColor = /background(?:-color)?\s*:/.test(styleStr);
-                
-                // Mindestens background + (padding ODER display) = Button
-                if (hasBgColor && (hasPadding || hasDisplay)) {
-                    allCtaPositions.push({
-                        index: match.index,
-                        endIndex: match.index + fullMatch.length,
-                        fullMatch: fullMatch,
-                        bgColor: match[1],
-                        innerText: match[2].replace(/<[^>]*>/g, '').trim()
-                    });
-                }
-            }
-        }
+        // Sammle alle CTA-Buttons (beide Typen)
+        const allCtaPositions = this._findAllCTAButtons();
         
         // Sammle alle VML-Block-Positionen
         const vmlPositions = [];
-        const vmlRegex2 = /<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
-        while ((match = vmlRegex2.exec(this.html)) !== null) {
+        let match;
+        const vmlRegex = /<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
+        while ((match = vmlRegex.exec(this.html)) !== null) {
             vmlPositions.push({
                 index: match.index,
                 endIndex: match.index + match[0].length,
@@ -944,13 +897,15 @@ class TemplateProcessor {
             });
         }
         
-        // Prüfe für jeden CTA ob ein VML-Block in der Nähe (davor, max 500 Zeichen) ist
+        let ctasFixed = 0;
+        let ctasMismatched = 0;
+        
+        // Prüfe für jeden CTA ob ein VML-Block in der Nähe ist
         for (const cta of allCtaPositions) {
             let hasVml = false;
             let vmlBlock = null;
             
             for (const vml of vmlPositions) {
-                // VML-Block sollte VOR dem CTA sein und maximal 500 Zeichen davor enden
                 if (vml.endIndex <= cta.index && (cta.index - vml.endIndex) < 500) {
                     hasVml = true;
                     vmlBlock = vml;
@@ -959,60 +914,52 @@ class TemplateProcessor {
             }
             
             if (!hasVml) {
-                // Kein VML-Block gefunden → Auto-Fix: VML-Block generieren
-                ctasWithoutVml++;
-                
-                // Extrahiere Button-Eigenschaften aus dem HTML-Button
-                const btnProps = this._extractButtonProperties(cta.fullMatch);
+                // Kein VML → Auto-Fix
+                const btnProps = this._extractButtonProperties(cta);
                 
                 if (btnProps && btnProps.href) {
-                    // Generiere VML-Block
                     const vmlCode = this._generateVmlButton(btnProps);
                     
-                    // Füge VML-Block VOR dem CTA ein
-                    // Suche den nächsten Container (td, div) der den Button enthält
-                    this.html = this.html.substring(0, cta.index) + 
+                    // Füge VML VOR dem CTA-Container ein
+                    const insertPos = cta.containerIndex || cta.index;
+                    this.html = this.html.substring(0, insertPos) + 
                                 vmlCode + '\n' +
-                                this.html.substring(cta.index);
+                                this.html.substring(insertPos);
                     
                     ctasFixed++;
                     
-                    // Aktualisiere Positionen (da wir Text eingefügt haben)
+                    // Aktualisiere Positionen
                     const offset = vmlCode.length + 1;
                     for (const otherCta of allCtaPositions) {
-                        if (otherCta.index > cta.index) {
+                        if (otherCta.index > insertPos) {
                             otherCta.index += offset;
                             otherCta.endIndex += offset;
+                            if (otherCta.containerIndex) otherCta.containerIndex += offset;
                         }
                     }
                     for (const otherVml of vmlPositions) {
-                        if (otherVml.index > cta.index) {
+                        if (otherVml.index > insertPos) {
                             otherVml.index += offset;
                             otherVml.endIndex += offset;
                         }
                     }
                 }
             } else if (vmlBlock) {
-                // VML vorhanden → Prüfe ob Link übereinstimmt
+                // VML vorhanden → Prüfe Link
                 const vmlHref = vmlBlock.fullMatch.match(/href\s*=\s*["']([^"']*)["']/i);
-                const ctaHref = cta.fullMatch.match(/href\s*=\s*["']([^"']*)["']/i);
-                
-                if (vmlHref && ctaHref && vmlHref[1] !== ctaHref[1]) {
-                    // Links stimmen nicht überein → Fix: VML-Link anpassen
+                if (vmlHref && cta.href && vmlHref[1] !== cta.href) {
                     const fixedVml = vmlBlock.fullMatch.replace(
                         /href\s*=\s*["'][^"']*["']/gi,
-                        'href="' + ctaHref[1] + '"'
+                        'href="' + cta.href + '"'
                     );
                     this.html = this.html.substring(0, vmlBlock.index) + 
                                 fixedVml + 
                                 this.html.substring(vmlBlock.endIndex);
-                    
                     ctasMismatched++;
                 }
             }
         }
         
-        // Ergebnis
         const totalCtas = allCtaPositions.length;
         
         if (totalCtas === 0) {
@@ -1031,69 +978,157 @@ class TemplateProcessor {
         }
     }
     
-    // Hilfsfunktion: Button-Eigenschaften aus HTML extrahieren
-    _extractButtonProperties(buttonHtml) {
+    // Finde alle CTA-Buttons: Typ A (Link mit bg) + Typ B (TD mit bgcolor + Link)
+    _findAllCTAButtons() {
+        const buttons = [];
+        let match;
+        
+        // Typ A: <a> mit background-color im eigenen style
+        const typeA = /<a\b[^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+        while ((match = typeA.exec(this.html)) !== null) {
+            const style = (match[0].match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const styleLower = style.toLowerCase();
+            if (/background(?:-color)?\s*:/.test(styleLower) && (/padding/.test(styleLower) || /display\s*:\s*(block|inline-block)/.test(styleLower))) {
+                const href = (match[0].match(/href\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                buttons.push({
+                    type: 'inline',
+                    index: match.index,
+                    endIndex: match.index + match[0].length,
+                    fullMatch: match[0],
+                    href: href
+                });
+            }
+        }
+        
+        // Typ B: <td> mit bgcolor-Attribut ODER background-color im style, text-align:center, enthält <a>
+        // Robustes Matching: Finde <td mit bgcolor, dann vorwärts zum nächsten </td>
+        const typeBOpen = /<td\b([^>]*(?:bgcolor\s*=\s*["'][^"']*["']|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*)>/gi;
+        while ((match = typeBOpen.exec(this.html)) !== null) {
+            const tdAttrs = match[1];
+            const tdOpenEnd = match.index + match[0].length;
+            
+            // Hat bgcolor-Attribut?
+            const bgcolorAttr = tdAttrs.match(/bgcolor\s*=\s*["']([^"']*)["']/i);
+            // Hat background-color im style?
+            const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const bgInStyle = tdStyle.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            
+            if (!bgcolorAttr && !bgInStyle) continue;
+            
+            // Ist es zentriert? (text-align:center im style ODER align="center" als Attribut)
+            const isCentered = /text-align\s*:\s*center/i.test(tdStyle) || /align\s*=\s*["']center["']/i.test(tdAttrs);
+            if (!isCentered) continue;
+            
+            // Finde das nächste </td> als Content-Ende
+            const closingIdx = this.html.indexOf('</td>', tdOpenEnd);
+            if (closingIdx < 0) continue;
+            
+            const tdInner = this.html.substring(tdOpenEnd, closingIdx);
+            const fullTdMatch = this.html.substring(match.index, closingIdx + 5);
+            
+            // Enthält einen <a>-Link?
+            const linkMatch = tdInner.match(/<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/i);
+            if (!linkMatch) continue;
+            
+            const href = linkMatch[1];
+            const linkText = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+            
+            // Überspringe wenn es ein Bild-Link ist (kein Text, nur <img>)
+            if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+            
+            // Überspringe wenn der Link selbst schon als Typ A erfasst wurde
+            const linkFullPos = this.html.indexOf(linkMatch[0], match.index);
+            const alreadyCaptured = buttons.some(b => b.type === 'inline' && 
+                Math.abs(b.index - linkFullPos) < 10);
+            if (alreadyCaptured) continue;
+            
+            buttons.push({
+                type: 'table',
+                index: match.index,
+                endIndex: match.index + fullTdMatch.length,
+                containerIndex: match.index,
+                fullMatch: fullTdMatch,
+                tdMatch: fullTdMatch,
+                href: href,
+                linkText: linkText,
+                bgColor: bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? '#' + bgInStyle[1] : '#333333')
+            });
+        }
+        
+        // Sortiere nach Position
+        buttons.sort((a, b) => a.index - b.index);
+        return buttons;
+    }
+    
+    // Hilfsfunktion: Button-Eigenschaften aus CTA-Objekt extrahieren
+    _extractButtonProperties(cta) {
         const props = {};
         
-        // href
-        const hrefMatch = buttonHtml.match(/href\s*=\s*["']([^"']*)["']/i);
-        props.href = hrefMatch ? hrefMatch[1] : '';
-        
-        // Text (ohne HTML-Tags)
-        const textMatch = buttonHtml.match(/>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/i);
-        props.text = textMatch ? textMatch[1].replace(/<[^>]*>/g, '').trim() : 'Button';
-        
-        // Style extrahieren
-        const styleMatch = buttonHtml.match(/style\s*=\s*["']([^"']*)["']/i);
-        const style = styleMatch ? styleMatch[1] : '';
-        
-        // Background-Color
-        const bgMatch = style.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
-        props.bgColor = bgMatch ? '#' + bgMatch[1] : '#333333';
-        // Normalisiere 3-stellige Hex zu 6-stellig
-        if (props.bgColor.length === 4) {
-            const c = props.bgColor;
-            props.bgColor = '#' + c[1]+c[1] + c[2]+c[2] + c[3]+c[3];
-        }
-        
-        // Text-Color
-        const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
-        props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
-        if (props.textColor.length === 4) {
-            const c = props.textColor;
-            props.textColor = '#' + c[1]+c[1] + c[2]+c[2] + c[3]+c[3];
-        }
-        
-        // Width
-        const widthMatch = style.match(/width\s*:\s*(\d+)/i);
-        props.width = widthMatch ? parseInt(widthMatch[1]) : 250;
-        
-        // Height / Padding-basierte Höhe
-        const heightMatch = style.match(/height\s*:\s*(\d+)/i);
-        if (heightMatch) {
-            props.height = parseInt(heightMatch[1]);
+        if (cta.type === 'table') {
+            // Tabellen-basierter Button
+            props.href = cta.href || '';
+            props.text = cta.linkText || 'Button';
+            
+            // BG-Color von td bgcolor
+            let bg = cta.bgColor || '#333333';
+            if (bg.indexOf('#') !== 0) bg = '#' + bg;
+            bg = bg.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
+            props.bgColor = bg;
+            
+            // Text-Color aus dem <a> style
+            const linkStyle = (cta.fullMatch.match(/<a[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const colorMatch = linkStyle.match(/color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
+            props.textColor = props.textColor.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
+            
+            // Dimensions aus td style
+            const tdStyle = (cta.tdMatch.match(/<td[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            
+            const widthMatch = tdStyle.match(/width\s*:\s*(\d+)/i);
+            props.width = widthMatch ? parseInt(widthMatch[1]) : 250;
+            
+            // Höhe aus padding berechnen
+            const padTopMatch = tdStyle.match(/padding-top\s*:\s*(\d+)/i);
+            const padBotMatch = tdStyle.match(/padding-bottom\s*:\s*(\d+)/i);
+            const padGenMatch = tdStyle.match(/padding\s*:\s*(\d+)/i);
+            const padTop = padTopMatch ? parseInt(padTopMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            const padBot = padBotMatch ? parseInt(padBotMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            props.height = padTop + padBot + 20;
+            
+            const radiusMatch = tdStyle.match(/border-radius\s*:\s*(\d+)/i);
+            props.borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
+            
+            const fontSizeMatch = (linkStyle || tdStyle).match(/font-size\s*:\s*(\d+)/i);
+            props.fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
+            
+            props.fontFamily = 'Arial';
+            props.fontWeight = cta.fullMatch.match(/<b\b|<strong\b|font-weight\s*:\s*bold/i) ? 'bold' : 'normal';
+            
         } else {
-            // Schätze Höhe aus padding
-            const paddingMatch = style.match(/padding\s*:\s*(\d+)/i);
-            const padV = paddingMatch ? parseInt(paddingMatch[1]) : 12;
-            props.height = padV * 2 + 20; // padding oben + unten + Schriftgröße
+            // Inline <a>-Button (original Logik)
+            const html = cta.fullMatch;
+            props.href = (html.match(/href\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            props.text = (html.match(/>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/i) || [])[1] || 'Button';
+            props.text = props.text.replace(/<[^>]*>/g, '').trim();
+            
+            const style = (html.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            
+            const bgMatch = style.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            props.bgColor = bgMatch ? '#' + bgMatch[1] : '#333333';
+            props.bgColor = props.bgColor.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
+            
+            const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
+            props.textColor = props.textColor.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
+            
+            props.width = parseInt((style.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
+            const heightMatch = style.match(/height\s*:\s*(\d+)/i);
+            props.height = heightMatch ? parseInt(heightMatch[1]) : (parseInt((style.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12') * 2 + 20);
+            props.borderRadius = parseInt((style.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
+            props.fontSize = parseInt((style.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+            props.fontFamily = ((style.match(/font-family\s*:\s*([^;'"]+)/i) || [])[1] || 'Arial').trim().split(',')[0].replace(/['"]/g, '');
+            props.fontWeight = (style.match(/font-weight\s*:\s*(\w+)/i) || [])[1] || 'bold';
         }
-        
-        // Border-Radius
-        const radiusMatch = style.match(/border-radius\s*:\s*(\d+)/i);
-        props.borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
-        
-        // Font-Size
-        const fontSizeMatch = style.match(/font-size\s*:\s*(\d+)/i);
-        props.fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
-        
-        // Font-Family
-        const fontFamilyMatch = style.match(/font-family\s*:\s*([^;'"]+)/i);
-        props.fontFamily = fontFamilyMatch ? fontFamilyMatch[1].trim().split(',')[0].replace(/['"]/g, '') : 'Arial';
-        
-        // Font-Weight
-        const fontWeightMatch = style.match(/font-weight\s*:\s*(\w+)/i);
-        props.fontWeight = fontWeightMatch ? fontWeightMatch[1] : 'bold';
         
         return props;
     }
@@ -1102,7 +1137,6 @@ class TemplateProcessor {
     _generateVmlButton(props) {
         const arcsize = props.borderRadius > 0 ? Math.round((props.borderRadius / Math.min(props.width, props.height)) * 100) + '%' : '0%';
         
-        // VML-Block: Outlook sieht nur diesen Teil
         let vml = '<!--[if mso]>\n';
         vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
         vml += 'href="' + props.href + '" ';
@@ -1393,6 +1427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let buttonsTabHtml = null;  // Separate HTML für Buttons Tab
     let buttonsHistory = [];  // Undo History Stack
     let buttonsPending = false;  // Pending Changes Flag
+    let manuallyMarkedButtons = [];  // Manuell als CTA markierte Link-Indizes
     
     // Phase 11: Global Commit Log & Action Counters
     let globalCommitLog = [];  // TAB_COMMITS History
@@ -6034,6 +6069,42 @@ function handleTrackingLinkReplace(linkId, newHref) {
         }
         html += '</div>'; // buttons-section
         
+        // === Manuelle Markierung: Alle nicht-erkannten Links anzeigen ===
+        const allLinks = extractAllLinksFromHTML(buttonsTabHtml);
+        // Filtere Links die bereits als CTA erkannt sind
+        const ctaHrefs = buttons.map(b => b.href);
+        const unrecognizedLinks = allLinks.filter(link => {
+            // Nur Links mit Text (keine Bild-Links), nicht bereits erkannt
+            if (!link.text) return false;
+            if (ctaHrefs.includes(link.href)) return false;
+            // Keine Tracking-Pixel oder leere Links
+            if (!link.href || link.href === '#') return false;
+            return true;
+        });
+        
+        if (unrecognizedLinks.length > 0) {
+            html += '<div class="buttons-section" style="margin-top: 16px;">';
+            html += '<details class="buttons-manual-section">';
+            html += '<summary class="buttons-manual-toggle">🔍 Nicht erkannte Links (' + unrecognizedLinks.length + ') – manuell als Button markieren</summary>';
+            html += '<div class="buttons-manual-list">';
+            html += '<p class="buttons-manual-hint">Falls ein Link ein Button sein sollte, klicke "Als CTA markieren". Das Tool baut dann automatisch einen Outlook-Button dafür.</p>';
+            
+            unrecognizedLinks.forEach((link, idx) => {
+                const linkId = 'UL' + String(idx + 1).padStart(3, '0');
+                html += '<div class="button-unrecognized-item" data-link-id="' + linkId + '">';
+                html += '<div class="button-unrecognized-info">';
+                html += '<span class="button-unrecognized-text">' + escapeHtml(link.text) + '</span>';
+                html += '<code class="button-unrecognized-href" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.length > 50 ? link.href.substring(0, 47) + '...' : link.href) + '</code>';
+                html += '</div>';
+                html += '<button class="btn-mark-as-cta" data-link-idx="' + link.globalIndex + '" data-link-id="' + linkId + '">🏷️ Als CTA markieren</button>';
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            html += '</details>';
+            html += '</div>';
+        }
+        
         // Undo Button
         if (buttonsHistory.length > 0) {
             html += '<div class="buttons-undo-section">';
@@ -6058,24 +6129,19 @@ function handleTrackingLinkReplace(linkId, newHref) {
     }
     
     // Extrahiere CTA-Buttons aus HTML (String-basiert, da VML in Comments)
+    // Erkennt: Typ A = <a> mit background-color, Typ B = <td bgcolor> mit <a> drin
     function extractCTAButtonsFromHTML(html) {
         if (!html) return [];
         
         const buttons = [];
         let btnIndex = 0;
         
-        // Finde alle <a>-Tags mit background-color (= CTA-Buttons)
-        const ctaRegex = /<a\b([^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
-        let match;
-        
         // Sammle VML-Blöcke
         const vmlBlocks = [];
         const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
         let vmlMatch;
         while ((vmlMatch = vmlRegex.exec(html)) !== null) {
-            // Extrahiere href aus VML
             const vmlHref = vmlMatch[1].match(/href\s*=\s*["']([^"']*)["']/i);
-            // Extrahiere Text aus VML (im <center> Tag)
             const vmlText = vmlMatch[1].match(/<center[^>]*>([\s\S]*?)<\/center>/i);
             vmlBlocks.push({
                 index: vmlMatch.index,
@@ -6086,12 +6152,40 @@ function handleTrackingLinkReplace(linkId, newHref) {
             });
         }
         
-        while ((match = ctaRegex.exec(html)) !== null) {
+        // Helper: Hex normalisieren
+        function normalizeHex(hex) {
+            if (!hex) return '#333333';
+            if (hex.indexOf('#') !== 0) hex = '#' + hex;
+            hex = hex.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/i, '#$1$1$2$2$3$3');
+            return hex.toLowerCase();
+        }
+        
+        // Helper: VML-Status prüfen
+        function checkVmlStatus(ctaPos, href, text) {
+            let hasVml = false;
+            let vmlStatus = 'missing';
+            for (const vml of vmlBlocks) {
+                if (vml.endIndex <= ctaPos && (ctaPos - vml.endIndex) < 500) {
+                    hasVml = true;
+                    const hrefOk = vml.href === href;
+                    const textOk = vml.text.toLowerCase() === text.toLowerCase();
+                    vmlStatus = (hrefOk && textOk) ? 'ok' : 'mismatch';
+                    break;
+                }
+            }
+            return { hasVml, vmlStatus };
+        }
+        
+        // === TYP A: <a> mit background-color im eigenen style ===
+        const typeARegex = /<a\b([^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
+        let match;
+        const typeAPositions = [];
+        
+        while ((match = typeARegex.exec(html)) !== null) {
             const fullTag = match[0];
             const attrs = match[1];
             const inner = match[2];
             
-            // Prüfe ob es wirklich ein Button ist (mindestens background + padding/display)
             const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
             if (!styleMatch) continue;
             const style = styleMatch[1].toLowerCase();
@@ -6099,85 +6193,221 @@ function handleTrackingLinkReplace(linkId, newHref) {
             const hasBg = /background(?:-color)?\s*:/.test(style);
             const hasPadding = /padding/.test(style);
             const hasDisplay = /display\s*:\s*(block|inline-block)/.test(style);
-            
             if (!hasBg || (!hasPadding && !hasDisplay)) continue;
             
             btnIndex++;
             const id = 'B' + String(btnIndex).padStart(3, '0');
-            
-            // Extrahiere Eigenschaften
             const hrefMatch = attrs.match(/href\s*=\s*["']([^"']*)["']/i);
             const href = hrefMatch ? hrefMatch[1] : '';
             const text = inner.replace(/<[^>]*>/g, '').trim();
             
-            // Background Color
             const bgMatch = style.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
-            let bgColor = bgMatch ? '#' + bgMatch[1] : '#333333';
-            if (bgColor.length === 4) { const c = bgColor; bgColor = '#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3]; }
-            
-            // Text Color
+            const bgColor = normalizeHex(bgMatch ? bgMatch[1] : '333333');
             const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
-            let textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
-            if (textColor.length === 4) { const c = textColor; textColor = '#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3]; }
+            const textColor = normalizeHex(colorMatch ? colorMatch[1] : 'ffffff');
+            const width = parseInt((style.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
+            let height = parseInt((style.match(/height\s*:\s*(\d+)/i) || [])[1] || '0');
+            if (!height) { const padV = parseInt((style.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12'); height = padV * 2 + 20; }
+            const borderRadius = parseInt((style.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
+            const fontSize = parseInt((style.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
             
-            // Width
-            const widthMatch = style.match(/width\s*:\s*(\d+)/i);
-            const width = widthMatch ? parseInt(widthMatch[1]) : 250;
+            const vml = checkVmlStatus(match.index, href, text);
             
-            // Height
-            const heightMatch = style.match(/height\s*:\s*(\d+)/i);
-            let height = 44;
-            if (heightMatch) {
-                height = parseInt(heightMatch[1]);
-            } else {
-                const paddingMatch = style.match(/padding\s*:\s*(\d+)/i);
-                const padV = paddingMatch ? parseInt(paddingMatch[1]) : 12;
-                height = padV * 2 + 20;
-            }
-            
-            // Border Radius
-            const radiusMatch = style.match(/border-radius\s*:\s*(\d+)/i);
-            const borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
-            
-            // Font Size
-            const fontSizeMatch = style.match(/font-size\s*:\s*(\d+)/i);
-            const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
-            
-            // Prüfe ob VML-Block in der Nähe
-            let hasVml = false;
-            let vmlStatus = 'missing'; // 'ok', 'mismatch', 'missing'
-            const ctaPos = match.index;
-            
-            for (const vml of vmlBlocks) {
-                if (vml.endIndex <= ctaPos && (ctaPos - vml.endIndex) < 500) {
-                    hasVml = true;
-                    // Prüfe ob href und text übereinstimmen
-                    const hrefMatch2 = vml.href === href;
-                    const textMatch2 = vml.text.toLowerCase() === text.toLowerCase();
-                    vmlStatus = (hrefMatch2 && textMatch2) ? 'ok' : 'mismatch';
-                    break;
-                }
-            }
-            
+            typeAPositions.push(match.index);
             buttons.push({
-                id: id,
-                href: href,
-                text: text,
-                bgColor: bgColor,
-                textColor: textColor,
-                width: width,
-                height: height,
-                borderRadius: borderRadius,
-                fontSize: fontSize,
-                hasVml: hasVml,
-                vmlStatus: vmlStatus,
-                matchIndex: match.index,
-                fullMatch: fullTag
+                id, type: 'inline', href, text, bgColor, textColor, width, height,
+                borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                matchIndex: match.index, fullMatch: fullTag
             });
         }
         
-        console.log('[INSPECTOR] Extracted ' + buttons.length + ' CTA buttons');
+        // === TYP B: <td> mit bgcolor/background-color + text-align:center + <a> drin ===
+        // Statt Regex auf komplette <td>...</td>: Finde alle <td mit bgcolor und dann vorwärts suchen
+        const tdOpenRegex = /<td\b([^>]*(?:bgcolor\s*=\s*["'][^"']*["']|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*)>/gi;
+        
+        while ((match = tdOpenRegex.exec(html)) !== null) {
+            const tdAttrs = match[1];
+            const tdOpenEnd = match.index + match[0].length;
+            
+            // Hat bgcolor oder background-color?
+            const bgcolorAttr = tdAttrs.match(/bgcolor\s*=\s*["']([^"']*)["']/i);
+            const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const bgInStyle = tdStyle.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            
+            if (!bgcolorAttr && !bgInStyle) continue;
+            
+            // Ist zentriert?
+            const isCentered = /text-align\s*:\s*center/i.test(tdStyle) || /align\s*=\s*["']center["']/i.test(tdAttrs);
+            if (!isCentered) continue;
+            
+            // Finde das nächste </td> als Content-Ende
+            const closingIdx = html.indexOf('</td>', tdOpenEnd);
+            if (closingIdx < 0) continue;
+            
+            const tdInner = html.substring(tdOpenEnd, closingIdx);
+            const fullTdMatch = html.substring(match.index, closingIdx + 5);
+            
+            // Enthält <a>-Link mit Text?
+            const linkMatch = tdInner.match(/<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/i);
+            if (!linkMatch) continue;
+            
+            const href = linkMatch[1];
+            const linkText = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+            
+            // Überspringe Bild-Links
+            if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+            
+            // Überspringe wenn bereits als Typ A erfasst
+            const linkPos = html.indexOf(linkMatch[0], match.index);
+            const alreadyCaptured = typeAPositions.some(p => Math.abs(p - linkPos) < 10);
+            if (alreadyCaptured) continue;
+            
+            btnIndex++;
+            const id = 'B' + String(btnIndex).padStart(3, '0');
+            
+            let bgColor = normalizeHex(bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? bgInStyle[1] : '333333'));
+            
+            // Text-Color aus dem <a> style
+            const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const tcMatch = linkStyleStr.match(/color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            const textColor = normalizeHex(tcMatch ? tcMatch[1] : '05141f');
+            
+            // Dimensions
+            const width = parseInt((tdStyle.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
+            const padTopMatch = tdStyle.match(/padding-top\s*:\s*(\d+)/i);
+            const padBotMatch = tdStyle.match(/padding-bottom\s*:\s*(\d+)/i);
+            const padGenMatch = tdStyle.match(/padding\s*:\s*(\d+)/i);
+            const padTop = padTopMatch ? parseInt(padTopMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            const padBot = padBotMatch ? parseInt(padBotMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            const height = padTop + padBot + 20;
+            const borderRadius = parseInt((tdStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
+            const fontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+            
+            const vml = checkVmlStatus(match.index, href, linkText);
+            
+            buttons.push({
+                id, type: 'table', href, text: linkText, bgColor, textColor, width, height,
+                borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                matchIndex: match.index, fullMatch: fullTdMatch
+            });
+        }
+        
+        // Sortiere nach Position im HTML
+        buttons.sort((a, b) => a.matchIndex - b.matchIndex);
+        
+        // IDs neu vergeben nach Sortierung
+        buttons.forEach((btn, i) => {
+            btn.id = 'B' + String(i + 1).padStart(3, '0');
+        });
+        
+        console.log('[INSPECTOR] Extracted ' + buttons.length + ' CTA buttons (inline: ' + 
+            buttons.filter(b => b.type === 'inline').length + ', table: ' + 
+            buttons.filter(b => b.type === 'table').length + ')');
         return buttons;
+    }
+    
+    // Extrahiere alle Links aus HTML (für manuelle Markierung)
+    function extractAllLinksFromHTML(html) {
+        if (!html) return [];
+        const links = [];
+        const linkRegex = /<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        let match;
+        let idx = 0;
+        while ((match = linkRegex.exec(html)) !== null) {
+            const text = match[2].replace(/<[^>]*>/g, '').trim();
+            links.push({
+                globalIndex: idx,
+                href: match[1],
+                text: text,
+                fullMatch: match[0],
+                position: match.index
+            });
+            idx++;
+        }
+        return links;
+    }
+    
+    // Manuell als CTA markieren: Fügt bgcolor auf die umgebende <td> ein
+    function handleMarkAsCta(linkGlobalIndex) {
+        const allLinks = extractAllLinksFromHTML(buttonsTabHtml);
+        const link = allLinks.find(l => l.globalIndex === linkGlobalIndex);
+        if (!link) {
+            showInspectorToast('⚠️ Link nicht gefunden');
+            return;
+        }
+        
+        // Speichere in History
+        buttonsHistory.push(buttonsTabHtml);
+        
+        let html = buttonsTabHtml;
+        
+        // Finde die umgebende <td> Zelle
+        const linkPos = html.indexOf(link.fullMatch);
+        if (linkPos < 0) {
+            showInspectorToast('⚠️ Link nicht im HTML gefunden');
+            return;
+        }
+        
+        // Suche rückwärts nach der umgebenden <td>
+        const beforeLink = html.substring(0, linkPos);
+        const tdOpenIdx = beforeLink.lastIndexOf('<td');
+        
+        if (tdOpenIdx >= 0) {
+            // Finde das Ende des <td> opening tags
+            const tdTagEnd = html.indexOf('>', tdOpenIdx);
+            if (tdTagEnd >= 0) {
+                const oldTdTag = html.substring(tdOpenIdx, tdTagEnd + 1);
+                
+                // Prüfe ob schon bgcolor vorhanden
+                if (!/bgcolor/i.test(oldTdTag)) {
+                    // Füge bgcolor="#333333" und align="center" hinzu
+                    let newTdTag = oldTdTag.replace(/<td\b/i, '<td bgcolor="#333333" align="center"');
+                    
+                    // Füge auch border-radius und padding hinzu wenn nicht vorhanden
+                    if (/style\s*=\s*["']/i.test(newTdTag)) {
+                        // Style existiert → ergänze
+                        newTdTag = newTdTag.replace(
+                            /style\s*=\s*["']/i,
+                            'style="border-radius: 6px; padding: 12px 24px; text-align: center; '
+                        );
+                    } else {
+                        // Kein Style → neues style hinzufügen
+                        newTdTag = newTdTag.replace(/<td\b/i, 
+                            '<td style="border-radius: 6px; padding: 12px 24px; text-align: center;"'
+                        );
+                    }
+                    
+                    html = html.substring(0, tdOpenIdx) + newTdTag + html.substring(tdTagEnd + 1);
+                } else {
+                    // bgcolor schon da → nur align="center" und text-align ergänzen
+                    let newTdTag = oldTdTag;
+                    if (!/align\s*=\s*["']center/i.test(newTdTag)) {
+                        newTdTag = newTdTag.replace(/<td\b/i, '<td align="center"');
+                    }
+                    if (/style\s*=\s*["']/i.test(newTdTag) && !/text-align\s*:\s*center/i.test(newTdTag)) {
+                        newTdTag = newTdTag.replace(/style\s*=\s*["']/i, 'style="text-align: center; ');
+                    }
+                    html = html.substring(0, tdOpenIdx) + newTdTag + html.substring(tdTagEnd + 1);
+                }
+            }
+        }
+        
+        // Merke als manuell markiert
+        manuallyMarkedButtons.push(linkGlobalIndex);
+        
+        buttonsTabHtml = html;
+        
+        // Check Pending
+        checkButtonsPending();
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Re-render
+        showButtonsTab(buttonsContent);
+        
+        showInspectorToast('🏷️ "' + (link.text.length > 20 ? link.text.substring(0, 17) + '...' : link.text) + '" als CTA markiert');
+        console.log('[INSPECTOR] Manually marked link as CTA:', link.text);
     }
     
     // Event Listener für Buttons Tab
@@ -6244,6 +6474,15 @@ function handleTrackingLinkReplace(linkId, newHref) {
         if (commitBtn) {
             commitBtn.addEventListener('click', handleButtonsCommit);
         }
+        
+        // Mark as CTA Buttons (manuelle Markierung)
+        document.querySelectorAll('.btn-mark-as-cta').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const linkIdx = parseInt(this.getAttribute('data-link-idx'));
+                handleMarkAsCta(linkIdx);
+            });
+        });
     }
     
     // Apply: Farbe/Breite/Höhe im VML-Block und HTML-Button ändern
