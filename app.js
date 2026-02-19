@@ -3996,17 +3996,11 @@ document.addEventListener('DOMContentLoaded', () => {
             previewReady = false;
             pendingPreviewMessages = []; // BUG #2 FIX: Array leeren
             
-            // Debug-Guard: Pruefe ob Script-Inhalt escaped wurde BEVOR srcdoc gesetzt wird
-            // FIX: Nur innerhalb von <script>-Tags pruefen, nicht im gesamten HTML
-            // (Templates enthalten regulaer &lt; z.B. in Preheader-Text oder Vergleichen)
-            const scriptTagMatch = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-            const scriptContent = scriptTagMatch ? scriptTagMatch[1] : '';
-            const scriptEscaped = scriptContent.includes('&amp;&amp;') || scriptContent.includes('&lt;');
-            
-            if (scriptEscaped) {
+            // OUTLOOK-FIX: Nur Script-Inhalt auf Escaping pruefen, nicht das gesamte HTML
+            const _scriptMatch = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+            const _scriptBody  = _scriptMatch ? _scriptMatch[1] : '';
+            if (_scriptBody.includes('&amp;&amp;') || _scriptBody.includes('&lt;')) {
                 console.error('[PREVIEW] Script content was HTML-escaped - aborting!');
-                console.error('[PREVIEW] Script contains &amp;&amp;:', scriptContent.includes('&amp;&amp;'));
-                console.error('[PREVIEW] Script contains &lt;:', scriptContent.includes('&lt;'));
                 showPreviewFallback();
                 return;
             }
@@ -4439,15 +4433,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Serialisiere zurÃ¼ck zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
         const annotatedHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         
-        // Debug-Guard: Pruefe ob Script-Inhalt escaped wurde (nur innerhalb <script>-Tags)
-        const _scriptCheck = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-        const _scriptBody = _scriptCheck ? _scriptCheck[1] : '';
-        if (_scriptBody.includes('&amp;&amp;') || _scriptBody.includes('&lt;')) {
-            console.error('[PREVIEW] Script content was HTML-escaped! This will cause SyntaxError.');
-            console.error('[PREVIEW] Found entities in script:', {
-                hasAmpAmp: _scriptBody.includes('&amp;&amp;'),
-                hasLt: _scriptBody.includes('&lt;')
+        // Debug-Guard: PrÃ¼fe ob Script escaped wurde
+        if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
+            console.error('[PREVIEW] Script was HTML-escaped! This will cause SyntaxError.');
+            console.error('[PREVIEW] Found entities in srcdoc:', {
+                hasAmpAmp: annotatedHtml.includes('&amp;&amp;'),
+                hasLt: annotatedHtml.includes('&lt;')
             });
+            // Trotzdem zurÃ¼ckgeben, aber mit Warning
         }
         
         console.log('[INSPECTOR] Generated annotated preview with ' + anchors.length + ' link annotations and ' + images.length + ' image annotations');
@@ -4829,22 +4822,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Handle Link Replace (Phase 7A)
-    // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace um MSO/VML nicht zu zerstoeren
+    // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace
     function handleTrackingLinkReplace(linkId, newHref) {
         console.log('[INSPECTOR] Replacing link:', linkId, 'with:', newHref);
-        
-        // Speichere in History
+
         trackingHistory.push(trackingTabHtml);
-        
-        // Finde n-tes href="..." in einem <a>-Tag (L001 -> Index 0, L002 -> Index 1, etc.)
+
         const linkIndex = parseInt(linkId.substring(1)) - 1;
-        
         const hrefRegex = /(<a\s[^>]*href=")([^"]*?)(")/gi;
         let currentIndex = 0;
         let oldHref = null;
         let found = false;
-        
+
         const result = trackingTabHtml.replace(hrefRegex, (fullMatch, before, href, after) => {
             if (currentIndex === linkIndex) {
                 oldHref = href;
@@ -4855,7 +4844,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentIndex++;
             return fullMatch;
         });
-        
+
         if (found) {
             trackingTabHtml = result;
             checkTrackingPending();
@@ -4868,53 +4857,48 @@ document.addEventListener('DOMContentLoaded', () => {
             showInspectorToast('Fehler: Link nicht gefunden.');
         }
     }
-    
-    // Handle Pixel Replace (Phase 7A)
-    // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace um MSO/VML nicht zu zerstoeren
+
+        // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace
     function handleTrackingPixelReplace(newUrl) {
         console.log('[INSPECTOR] Replacing pixel URL with:', newUrl);
-        
-        // Speichere in History
+
         trackingHistory.push(trackingTabHtml);
-        
-        // Suche Tracking-Pixel via String-Matching (gleiche Heuristik wie detectTrackingPixel)
-        // Strategie: Finde <img ...> Tags und pruefe ob sie Pixel-Merkmale haben
+
         const imgRegex = /<img([^>]*?)>/gi;
         let found = false;
         let oldSrc = null;
-        
+
         const result = trackingTabHtml.replace(imgRegex, (fullMatch, attrs) => {
-            if (found) return fullMatch; // Nur erstes Pixel ersetzen
-            
-            const widthMatch = attrs.match(/width="(\d+)"/i);
+            if (found) return fullMatch;
+
+            const widthMatch  = attrs.match(/width="(\d+)"/i);
             const heightMatch = attrs.match(/height="(\d+)"/i);
-            const styleMatch = attrs.match(/style="([^"]*)"/i);
-            const srcMatch = attrs.match(/src="([^"]*)"/i);
-            
-            const width = widthMatch ? widthMatch[1] : null;
+            const styleMatch  = attrs.match(/style="([^"]*)"/i);
+            const srcMatch    = attrs.match(/src="([^"]*)"/i);
+
+            const width  = widthMatch  ? widthMatch[1]  : null;
             const height = heightMatch ? heightMatch[1] : null;
-            const style = styleMatch ? styleMatch[1] : '';
-            const src = srcMatch ? srcMatch[1] : '';
-            
+            const style  = styleMatch  ? styleMatch[1]  : '';
+            const src    = srcMatch    ? srcMatch[1]    : '';
+
             const is1x1 = (width === '1' && height === '1') ||
                           style.includes('width:1px') ||
                           style.includes('height:1px');
-            
+
             const hasTrackingUrl = src.includes('track') ||
                                    src.includes('pixel') ||
-                                   src.includes('open') ||
+                                   src.includes('open')  ||
                                    src.includes('beacon');
-            
+
             if (is1x1 || hasTrackingUrl) {
                 oldSrc = src;
                 found = true;
-                // Ersetze nur den src-Wert im Attribut-String
                 const newAttrs = attrs.replace(/src="[^"]*"/, 'src="' + newUrl + '"');
                 return '<img' + newAttrs + '>';
             }
             return fullMatch;
         });
-        
+
         if (found) {
             trackingTabHtml = result;
             checkTrackingPending();
@@ -4927,9 +4911,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showInspectorToast('Fehler: Kein Tracking-Pixel gefunden.');
         }
     }
-    
-    // Handle Tracking Undo (Phase 7A)
-    function handleTrackingUndo() {
+
+        function handleTrackingUndo() {
         if (trackingHistory.length === 0) return;
         
         // Restore previous state
@@ -5076,62 +5059,56 @@ document.addEventListener('DOMContentLoaded', () => {
     // PHASE 8: TRACKING INSERT HANDLERS
     // ============================================
     
-    // Handle Pixel Insert (Phase 8A)
-    // OUTLOOK-FIX: Kein DOMParser - reiner String-Insert um MSO/VML nicht zu zerstoeren
+    // OUTLOOK-FIX: Kein DOMParser - reiner String-Insert
     function handleTrackingPixelInsert(pixelUrl) {
         console.log('[INSPECTOR] Inserting tracking pixel:', pixelUrl);
-        
-        // Speichere in History
+
         trackingHistory.push(trackingTabHtml);
-        
-        // Pruefe ob bereits ein 1x1 Pixel existiert (via String-Matching)
+
+        // Pruefen ob bereits ein 1x1 Pixel existiert
         const imgRegex = /<img([^>]*?)>/gi;
         let imgMatch;
         while ((imgMatch = imgRegex.exec(trackingTabHtml)) !== null) {
             const attrs = imgMatch[1];
-            const widthMatch = attrs.match(/width="(\d+)"/i);
+            const widthMatch  = attrs.match(/width="(\d+)"/i);
             const heightMatch = attrs.match(/height="(\d+)"/i);
-            const styleMatch = attrs.match(/style="([^"]*)"/i);
-            const width = widthMatch ? widthMatch[1] : null;
+            const styleMatch  = attrs.match(/style="([^"]*)"/i);
+            const width  = widthMatch  ? widthMatch[1]  : null;
             const height = heightMatch ? heightMatch[1] : null;
-            const style = styleMatch ? styleMatch[1] : '';
-            
-            const is1x1 = (width === '1' && height === '1') ||
-                          style.includes('width:1px') ||
-                          style.includes('height:1px');
-            
-            if (is1x1) {
-                showInspectorToast('Warnung: 1x1 Pixel existiert bereits. Bitte "Ersetzen" verwenden.');
+            const style  = styleMatch  ? styleMatch[1]  : '';
+
+            if ((width === '1' && height === '1') ||
+                style.includes('width:1px') ||
+                style.includes('height:1px')) {
+                showInspectorToast('1x1 Pixel existiert bereits. Bitte "Ersetzen" verwenden.');
                 trackingHistory.pop();
                 return;
             }
         }
-        
-        // Finde <body> Tag via String
+
         const bodyMatch = trackingTabHtml.match(/<body[^>]*>/i);
         if (!bodyMatch) {
             showInspectorToast('Fehler: Kein <body> Tag gefunden.');
             trackingHistory.pop();
             return;
         }
-        
-        // Pixel-Block als String (exakt wie in Spec)
-        const pixelBlock = '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">' +
-                           '<img src="' + pixelUrl + '" width="1" height="1" style="display:block;" alt="">' +
-                           '</div>';
-        
-        // Einfuegen direkt nach dem oeffnenden <body> Tag
+
+        const pixelBlock =
+            '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">' +
+            '<img src="' + pixelUrl + '" width="1" height="1" style="display:block;" alt="">' +
+            '</div>';
+
         const bodyTagEnd = trackingTabHtml.indexOf(bodyMatch[0]) + bodyMatch[0].length;
         trackingTabHtml = trackingTabHtml.slice(0, bodyTagEnd) + '\n' + pixelBlock + trackingTabHtml.slice(bodyTagEnd);
-        
+
         checkTrackingPending();
         updateInspectorPreview();
         showTrackingTab(trackingContent);
-        
+
         console.log('[INSPECTOR] Pixel inserted:', pixelUrl);
     }
-    
-    // Handle Link Insert (Phase 8B)
+
+        // Handle Link Insert (Phase 8B)
     function handleTrackingLinkInsert(targetUrl) {
         if (!trackingSelectedElement) {
             showInspectorToast('âš ï¸ Kein Element ausgewÃ¤hlt.');
