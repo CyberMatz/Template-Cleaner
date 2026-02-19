@@ -1,5 +1,5 @@
 // HTML Template QA Tool - Client-Side Processing
-// Keine Server-Komponenten - Alles lÃ¤uft im Browser
+// Keine Server-Komponenten - Alles läuft im Browser
 
 // Phase 13 P6: DEV_MODE Schalter (false = Produktion, true = Debug Logs)
 window.DEV_MODE = false;
@@ -56,7 +56,7 @@ class TemplateProcessor {
         // P08/P09: Image Alt-Attribute
         this.checkImageAltAttributes();
 
-        // P09: Ã–ffnerpixel (Read-only)
+        // P09: Öffnerpixel (Read-only)
         this.checkOpeningPixel();
 
         // P06: Anrede-Ersetzung
@@ -115,18 +115,18 @@ class TemplateProcessor {
 
             // Entferne ALLE Doctypes
             this.html = this.html.replace(doctypeRegex, '');
-            // FÃ¼ge korrekten ein
+            // Füge korrekten ein
             this.html = correctDoctype + '\n' + this.html.trim();
 
             if (count > 1) {
-                this.addCheck(id, 'FIXED', `DOCTYPE-Duplikate entfernt (${count} â†’ 1)`);
+                this.addCheck(id, 'FIXED', `DOCTYPE-Duplikate entfernt (${count} → 1)`);
             } else {
                 this.addCheck(id, 'FIXED', 'DOCTYPE korrigiert');
             }
         } else {
             // Kein DOCTYPE gefunden
             this.html = correctDoctype + '\n' + this.html.trim();
-            this.addCheck(id, 'FIXED', 'DOCTYPE eingefÃ¼gt');
+            this.addCheck(id, 'FIXED', 'DOCTYPE eingefügt');
         }
     }
 
@@ -140,7 +140,7 @@ class TemplateProcessor {
         if (htmlTagMatch) {
             const htmlTag = htmlTagMatch[0];
             
-            // PrÃ¼fe ob alle Attribute vorhanden sind
+            // Prüfe ob alle Attribute vorhanden sind
             const hasXmlns = htmlTag.includes('xmlns="http://www.w3.org/1999/xhtml"');
             const hasV = htmlTag.includes('xmlns:v=');
             const hasO = htmlTag.includes('xmlns:o=');
@@ -150,7 +150,7 @@ class TemplateProcessor {
             } else {
                 // Ersetze HTML-Tag
                 this.html = this.html.replace(/<html[^>]*>/i, `<html ${correctAttrs}>`);
-                this.addCheck(id, 'FIXED', 'HTML-Tag Attribute ergÃ¤nzt');
+                this.addCheck(id, 'FIXED', 'HTML-Tag Attribute ergänzt');
             }
         } else {
             this.addCheck(id, 'FAIL', 'HTML-Tag nicht gefunden');
@@ -183,15 +183,15 @@ class TemplateProcessor {
                 }
                 return '';
             });
-            this.addCheck(id, 'FIXED', `Pre-Header reduziert (${preheaderCount} â†’ 1)`);
+            this.addCheck(id, 'FIXED', `Pre-Header reduziert (${preheaderCount} → 1)`);
         } else if (preheaderCount === 0) {
-            // Kein Preheader - nur einfÃ¼gen wenn Text angegeben
+            // Kein Preheader - nur einfügen wenn Text angegeben
             if (this.preheaderText) {
                 const bodyMatch = this.html.match(/<body[^>]*>/i);
                 if (bodyMatch) {
                     const insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
                     this.html = this.html.slice(0, insertPos) + '\n' + `<div style="display: none;">${this.preheaderText}</div>` + '\n' + this.html.slice(insertPos);
-                    this.addCheck(id, 'FIXED', 'Pre-Header eingefÃ¼gt (Preheader-Text angegeben)');
+                    this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (Preheader-Text angegeben)');
                 } else {
                     this.addCheck(id, 'FAIL', 'Body-Tag nicht gefunden');
                 }
@@ -207,7 +207,7 @@ class TemplateProcessor {
         const headerCount = (this.html.match(/%header%/g) || []).length;
 
         if (headerCount === 1) {
-            // PrÃ¼fe ob Header im normalen HTML-Flow (nicht nur in MSO-Comments)
+            // Prüfe ob Header im normalen HTML-Flow (nicht nur in MSO-Comments)
             const htmlWithoutMSO = this.html.replace(/<!--\[if[^\]]*\]>([\s\S]*?)<!\[endif\]-->/gi, '');
             const headerInNormalFlow = htmlWithoutMSO.includes('%header%');
             
@@ -230,38 +230,38 @@ class TemplateProcessor {
                 }
                 return '';
             });
-            this.addCheck(id, 'FIXED', `Header-Platzhalter reduziert (${headerCount} â†’ 1)`);
+            this.addCheck(id, 'FIXED', `Header-Platzhalter reduziert (${headerCount} → 1)`);
         } else {
-            // Kein Header - einfÃ¼gen
+            // Kein Header - einfügen
             this.insertHeaderPlaceholder();
-            this.addCheck(id, 'FIXED', 'Header-Platzhalter eingefÃ¼gt');
+            this.addCheck(id, 'FIXED', 'Header-Platzhalter eingefügt');
         }
     }
 
-    // Header-Platzhalter einfÃ¼gen
+    // Header-Platzhalter einfügen
     insertHeaderPlaceholder() {
         const bodyMatch = this.html.match(/<body[^>]*>/i);
         if (!bodyMatch) return;
 
         let insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
 
-        // PrÃ¼fe ob Preheader vorhanden (direkt nach body)
+        // Prüfe ob Preheader vorhanden (direkt nach body)
         const afterBody = this.html.slice(insertPos);
         const preheaderMatch = afterBody.match(/^\s*<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>.*?<\/div>/i);
 
         if (preheaderMatch) {
-            // Header nach Preheader einfÃ¼gen
+            // Header nach Preheader einfügen
             insertPos += preheaderMatch[0].length;
         }
 
-        // DPL: Header INNERHALB des roten Hintergrund-Divs einfÃ¼gen
+        // DPL: Header INNERHALB des roten Hintergrund-Divs einfügen
         if (this.checklistType === 'dpl') {
             // Suche nach dem roten Hintergrund-Div (#6B140F)
             const afterPreheader = this.html.slice(insertPos);
             const redBgDivMatch = afterPreheader.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
             
             if (redBgDivMatch) {
-                // Header nach dem Ã¶ffnenden roten Div einfÃ¼gen
+                // Header nach dem öffnenden roten Div einfügen
                 insertPos += afterPreheader.indexOf(redBgDivMatch[0]) + redBgDivMatch[0].length;
             }
         }
@@ -273,14 +273,14 @@ class TemplateProcessor {
     // DPL: P05 - Outlook Conditional Comments
     checkOutlookConditionalComments() {
         const id = 'P05_OUTLOOK_CONDITIONAL';
-        // PrÃ¼fe ob der SPEZIFISCHE Haupt-MSO-Wrapper (mit bgcolor="#6B140F") existiert
+        // Prüfe ob der SPEZIFISCHE Haupt-MSO-Wrapper (mit bgcolor="#6B140F") existiert
         const hasMainMSOWrapper = this.html.includes('bgcolor="#6B140F"') && this.html.includes('<!--[if mso]>');
 
         if (hasMainMSOWrapper) {
             this.addCheck(id, 'PASS', 'Outlook Conditional Comments vorhanden');
         } else {
-            // FÃ¼ge MSO-Wrapper um den roten Hintergrund-Div ein
-            // MSO-Wrapper muss Header, Content UND Footer umschlieÃŸen
+            // Füge MSO-Wrapper um den roten Hintergrund-Div ein
+            // MSO-Wrapper muss Header, Content UND Footer umschließen
             
             // Finde den roten Hintergrund-Div
             const redDivMatch = this.html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
@@ -288,17 +288,17 @@ class TemplateProcessor {
             if (redDivMatch) {
                 const redDivStart = this.html.indexOf(redDivMatch[0]);
                 
-                // Finde das schlieÃŸende </div> des roten Divs
+                // Finde das schließende </div> des roten Divs
                 const afterRedDiv = this.html.slice(redDivStart);
                 let depth = 0;
                 let redDivEnd = -1;
                 
                 for (let i = 0; i < afterRedDiv.length; i++) {
-                    // PrÃ¼fe auf Ã¶ffnende <div Tags (mit beliebigen Attributen)
+                    // Prüfe auf öffnende <div Tags (mit beliebigen Attributen)
                     if (afterRedDiv.substr(i, 4) === '<div' && (afterRedDiv[i+4] === ' ' || afterRedDiv[i+4] === '>')) {
                         depth++;
                     } 
-                    // PrÃ¼fe auf schlieÃŸende </div> Tags
+                    // Prüfe auf schließende </div> Tags
                     else if (afterRedDiv.substr(i, 6) === '</div>') {
                         depth--;
                         if (depth === 0) {
@@ -309,14 +309,14 @@ class TemplateProcessor {
                 }
                 
                 if (redDivEnd > 0) {
-                    // FÃ¼ge MSO-Wrapper VOR dem roten Div und NACH dem roten Div ein
+                    // Füge MSO-Wrapper VOR dem roten Div und NACH dem roten Div ein
                     const msoOpen = '\n<!--[if mso]>\n<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center" bgcolor="#6B140F" style="background-color: #6B140F;">\n<tr>\n<td style="padding: 0;">\n<![endif]-->\n';
                     const msoClose = '\n<!--[if mso]>\n</td>\n</tr>\n</table>\n<![endif]-->\n';
                     
                     this.html = this.html.slice(0, redDivStart) + msoOpen + this.html.slice(redDivStart, redDivEnd) + msoClose + this.html.slice(redDivEnd);
-                    this.addCheck(id, 'FIXED', 'Outlook Conditional Comments um roten Div eingefÃ¼gt');
+                    this.addCheck(id, 'FIXED', 'Outlook Conditional Comments um roten Div eingefügt');
                 } else {
-                    this.addCheck(id, 'FAIL', 'SchlieÃŸendes </div> des roten Divs nicht gefunden');
+                    this.addCheck(id, 'FAIL', 'Schließendes </div> des roten Divs nicht gefunden');
                 }
             } else {
                 this.addCheck(id, 'FAIL', 'Roter Hintergrund-Div (#6B140F) nicht gefunden');
@@ -341,35 +341,35 @@ class TemplateProcessor {
                 }
                 return '';
             });
-            this.addCheck(id, 'FIXED', `Footer-Platzhalter reduziert (${footerCount} â†’ 1)`);
+            this.addCheck(id, 'FIXED', `Footer-Platzhalter reduziert (${footerCount} → 1)`);
         } else {
-            // Kein Footer - einfÃ¼gen
+            // Kein Footer - einfügen
             let insertPos;
             
-            // DPL: Footer INNERHALB des roten Hintergrund-Divs einfÃ¼gen
+            // DPL: Footer INNERHALB des roten Hintergrund-Divs einfügen
             if (this.checklistType === 'dpl') {
-                // Suche nach dem schlieÃŸenden Div des roten Hintergrunds
-                // Der rote Div enthÃ¤lt den weiÃŸen Content-Div, Footer kommt nach Content aber vor </div> des roten Divs
+                // Suche nach dem schließenden Div des roten Hintergrunds
+                // Der rote Div enthält den weißen Content-Div, Footer kommt nach Content aber vor </div> des roten Divs
                 
-                // Strategie: Finde den weiÃŸen Content-Div und dessen schlieÃŸendes </div>
-                // Footer kommt nach diesem </div> aber vor dem nÃ¤chsten </div> (roter Div)
+                // Strategie: Finde den weißen Content-Div und dessen schließendes </div>
+                // Footer kommt nach diesem </div> aber vor dem nächsten </div> (roter Div)
                 const whiteDivMatch = this.html.match(/<div[^>]*background-color:\s*#fafdfe[^>]*>/i);
                 
                 if (whiteDivMatch) {
                     const whiteDivStart = this.html.indexOf(whiteDivMatch[0]);
                     const afterWhiteDiv = this.html.slice(whiteDivStart);
                     
-                    // Finde das schlieÃŸende </div> des weiÃŸen Divs
-                    // Einfache Heuristik: ZÃ¤hle Ã¶ffnende und schlieÃŸende Divs
+                    // Finde das schließende </div> des weißen Divs
+                    // Einfache Heuristik: Zähle öffnende und schließende Divs
                     let depth = 0;
                     let whiteDivEnd = -1;
                     
                     for (let i = 0; i < afterWhiteDiv.length; i++) {
-                        // PrÃ¼fe auf Ã¶ffnende <div Tags (mit beliebigen Attributen)
+                        // Prüfe auf öffnende <div Tags (mit beliebigen Attributen)
                         if (afterWhiteDiv.substr(i, 4) === '<div' && (afterWhiteDiv[i+4] === ' ' || afterWhiteDiv[i+4] === '>')) {
                             depth++;
                         } 
-                        // PrÃ¼fe auf schlieÃŸende </div> Tags
+                        // Prüfe auf schließende </div> Tags
                         else if (afterWhiteDiv.substr(i, 6) === '</div>') {
                             depth--;
                             if (depth === 0) {
@@ -385,7 +385,7 @@ class TemplateProcessor {
                 }
             }
             
-            // Fallback: Vor </body> einfÃ¼gen
+            // Fallback: Vor </body> einfügen
             if (!insertPos) {
                 const bodyCloseMatch = this.html.match(/<\/body>/i);
                 if (bodyCloseMatch) {
@@ -396,9 +396,9 @@ class TemplateProcessor {
             if (insertPos) {
                 const footerWrapper = '\n<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center"><tr><td><center>%footer%</center></td></tr></table>\n';
                 this.html = this.html.slice(0, insertPos) + footerWrapper + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Footer-Platzhalter eingefÃ¼gt');
+                this.addCheck(id, 'FIXED', 'Footer-Platzhalter eingefügt');
             } else {
-                this.addCheck(id, 'FAIL', 'EinfÃ¼geposition fÃ¼r Footer nicht gefunden');
+                this.addCheck(id, 'FAIL', 'Einfügeposition für Footer nicht gefunden');
             }
         }
     }
@@ -433,7 +433,7 @@ class TemplateProcessor {
                         const beforeCtx = this.html.substring(Math.max(0, insertPosition - 50), insertPosition);
                         const afterCtx = '';  // Am Ende gibt es kein afterCtx
                         
-                        // Snippet fÃ¼r Anzeige (200 chars vor)
+                        // Snippet für Anzeige (200 chars vor)
                         const snippetBefore = this.html.substring(Math.max(0, insertPosition - 200), insertPosition);
                         
                         // Auto-Fix Event speichern
@@ -449,7 +449,7 @@ class TemplateProcessor {
                             snippetAfter: inserted
                         });
                         
-                        // Tag einfÃ¼gen
+                        // Tag einfügen
                         this.html += inserted;
                     }
                     fixed = true;
@@ -474,7 +474,7 @@ class TemplateProcessor {
 
         images.forEach(img => {
             if (!img.includes('alt=')) {
-                // Alt-Attribut fehlt - hinzufÃ¼gen mit generischem Text
+                // Alt-Attribut fehlt - hinzufügen mit generischem Text
                 const newImg = img.replace(/<img/, '<img alt="Image"');
                 this.html = this.html.replace(img, newImg);
                 fixed++;
@@ -485,7 +485,7 @@ class TemplateProcessor {
         });
 
         if (fixed > 0) {
-            this.addCheck(id, 'FIXED', `Alt-Attribute ergÃ¤nzt (${fixed} Bilder mit alt="Image")`);
+            this.addCheck(id, 'FIXED', `Alt-Attribute ergänzt (${fixed} Bilder mit alt="Image")`);
         } else if (emptyAlt > 0) {
             this.addCheck(id, 'WARN', `${emptyAlt} Bilder mit leerem Alt-Attribut (funktioniert, aber nicht optimal)`);
         } else {
@@ -493,11 +493,11 @@ class TemplateProcessor {
         }
     }
 
-    // P09: Ã–ffnerpixel (Read-only, erweitert)
+    // P09: Öffnerpixel (Read-only, erweitert)
     checkOpeningPixel() {
         const id = 'P09_OPENING_PIXEL';
         
-        // Suche nach typischen Ã–ffnerpixel-Mustern
+        // Suche nach typischen Öffnerpixel-Mustern
         const pixelPatterns = [
             /<img[^>]*src="[^"]*track[^"]*"[^>]*>/i,
             /<img[^>]*src="[^"]*pixel[^"]*"[^>]*>/i,
@@ -520,18 +520,18 @@ class TemplateProcessor {
         }
 
         if (pixelFound) {
-            // PrÃ¼fe ob Pixel versteckt ist (display:none oder width/height=1)
+            // Prüfe ob Pixel versteckt ist (display:none oder width/height=1)
             const isHidden = /display:\s*none/i.test(pixelElement) || 
                            (/width="1"/.test(pixelElement) && /height="1"/.test(pixelElement));
             
             if (isHidden) {
-                this.addCheck(id, 'PASS', 'Ã–ffnerpixel vorhanden und korrekt versteckt');
+                this.addCheck(id, 'PASS', 'Öffnerpixel vorhanden und korrekt versteckt');
             } else {
-                this.addCheck(id, 'WARN', 'Ã–ffnerpixel vorhanden, aber mÃ¶glicherweise sichtbar (sollte hidden sein)');
+                this.addCheck(id, 'WARN', 'Öffnerpixel vorhanden, aber möglicherweise sichtbar (sollte hidden sein)');
             }
         } else {
             // Read-only - kein FAIL, nur WARN
-            this.addCheck(id, 'WARN', 'Ã–ffnerpixel nicht gefunden (optional, keine automatische EinfÃ¼gung)');
+            this.addCheck(id, 'WARN', 'Öffnerpixel nicht gefunden (optional, keine automatische Einfügung)');
         }
     }
 
@@ -541,8 +541,8 @@ class TemplateProcessor {
         
         // Suche nach Anrede-Platzhaltern
         const anredePatterns = [
-            /Â§persÃ¶nlicheÂ§\s*Â§anredeÂ§/gi,
-            /Â§anredeÂ§/gi
+            /§persönliche§\s*§anrede§/gi,
+            /§anrede§/gi
         ];
 
         let found = false;
@@ -559,35 +559,35 @@ class TemplateProcessor {
             return;
         }
 
-        // PrÃ¼fe auf SonderfÃ¤lle (fremdsprachige BegrÃ¼ÃŸungen)
-        const sonderfall = /(?:Â¡Buenos dÃ­as|Buongiorno|Bonjour|Ciao|Hello|Hola)\s+Â§/i.test(this.html);
+        // Prüfe auf Sonderfälle (fremdsprachige Begrüßungen)
+        const sonderfall = /(?:¡Buenos días|Buongiorno|Bonjour|Ciao|Hello|Hola)\s+§/i.test(this.html);
 
         if (sonderfall) {
-            // Sonderfall: BegrÃ¼ÃŸung behalten, nur Platzhalter ersetzen
-            this.html = this.html.replace(/Â§persÃ¶nlicheÂ§\s*Â§anredeÂ§/gi, '%vorname% %nachname%!');
-            this.html = this.html.replace(/Â§anredeÂ§/gi, '%vorname%!');
-            this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (Sonderfall: Fremdsprachige BegrÃ¼ÃŸung)');
+            // Sonderfall: Begrüßung behalten, nur Platzhalter ersetzen
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, '%vorname% %nachname%!');
+            this.html = this.html.replace(/§anrede§/gi, '%vorname%!');
+            this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (Sonderfall: Fremdsprachige Begrüßung)');
             return;
         }
 
-        // Standardfall: PrÃ¼fe DU/SIE-Form anhand des Textes
+        // Standardfall: Prüfe DU/SIE-Form anhand des Textes
         const duForm = /(\bdu\b|\bdein|\bdir\b|\bdich\b)/i.test(this.html);
         const sieForm = /(\bSie\b|\bIhr\b|\bIhnen\b)/i.test(this.html);
 
         if (duForm) {
             // DU-Form
-            this.html = this.html.replace(/Â§persÃ¶nlicheÂ§\s*Â§anredeÂ§/gi, 'Hallo %vorname%');
-            this.html = this.html.replace(/Â§anredeÂ§/gi, 'Hallo %vorname%');
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, 'Hallo %vorname%');
+            this.html = this.html.replace(/§anrede§/gi, 'Hallo %vorname%');
             this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (DU-Form: "Hallo %vorname%")');
         } else if (sieForm) {
             // SIE-Form
-            this.html = this.html.replace(/Â§persÃ¶nlicheÂ§\s*Â§anredeÂ§/gi, '%briefanredeGeehrte%');
-            this.html = this.html.replace(/Â§anredeÂ§/gi, '%briefanredeGeehrte%');
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, '%briefanredeGeehrte%');
+            this.html = this.html.replace(/§anrede§/gi, '%briefanredeGeehrte%');
             this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (SIE-Form: "%briefanredeGeehrte%")');
         } else {
             // Nicht eindeutig - Default SIE-Form
-            this.html = this.html.replace(/Â§persÃ¶nlicheÂ§\s*Â§anredeÂ§/gi, '%briefanredeGeehrte%');
-            this.html = this.html.replace(/Â§anredeÂ§/gi, '%briefanredeGeehrte%');
+            this.html = this.html.replace(/§persönliche§\s*§anrede§/gi, '%briefanredeGeehrte%');
+            this.html = this.html.replace(/§anrede§/gi, '%briefanredeGeehrte%');
             this.addCheck(id, 'FIXED', 'Anrede-Platzhalter ersetzt (Default SIE-Form)');
         }
     }
@@ -611,19 +611,19 @@ class TemplateProcessor {
             return;
         }
 
-        // PrÃ¼fe ob Mobile-Optimierung vorhanden
+        // Prüfe ob Mobile-Optimierung vorhanden
         const hasFooterMobileStyles = /@media[^{]*\{[^}]*\.footer[^}]*font-size/i.test(this.html);
 
         if (!hasFooterMobileStyles) {
-            // Keine Mobile-Optimierung - hinzufÃ¼gen
+            // Keine Mobile-Optimierung - hinzufügen
             const headCloseMatch = this.html.match(/<\/head>/i);
             if (headCloseMatch) {
                 const insertPos = this.html.indexOf(headCloseMatch[0]);
                 const mobileStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    .footer-table { width: 100% !important; }\n    .footer-table td { font-size: 11px !important; padding: 15px !important; }\n}\n</style>\n`;
                 this.html = this.html.slice(0, insertPos) + mobileStyles + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Footer Mobile-Optimierung hinzugefÃ¼gt');
+                this.addCheck(id, 'FIXED', 'Footer Mobile-Optimierung hinzugefügt');
             } else {
-                this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Optimierung nicht hinzugefÃ¼gt');
+                this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Optimierung nicht hinzugefügt');
             }
         } else {
             this.addCheck(id, 'PASS', 'Footer Mobile Visibility korrekt');
@@ -651,7 +651,7 @@ class TemplateProcessor {
         if (trackingFound) {
             this.addCheck(id, 'PASS', 'Tracking-URLs vorhanden (Read-only)');
         } else {
-            this.addCheck(id, 'WARN', 'Keine Tracking-URLs gefunden (Read-only, keine automatische EinfÃ¼gung)');
+            this.addCheck(id, 'WARN', 'Keine Tracking-URLs gefunden (Read-only, keine automatische Einfügung)');
         }
     }
 
@@ -659,22 +659,22 @@ class TemplateProcessor {
     checkMobileResponsiveness() {
         const id = 'P11_MOBILE_RESPONSIVE';
         
-        // PrÃ¼fe auf Media Queries
+        // Prüfe auf Media Queries
         const hasMediaQueries = /@media[^{]*\{/i.test(this.html);
         
         if (!hasMediaQueries) {
-            // Keine Media Queries - Basis-Responsive Styles hinzufÃ¼gen
+            // Keine Media Queries - Basis-Responsive Styles hinzufügen
             const headCloseMatch = this.html.match(/<\/head>/i);
             if (headCloseMatch) {
                 const insertPos = this.html.indexOf(headCloseMatch[0]);
                 const responsiveStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    table[class="container"] { width: 100% !important; }\n    td[class="mobile-padding"] { padding: 10px !important; }\n    img { max-width: 100% !important; height: auto !important; }\n}\n</style>\n`;
                 this.html = this.html.slice(0, insertPos) + responsiveStyles + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Basis Mobile-Responsive Styles hinzugefÃ¼gt');
+                this.addCheck(id, 'FIXED', 'Basis Mobile-Responsive Styles hinzugefügt');
             } else {
-                this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Responsive Styles nicht hinzugefÃ¼gt');
+                this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Responsive Styles nicht hinzugefügt');
             }
         } else {
-            // Media Queries vorhanden - prÃ¼fe auf Mobile-optimierte Font-Sizes
+            // Media Queries vorhanden - prüfe auf Mobile-optimierte Font-Sizes
             const hasMobileFontSizes = /@media[^{]*\{[^}]*font-size/i.test(this.html);
             
             if (hasMobileFontSizes) {
@@ -689,11 +689,11 @@ class TemplateProcessor {
     checkViewportMetaTag() {
         const id = 'P11_VIEWPORT';
         
-        // PrÃ¼fe auf Viewport Meta-Tag
+        // Prüfe auf Viewport Meta-Tag
         const hasViewport = /<meta[^>]*name="viewport"[^>]*>/i.test(this.html);
         
         if (hasViewport) {
-            // PrÃ¼fe ob korrekte Werte gesetzt sind
+            // Prüfe ob korrekte Werte gesetzt sind
             const viewportMatch = this.html.match(/<meta[^>]*name="viewport"[^>]*content="([^"]*)"[^>]*>/i);
             if (viewportMatch) {
                 const content = viewportMatch[1];
@@ -703,19 +703,19 @@ class TemplateProcessor {
                 if (hasWidth && hasInitialScale) {
                     this.addCheck(id, 'PASS', 'Viewport Meta-Tag korrekt');
                 } else {
-                    this.addCheck(id, 'WARN', 'Viewport Meta-Tag vorhanden, aber mÃ¶glicherweise unvollstÃ¤ndig');
+                    this.addCheck(id, 'WARN', 'Viewport Meta-Tag vorhanden, aber möglicherweise unvollständig');
                 }
             }
         } else {
-            // Viewport Meta-Tag fehlt - hinzufÃ¼gen
+            // Viewport Meta-Tag fehlt - hinzufügen
             const headMatch = this.html.match(/<head[^>]*>/i);
             if (headMatch) {
                 const insertPos = this.html.indexOf(headMatch[0]) + headMatch[0].length;
                 const viewportTag = '\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
                 this.html = this.html.slice(0, insertPos) + viewportTag + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Viewport Meta-Tag hinzugefÃ¼gt');
+                this.addCheck(id, 'FIXED', 'Viewport Meta-Tag hinzugefügt');
             } else {
-                this.addCheck(id, 'FAIL', 'Head-Tag nicht gefunden, Viewport Meta-Tag nicht hinzugefÃ¼gt');
+                this.addCheck(id, 'FAIL', 'Head-Tag nicht gefunden, Viewport Meta-Tag nicht hinzugefügt');
             }
         }
     }
@@ -773,7 +773,7 @@ class TemplateProcessor {
         
         let wrongColors = [];
         
-        // PrÃ¼fe CSS background-color
+        // Prüfe CSS background-color
         let match;
         while ((match = bgColorRegex.exec(this.html)) !== null) {
             const color = '#' + match[1].toUpperCase();
@@ -782,7 +782,7 @@ class TemplateProcessor {
             }
         }
         
-        // PrÃ¼fe HTML bgcolor Attribute
+        // Prüfe HTML bgcolor Attribute
         while ((match = bgAttrRegex.exec(this.html)) !== null) {
             const color = '#' + match[1].toUpperCase();
             if (color !== dplColor.toUpperCase()) {
@@ -820,7 +820,7 @@ class TemplateProcessor {
         while ((match = linkRegex.exec(this.html)) !== null) {
             const linkText = match[1].trim();
             
-            // PrÃ¼fe ob generische Phrase
+            // Prüfe ob generische Phrase
             for (const phrase of genericPhrases) {
                 if (phrase.test(linkText)) {
                     links.push(linkText);
@@ -830,9 +830,9 @@ class TemplateProcessor {
         }
         
         if (links.length > 0) {
-            this.addCheck(id, 'WARN', `${links.length} Links mit generischen Phrasen gefunden (z.B. "${links[0]}" - besser: aussagekrÃ¤ftiger Text)`);
+            this.addCheck(id, 'WARN', `${links.length} Links mit generischen Phrasen gefunden (z.B. "${links[0]}" - besser: aussagekräftiger Text)`);
         } else {
-            this.addCheck(id, 'PASS', 'Link-Texte aussagekrÃ¤ftig');
+            this.addCheck(id, 'PASS', 'Link-Texte aussagekräftig');
         }
     }
 
@@ -849,7 +849,7 @@ class TemplateProcessor {
             return;
         }
         
-        // PrÃ¼fe ob HTML-Fallback vorhanden
+        // Prüfe ob HTML-Fallback vorhanden
         // Einfache Heuristik: Nach jedem VML-Button sollte ein <a> Tag folgen
         const vmlCount = vmlButtons.length;
         const fallbackPattern = /<!--\[if\s+mso\]>[^<]*<v:roundrect[^>]*>[\s\S]*?<!\[endif\]-->[\s\S]*?<a[^>]*>/gi;
@@ -857,7 +857,7 @@ class TemplateProcessor {
         const fallbackCount = fallbackMatches ? fallbackMatches.length : 0;
         
         if (fallbackCount < vmlCount) {
-            this.addCheck(id, 'WARN', `${vmlCount} VML-Buttons gefunden, aber nur ${fallbackCount} mit HTML-Fallback (Outlook-KompatibilitÃ¤t prÃ¼fen!)`);
+            this.addCheck(id, 'WARN', `${vmlCount} VML-Buttons gefunden, aber nur ${fallbackCount} mit HTML-Fallback (Outlook-Kompatibilität prüfen!)`);
         } else {
             this.addCheck(id, 'PASS', `CTA-Buttons mit Outlook-Fallback (${vmlCount} VML-Buttons)`);
         }
@@ -867,7 +867,7 @@ class TemplateProcessor {
     checkInlineStyles() {
         const id = 'P15_INLINE_STYLES';
         
-        // PrÃ¼fe ob wichtige Styles inline sind (nicht nur in <style> Tags)
+        // Prüfe ob wichtige Styles inline sind (nicht nur in <style> Tags)
         const hasStyleTag = /<style[^>]*>[\s\S]*?<\/style>/i.test(this.html);
         
         if (!hasStyleTag) {
@@ -875,26 +875,26 @@ class TemplateProcessor {
             return;
         }
         
-        // PrÃ¼fe ob kritische Styles in <style> Tags sind
+        // Prüfe ob kritische Styles in <style> Tags sind
         const styleTagContent = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
         if (styleTagContent) {
             const styles = styleTagContent[1];
             
-            // Kritische Styles die inline sein sollten (auÃŸer Media Queries)
+            // Kritische Styles die inline sein sollten (außer Media Queries)
             const hasCriticalStyles = /(?:width|height|padding|margin|background|color|font-size):/i.test(styles);
             const hasMediaQueries = /@media/i.test(styles);
             
             if (hasCriticalStyles && !hasMediaQueries) {
-                this.addCheck(id, 'WARN', 'Wichtige Styles in <style> Tags gefunden - sollten inline sein fÃ¼r bessere E-Mail-Client-KompatibilitÃ¤t');
+                this.addCheck(id, 'WARN', 'Wichtige Styles in <style> Tags gefunden - sollten inline sein für bessere E-Mail-Client-Kompatibilität');
             } else if (hasMediaQueries) {
-                this.addCheck(id, 'PASS', 'Styles in <style> Tags sind hauptsÃ¤chlich Media Queries (korrekt)');
+                this.addCheck(id, 'PASS', 'Styles in <style> Tags sind hauptsächlich Media Queries (korrekt)');
             } else {
                 this.addCheck(id, 'PASS', 'Inline Styles korrekt');
             }
         }
     }
 
-    // Check hinzufÃ¼gen
+    // Check hinzufügen
     addCheck(id, status, message) {
         this.checks.push({ id, status, message });
     }
@@ -949,7 +949,7 @@ class TemplateProcessor {
                 unresolved += `${check.id} ${check.status} - ${check.message}\n`;
             });
         } else {
-            unresolved += 'Keine ungelÃ¶sten Probleme.\n';
+            unresolved += 'Keine ungelösten Probleme.\n';
         }
 
         return {
@@ -962,9 +962,9 @@ class TemplateProcessor {
         };
     }
 
-    // Einfache SHA256-Implementierung (fÃ¼r Browser)
+    // Einfache SHA256-Implementierung (für Browser)
     sha256(str) {
-        // Vereinfachte Hash-Funktion fÃ¼r Demonstration
+        // Vereinfachte Hash-Funktion für Demonstration
         // In Produktion: crypto.subtle.digest verwenden
         let hash = 0;
         for (let i = 0; i < str.length; i++) {
@@ -1008,10 +1008,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadReport = document.getElementById('downloadReport');
     const downloadUnresolved = document.getElementById('downloadUnresolved');
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
-    const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');  // FIX: TDZ - frÃ¼h deklarieren
-    const showInspectorBtn = document.getElementById('showInspectorBtn');  // FIX: TDZ - frÃ¼h deklarieren
+    const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');  // FIX: TDZ - früh deklarieren
+    const showInspectorBtn = document.getElementById('showInspectorBtn');  // FIX: TDZ - früh deklarieren
     
-    // FIX: Alle weiteren DOM-Elemente frÃ¼h deklarieren (TDZ-Vermeidung)
+    // FIX: Alle weiteren DOM-Elemente früh deklarieren (TDZ-Vermeidung)
     const uploadBtn = document.getElementById('uploadBtn');
     const showDiffBtn = document.getElementById('showDiffBtn');
     const diffModal = document.getElementById('diffModal');
@@ -1086,8 +1086,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // State-Variablen (KEIN uploadedFile mehr!)
     let processingResult = null;
-    let selectedHtml = null;  // Single Source of Truth fÃ¼r HTML-Content
-    let selectedFilename = null;  // Single Source of Truth fÃ¼r Dateiname
+    let selectedHtml = null;  // Single Source of Truth für HTML-Content
+    let selectedFilename = null;  // Single Source of Truth für Dateiname
     
     // ===== PHASE C: ASSET REVIEW STATE =====
     let assetReviewOriginalHtml = null;
@@ -1096,35 +1096,35 @@ document.addEventListener('DOMContentLoaded', () => {
     let assetReviewActionLog = [];
     let assetReviewDirty = false;
     
-    // Globale Arrays fÃ¼r Match-Daten (rawTag + position)
+    // Globale Arrays für Match-Daten (rawTag + position)
     let assetImages = [];
     let assetPixels = [];
     
     // ===== INSPECTOR STATE =====
-    let currentWorkingHtml = null;  // Single Source of Truth fÃ¼r Inspector
+    let currentWorkingHtml = null;  // Single Source of Truth für Inspector
     let currentInspectorTab = 'tracking';  // Aktueller Tab
     
-    // Preview Ready State (fÃ¼r Message Queue)
+    // Preview Ready State (für Message Queue)
     let previewReady = false;  // Ist Preview iframe geladen?
-    let pendingPreviewMessages = [];  // BUG #2 FIX: Array statt einzelne Variable - mehrere Messages mÃ¶glich
+    let pendingPreviewMessages = [];  // BUG #2 FIX: Array statt einzelne Variable - mehrere Messages möglich
     
     // Editor Tab State (Phase 6)
-    let editorTabHtml = null;  // Separate HTML fÃ¼r Editor Tab
+    let editorTabHtml = null;  // Separate HTML für Editor Tab
     let editorHistory = [];  // Undo History Stack
-    let editorSelectedElement = null;  // Aktuell ausgewÃ¤hltes Element
+    let editorSelectedElement = null;  // Aktuell ausgewähltes Element
     let editorPending = false;  // Pending Changes Flag
     
     // Tracking Tab State (Phase 7A)
-    let trackingTabHtml = null;  // Separate HTML fÃ¼r Tracking Tab
+    let trackingTabHtml = null;  // Separate HTML für Tracking Tab
     let trackingHistory = [];  // Undo History Stack
     let trackingPending = false;  // Pending Changes Flag
     
     // Tracking Insert Mode State (Phase 8)
     let trackingInsertMode = false;  // Element-Auswahl aktiv
-    let trackingSelectedElement = null;  // AusgewÃ¤hltes Element fÃ¼r Link-Insert
+    let trackingSelectedElement = null;  // Ausgewähltes Element für Link-Insert
     
     // Images Tab State (Phase 7B)
-    let imagesTabHtml = null;  // Separate HTML fÃ¼r Images Tab
+    let imagesTabHtml = null;  // Separate HTML für Images Tab
     let imagesHistory = [];  // Undo History Stack
     let imagesPending = false;  // Pending Changes Flag
     
@@ -1151,7 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         blocksReplaced: 0
     };
 
-    // Datei-Upload Handler (change + input fÃ¼r Browser-KompatibilitÃ¤t)
+    // Datei-Upload Handler (change + input für Browser-Kompatibilität)
     const handleFileSelect = () => {
         const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (file) {
@@ -1161,8 +1161,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const anyPending = trackingPending || imagesPending || editorPending;
             if (anyPending) {
                 const discard = confirm(
-                    'âš ï¸ Es gibt nicht Ã¼bernommene Ã„nderungen in einem oder mehreren Tabs.\n\n' +
-                    'Wenn Sie eine neue Datei laden, gehen alle nicht Ã¼bernommenen Ã„nderungen verloren.\n\n' +
+                    '⚠️ Es gibt nicht übernommene Änderungen in einem oder mehreren Tabs.\n\n' +
+                    'Wenn Sie eine neue Datei laden, gehen alle nicht übernommenen Änderungen verloren.\n\n' +
                     'Fortfahren?'
                 );
                 
@@ -1184,7 +1184,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('[UPLOAD] FileReader finished, selectedHtml set (' + selectedHtml.length + ' chars)');
                 
                 // UI-Update ERST NACH FileReader fertig
-                fileName.textContent = `ðŸ“„ ${file.name}`;
+                fileName.textContent = `📄 ${file.name}`;
                 
                 // Process Button aktivieren
                 processBtn.disabled = false;
@@ -1201,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             reader.onerror = () => {
                 console.error('[UPLOAD] FileReader error');
-                showInspectorToast('âŒ Fehler beim Lesen der Datei.');
+                showInspectorToast('❌ Fehler beim Lesen der Datei.');
                 selectedHtml = null;
                 selectedFilename = null;
                 processBtn.disabled = true;
@@ -1218,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    // Beide Events registrieren (Browser-KompatibilitÃ¤t)
+    // Beide Events registrieren (Browser-Kompatibilität)
     fileInput.addEventListener('change', handleFileSelect);
     fileInput.addEventListener('input', handleFileSelect);
     
@@ -1235,19 +1235,19 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('PROCESS_CLICK', 'selectedHtml=', selectedHtml ? selectedHtml.length + ' chars' : 'null', 'disabled=', processBtn.disabled);
         
         if (!selectedHtml) {
-            showInspectorToast('âš ï¸ Bitte zuerst eine HTML-Datei auswÃ¤hlen.');
+            showInspectorToast('⚠️ Bitte zuerst eine HTML-Datei auswählen.');
             uploadHint.style.display = 'block';
             return;
         }
 
         processBtn.disabled = true;
-        processBtn.innerHTML = '<span class="btn-icon">â³</span> Verarbeite...';
+        processBtn.innerHTML = '<span class="btn-icon">⏳</span> Verarbeite...';
 
         try {
             // Verwende selectedHtml direkt (bereits eingelesen)
             const htmlContent = selectedHtml;
 
-            // Processor erstellen und ausfÃ¼hren
+            // Processor erstellen und ausführen
             const processor = new TemplateProcessor(
                 htmlContent,
                 getChecklistType(),
@@ -1296,20 +1296,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Diff-Button aktivieren
             showDiffBtn.disabled = false;
-            showDiffBtn.title = 'Ã„nderungen zwischen Original und Optimiert anzeigen';
+            showDiffBtn.title = 'Änderungen zwischen Original und Optimiert anzeigen';
 
             // Tag-Review Button aktivieren
             showTagReviewBtn.disabled = false;
-            showTagReviewBtn.title = 'HTML-Tags manuell Ã¼berprÃ¼fen und schlieÃŸen';
+            showTagReviewBtn.title = 'HTML-Tags manuell überprüfen und schließen';
             
             // Asset-Review Button aktivieren
             showAssetReviewBtn.disabled = false;
-            showAssetReviewBtn.title = 'Assets und Tracking manuell Ã¼berprÃ¼fen';
+            showAssetReviewBtn.title = 'Assets und Tracking manuell überprüfen';
             
             // Inspector Button aktivieren
             if (showInspectorBtn) {
                 showInspectorBtn.disabled = false;
-                showInspectorBtn.title = 'Inspector Ã¶ffnen';
+                showInspectorBtn.title = 'Inspector öffnen';
             }
             
             // Download Optimized Button aktivieren
@@ -1322,10 +1322,10 @@ document.addEventListener('DOMContentLoaded', () => {
             resultsSection.scrollIntoView({ behavior: 'smooth' });
 
         } catch (error) {
-            showInspectorToast('âŒ Fehler bei der Verarbeitung: ' + error.message);
+            showInspectorToast('❌ Fehler bei der Verarbeitung: ' + error.message);
         } finally {
             processBtn.disabled = false;
-            processBtn.innerHTML = '<span class="btn-icon">âš™ï¸</span> Template verarbeiten';
+            processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
         }
     });
 
@@ -1334,12 +1334,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (processingResult && selectedFilename) {
             // Phase 12 FIX 2: Download strikt aus currentWorkingHtml (kein Fallback)
             if (!currentWorkingHtml) {
-                showInspectorToast('âŒ Kein committed Stand vorhanden');
+                showInspectorToast('❌ Kein committed Stand vorhanden');
                 console.log('[DOWNLOAD] currentWorkingHtml is empty');
                 return;
             }
             
-            // Originalnamen verwenden und "_optimized" anhÃ¤ngen
+            // Originalnamen verwenden und "_optimized" anhängen
             const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
@@ -1351,7 +1351,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     downloadReport.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
-            // Originalnamen verwenden und "_report" anhÃ¤ngen
+            // Originalnamen verwenden und "_report" anhängen
             const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const baseName = nameParts.join('.');
@@ -1360,7 +1360,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Report mit MANUAL_ACTIONS erweitern
             let reportContent = processingResult.report;
             
-            // PrÃ¼fe ob autoFixes existiert
+            // Prüfe ob autoFixes existiert
             if (processingResult.autoFixes && processingResult.autoFixes.length > 0) {
                 reportContent += `\n\nAUTO_FIXES_COUNT=${processingResult.autoFixes.length}\n`;
                 reportContent += `AUTO_FIXES:\n`;
@@ -1369,7 +1369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             
-            // PrÃ¼fe ob manualActionLog existiert (nur wenn Tag-Review verwendet wurde)
+            // Prüfe ob manualActionLog existiert (nur wenn Tag-Review verwendet wurde)
             if (typeof manualActionLog !== 'undefined' && manualActionLog.length > 0) {
                 reportContent += `\n\nMANUAL_ACTIONS_COUNT=${manualActionLog.length}\n`;
                 reportContent += `MANUAL_ACTIONS:\n`;
@@ -1397,7 +1397,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     downloadUnresolved.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
-            // Originalnamen verwenden und "_unresolved" anhÃ¤ngen
+            // Originalnamen verwenden und "_unresolved" anhängen
             const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const baseName = nameParts.join('.');
@@ -1409,25 +1409,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Phase 11 B3: Final Output Download
     if (downloadFinalOutput) {
         downloadFinalOutput.addEventListener('click', () => {
-            // Phase 12 FIX 2: Strikt currentWorkingHtml prÃ¼fen
+            // Phase 12 FIX 2: Strikt currentWorkingHtml prüfen
             if (!currentWorkingHtml) {
-                showInspectorToast('âŒ Kein committed Stand vorhanden');
+                showInspectorToast('❌ Kein committed Stand vorhanden');
                 console.log('[FINAL OUTPUT] currentWorkingHtml is empty');
                 return;
             }
             
             if (!selectedFilename) {
-                showInspectorToast('âš ï¸ Bitte erst Template verarbeiten');
+                showInspectorToast('⚠️ Bitte erst Template verarbeiten');
                 return;
             }
             
-            // PrÃ¼fe ob pending Changes existieren
+            // Prüfe ob pending Changes existieren
             const anyPending = trackingPending || imagesPending || editorPending;
             
             if (anyPending) {
                 const confirmed = confirm(
-                    'Es gibt nicht Ã¼bernommene Ã„nderungen.\n\n' +
-                    'Final Output enthÃ¤lt nur den letzten Ã¼bernommenen Stand.\n\n' +
+                    'Es gibt nicht übernommene Änderungen.\n\n' +
+                    'Final Output enthält nur den letzten übernommenen Stand.\n\n' +
                     'Trotzdem herunterladen?'
                 );
                 
@@ -1471,7 +1471,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showDiffBtn.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
-            // Phase 11 B4: PrÃ¼fe ob pending Changes existieren
+            // Phase 11 B4: Prüfe ob pending Changes existieren
             const anyPending = trackingPending || imagesPending || editorPending;
             // diffPendingHint bereits oben deklariert
             
@@ -1490,7 +1490,7 @@ document.addEventListener('DOMContentLoaded', () => {
             diffOriginal.innerHTML = diff.original;
             diffOptimized.innerHTML = diff.optimized;
             
-            // Ã–ffne Modal
+            // Öffne Modal
             diffModal.style.display = 'flex';
             
             console.log('[DIFF] Opened with anyPending=' + anyPending);
@@ -1501,7 +1501,7 @@ document.addEventListener('DOMContentLoaded', () => {
         diffModal.style.display = 'none';
     });
 
-    // SchlieÃŸe Modal bei Klick auÃŸerhalb
+    // Schließe Modal bei Klick außerhalb
     diffModal.addEventListener('click', (e) => {
         if (e.target === diffModal) {
             diffModal.style.display = 'none';
@@ -1520,21 +1520,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const lineNum = (i + 1).toString().padStart(4, ' ');
             
             if (origLine === optLine) {
-                // UnverÃ¤ndert
+                // Unverändert
                 originalHtml += `<span class="diff-line-unchanged"><span class="line-num">${lineNum}</span>${escapeHtml(origLine)}\n</span>`;
                 optimizedHtml += `<span class="diff-line-unchanged"><span class="line-num">${lineNum}</span>${escapeHtml(optLine)}\n</span>`;
             } else {
-                // VerÃ¤ndert
+                // Verändert
                 if (origLine && !optLine) {
                     // Zeile entfernt
                     originalHtml += `<span class="diff-line-removed"><span class="line-num">${lineNum}</span>${escapeHtml(origLine)}\n</span>`;
                     optimizedHtml += `<span class="diff-line-empty"><span class="line-num">${lineNum}</span>\n</span>`;
                 } else if (!origLine && optLine) {
-                    // Zeile hinzugefÃ¼gt
+                    // Zeile hinzugefügt
                     originalHtml += `<span class="diff-line-empty"><span class="line-num">${lineNum}</span>\n</span>`;
                     optimizedHtml += `<span class="diff-line-added"><span class="line-num">${lineNum}</span>${escapeHtml(optLine)}\n</span>`;
                 } else {
-                    // Zeile geÃ¤ndert
+                    // Zeile geändert
                     originalHtml += `<span class="diff-line-changed"><span class="line-num">${lineNum}</span>${escapeHtml(origLine)}\n</span>`;
                     optimizedHtml += `<span class="diff-line-changed"><span class="line-num">${lineNum}</span>${escapeHtml(optLine)}\n</span>`;
                 }
@@ -1544,7 +1544,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return { original: originalHtml, optimized: optimizedHtml };
     }
 
-    // HTML escapen fÃ¼r sichere Anzeige
+    // HTML escapen für sichere Anzeige
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -1563,7 +1563,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showTagReviewBtn.disabled = true;
     showTagReviewBtn.title = 'Erst Template verarbeiten';
 
-    // Tag-Review Ã¶ffnen
+    // Tag-Review öffnen
     showTagReviewBtn.addEventListener('click', () => {
         if (!processingResult) {
             // Zeige Hinweis wenn noch nicht verarbeitet
@@ -1598,18 +1598,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updatePreview();
         
-        // Debug: PrÃ¼fe Button-Status
-        console.log('[DEBUG] Modal wird geÃ¶ffnet');
+        // Debug: Prüfe Button-Status
+        console.log('[DEBUG] Modal wird geöffnet');
         console.log('[DEBUG] undoLastAction Button:', undoLastAction);
         console.log('[DEBUG] undoLastAction.disabled:', undoLastAction ? undoLastAction.disabled : 'NULL');
         console.log('[DEBUG] commitReviewChanges Button:', document.getElementById('commitReviewChanges'));
         console.log('[DEBUG] commitReviewChanges.disabled:', document.getElementById('commitReviewChanges') ? document.getElementById('commitReviewChanges').disabled : 'NULL');
         
-        // Ã–ffne Modal
+        // Öffne Modal
         tagReviewModal.style.display = 'flex';
     });
 
-    // Modal schlieÃŸen
+    // Modal schließen
     closeTagReviewModal.addEventListener('click', () => {
         tagReviewModal.style.display = 'none';
     });
@@ -1620,22 +1620,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Ã„nderungen Ã¼bernehmen Button
+    // Änderungen übernehmen Button
     // commitReviewChangesBtn bereits oben deklariert (TDZ Fix)
     if (commitReviewChangesBtn) {
         console.log('[DEBUG] commitReviewChanges Button gefunden, Event-Listener wird gebunden');
         commitReviewChangesBtn.addEventListener('click', () => {
             console.log('[DEBUG] commitReviewChanges Button geklickt!');
             console.log('[DEBUG] processingResult:', processingResult);
-            console.log('[DEBUG] currentReviewHtml LÃ¤nge:', currentReviewHtml ? currentReviewHtml.length : 'NULL');
+            console.log('[DEBUG] currentReviewHtml Länge:', currentReviewHtml ? currentReviewHtml.length : 'NULL');
             
-            // Ãœbernehme currentReviewHtml in processingResult
+            // Übernehme currentReviewHtml in processingResult
             processingResult.optimizedHtml = currentReviewHtml;
             
-            // Zeige BestÃ¤tigung
+            // Zeige Bestätigung
             // reviewHint bereits oben deklariert
             if (reviewHint) {
-                reviewHint.textContent = 'âœ… Ãœbernommen. Downloads nutzen jetzt den neuen Stand.';
+                reviewHint.textContent = '✅ Übernommen. Downloads nutzen jetzt den neuen Stand.';
                 reviewHint.style.display = 'block';
                 reviewHint.style.backgroundColor = '#e8f5e9';
                 reviewHint.style.color = '#2e7d32';
@@ -1645,10 +1645,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 3000);
             } else {
                 console.warn('[DEBUG] reviewHint Element nicht gefunden');
-                showInspectorToast('âœ… Ãœbernommen. Downloads nutzen jetzt den neuen Stand.');
+                showInspectorToast('✅ Übernommen. Downloads nutzen jetzt den neuen Stand.');
             }
             
-            // Button deaktivieren bis zur nÃ¤chsten Ã„nderung
+            // Button deaktivieren bis zur nächsten Änderung
             commitReviewChangesBtn.disabled = true;
             console.log('[DEBUG] commitReviewChanges Button deaktiviert');
         });
@@ -1787,7 +1787,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Probleme anzeigen
     function displayProblems(problems) {
         if (problems.length === 0) {
-            tagProblemsList.innerHTML = '<div class="no-problems">âœ… Keine nicht geschlossenen Tags gefunden!</div>';
+            tagProblemsList.innerHTML = '<div class="no-problems">✅ Keine nicht geschlossenen Tags gefunden!</div>';
             return;
         }
         
@@ -1802,14 +1802,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="problem-details">
                         <strong>Position:</strong> Zeile ${problem.lineNumber}<br>
                         <strong>Anzahl:</strong> ${problem.unclosedCount} Tag(s) nicht geschlossen<br>
-                        <strong>Klartext:</strong> Dieses &lt;${problem.tagType}&gt;-Tag ist geÃ¶ffnet, aber nicht geschlossen.
+                        <strong>Klartext:</strong> Dieses &lt;${problem.tagType}&gt;-Tag ist geöffnet, aber nicht geschlossen.
                     </div>
                     <div class="problem-snippet">
                         <pre>${escapeHtml(problem.snippet)}</pre>
                     </div>
                     <div class="problem-actions">
                         <button class="btn-close-tag" data-tag="${problem.tagType}" data-index="${index}">
-                            Tag schlieÃŸen
+                            Tag schließen
                         </button>
                         <button class="btn-ignore-tag" data-index="${index}">
                             Ignorieren
@@ -1821,7 +1821,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         tagProblemsList.innerHTML = html;
         
-        // Event-Listener fÃ¼r Item-Klick (Fokus)
+        // Event-Listener für Item-Klick (Fokus)
         document.querySelectorAll('.problem-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 // Entferne active von allen Items
@@ -1839,7 +1839,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // Event-Listener fÃ¼r Buttons
+        // Event-Listener für Buttons
         document.querySelectorAll('.btn-close-tag').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();  // Verhindere Item-Klick
@@ -1863,7 +1863,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // autoFixesList bereits oben deklariert
         
         if (!autoFixes || autoFixes.length === 0) {
-            autoFixesList.innerHTML = '<div class="no-problems">âœ… Keine automatischen Tag-SchlieÃŸungen durchgefÃ¼hrt.</div>';
+            autoFixesList.innerHTML = '<div class="no-problems">✅ Keine automatischen Tag-Schließungen durchgeführt.</div>';
             return;
         }
         
@@ -1874,24 +1874,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="problem-item autofix-item" data-autofix-id="${autoFix.id}" data-snippet="${escapeHtml(snippetText)}">
                     <div class="problem-header">
                         <span class="problem-tag">${autoFix.inserted}</span>
-                        <span class="problem-status" style="background: #4caf50;">Auto-Closing eingefÃ¼gt</span>
+                        <span class="problem-status" style="background: #4caf50;">Auto-Closing eingefügt</span>
                     </div>
                     <div class="problem-details">
                         <strong>ID:</strong> ${autoFix.id}<br>
                         <strong>Tag-Typ:</strong> &lt;${autoFix.tag}&gt;<br>
-                        <strong>EingefÃ¼gt:</strong> ${escapeHtml(autoFix.inserted)}<br>
+                        <strong>Eingefügt:</strong> ${escapeHtml(autoFix.inserted)}<br>
                         <strong>Position:</strong> ${autoFix.insertPosition}
                     </div>
                     <div class="problem-snippet">
-                        <strong>Snippet (vor EinfÃ¼gung):</strong>
+                        <strong>Snippet (vor Einfügung):</strong>
                         <pre>${escapeHtml(autoFix.snippetBefore)}${escapeHtml(autoFix.inserted)}</pre>
                     </div>
                     <div class="problem-actions">
                         <button class="btn-undo-autofix" data-autofix-index="${index}">
-                            â†©ï¸ Undo diesen Fix
+                            ↩️ Undo diesen Fix
                         </button>
                         <button class="btn-accept-autofix" data-autofix-index="${index}">
-                            âœ… Behalten
+                            ✅ Behalten
                         </button>
                     </div>
                 </div>
@@ -1900,7 +1900,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         autoFixesList.innerHTML = html;
         
-        // Event-Listener fÃ¼r Item-Klick (Fokus)
+        // Event-Listener für Item-Klick (Fokus)
         document.querySelectorAll('.autofix-item').forEach((item, index) => {
             item.addEventListener('click', (e) => {
                 // Entferne active von allen Items
@@ -1908,7 +1908,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Setze active auf geklicktes Item
                 item.classList.add('active');
                 
-                // Jump to location (wenn insertPosition verfÃ¼gbar)
+                // Jump to location (wenn insertPosition verfügbar)
                 const autoFix = autoFixes[index];
                 if (autoFix && autoFix.insertPosition !== undefined) {
                     jumpToLocation(autoFix.insertPosition, autoFix.snippetBefore + autoFix.inserted);
@@ -1925,7 +1925,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // Event-Listener fÃ¼r Buttons
+        // Event-Listener für Buttons
         document.querySelectorAll('.btn-undo-autofix').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();  // Verhindere Item-Klick
@@ -1951,32 +1951,32 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (index === -1) {
             // Nicht gefunden
-            showInspectorToast('âš ï¸ Undo nicht eindeutig mÃ¶glich - Pattern nicht gefunden');
+            showInspectorToast('⚠️ Undo nicht eindeutig möglich - Pattern nicht gefunden');
             return;
         }
         
-        // PrÃ¼fe ob mehrfach vorhanden
+        // Prüfe ob mehrfach vorhanden
         const lastIndex = currentReviewHtml.lastIndexOf(searchPattern);
         if (index !== lastIndex) {
             // Mehrfach gefunden
-            showInspectorToast('âš ï¸ Undo nicht eindeutig mÃ¶glich - Pattern mehrfach vorhanden');
+            showInspectorToast('⚠️ Undo nicht eindeutig möglich - Pattern mehrfach vorhanden');
             return;
         }
         
-        // Speichere aktuellen State in History (fÃ¼r globalen Undo)
+        // Speichere aktuellen State in History (für globalen Undo)
         tagReviewHistory.push({
             html: currentReviewHtml,
             action: `AUTO_FIX_UNDONE - ${autoFix.id}`,
             element: autoFixElement.cloneNode(true)
         });
         
-        // Eindeutig gefunden â†’ inserted entfernen
+        // Eindeutig gefunden → inserted entfernen
         const before = currentReviewHtml.substring(0, index + autoFix.beforeCtx.length);
         const after = currentReviewHtml.substring(index + autoFix.beforeCtx.length + autoFix.inserted.length);
         currentReviewHtml = before + after;
         
         // Log
-        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${autoFix.id} rÃ¼ckgÃ¤ngig gemacht (User Action)`;
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${autoFix.id} rückgängig gemacht (User Action)`;
         manualActionLog.push(logEntry);
         
         // Update UI (nur dieses Element!)
@@ -1985,9 +1985,9 @@ document.addEventListener('DOMContentLoaded', () => {
         autoFixElement.querySelector('.btn-undo-autofix').disabled = true;
         autoFixElement.querySelector('.btn-accept-autofix').disabled = true;
         
-        // Markierung hinzufÃ¼gen
+        // Markierung hinzufügen
         const undoneLabel = document.createElement('span');
-        undoneLabel.textContent = 'â†©ï¸ RÃ¼ckgÃ¤ngig gemacht';
+        undoneLabel.textContent = '↩️ Rückgängig gemacht';
         undoneLabel.style.color = '#f44336';
         undoneLabel.style.fontWeight = 'bold';
         undoneLabel.style.marginLeft = '10px';
@@ -2008,7 +2008,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Auto-Fix akzeptieren (UI-State only)
     function acceptAutoFix(autoFixElement) {
-        // Speichere aktuellen State in History (fÃ¼r globalen Undo)
+        // Speichere aktuellen State in History (für globalen Undo)
         tagReviewHistory.push({
             html: currentReviewHtml,
             action: 'AUTO_FIX_ACCEPTED',
@@ -2020,15 +2020,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_ACCEPTED - ${autoFixId} akzeptiert (User Action)`;
         manualActionLog.push(logEntry);
         
-        // Nur UI-State Ã¤ndern (nur dieses Element!)
+        // Nur UI-State ändern (nur dieses Element!)
         autoFixElement.style.opacity = '0.6';
-        autoFixElement.style.backgroundColor = '#e8f5e9';  // GrÃ¼ner Hintergrund
+        autoFixElement.style.backgroundColor = '#e8f5e9';  // Grüner Hintergrund
         autoFixElement.querySelector('.btn-undo-autofix').disabled = true;
         autoFixElement.querySelector('.btn-accept-autofix').disabled = true;
         
-        // Markierung hinzufÃ¼gen
+        // Markierung hinzufügen
         const acceptedLabel = document.createElement('span');
-        acceptedLabel.textContent = 'âœ… Akzeptiert';
+        acceptedLabel.textContent = '✅ Akzeptiert';
         acceptedLabel.style.color = '#4caf50';
         acceptedLabel.style.fontWeight = 'bold';
         acceptedLabel.style.marginLeft = '10px';
@@ -2044,7 +2044,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Tag schlieÃŸen (mit exakten Boundary-Regeln)
+    // Tag schließen (mit exakten Boundary-Regeln)
     function closeTag(tagType, problemIndex) {
         // Boundary-Regeln je nach Tag-Typ
         const boundaries = {
@@ -2080,7 +2080,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (lastOpenPos === -1 || depth <= 0) {
-            showInspectorToast('âš ï¸ Kein offenes Tag gefunden.');
+            showInspectorToast('⚠️ Kein offenes Tag gefunden.');
             return;
         }
         
@@ -2098,35 +2098,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (boundaryPos === -1) {
-            // Kein sicherer EinfÃ¼gepunkt gefunden
-            showInspectorToast(`âš ï¸ Kein sicherer EinfÃ¼gepunkt fÃ¼r <${tagType}>. Bitte "Ignorieren" wÃ¤hlen.`);
+            // Kein sicherer Einfügepunkt gefunden
+            showInspectorToast(`⚠️ Kein sicherer Einfügepunkt für <${tagType}>. Bitte "Ignorieren" wählen.`);
             return;
         }
         
-        // PrÃ¼fe ob bereits ein Closing-Tag zwischen lastOpenPos und Boundary existiert
+        // Prüfe ob bereits ein Closing-Tag zwischen lastOpenPos und Boundary existiert
         const betweenHtml = searchHtml.substring(0, boundaryPos);
         const existingClose = betweenHtml.match(new RegExp(`</${tagType}>`, 'i'));
         
         if (existingClose) {
             // Nicht eindeutig
-            showInspectorToast(`âš ï¸ Nicht eindeutig: </${tagType}> bereits vorhanden. Bitte "Ignorieren" wÃ¤hlen.`);
+            showInspectorToast(`⚠️ Nicht eindeutig: </${tagType}> bereits vorhanden. Bitte "Ignorieren" wählen.`);
             return;
         }
         
-        // Speichere aktuellen State in History (fÃ¼r Undo)
+        // Speichere aktuellen State in History (für Undo)
         tagReviewHistory.push(currentReviewHtml);
         
-        // Berechne absolute EinfÃ¼geposition (direkt VOR der Boundary)
+        // Berechne absolute Einfügeposition (direkt VOR der Boundary)
         const insertPos = lastOpenPos + boundaryPos;
         
-        // Speichere Vorher-Snippet (Â±10 Zeilen um EinfÃ¼gestelle)
+        // Speichere Vorher-Snippet (±10 Zeilen um Einfügestelle)
         const lines = currentReviewHtml.split('\n');
         let currentLine = currentReviewHtml.substring(0, insertPos).split('\n').length;
         const snippetStart = Math.max(0, currentLine - 10);
         const snippetEnd = Math.min(lines.length, currentLine + 10);
         const beforeSnippet = lines.slice(snippetStart, snippetEnd).join('\n');
         
-        // FÃ¼ge Closing-Tag ein
+        // Füge Closing-Tag ein
         currentReviewHtml = currentReviewHtml.substring(0, insertPos) + 
                            `</${tagType}>` + 
                            currentReviewHtml.substring(insertPos);
@@ -2135,7 +2135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_MANUAL_TAG_CLOSE - <${tagType}> Tag geschlossen (User Action)`;
         manualActionLog.push(logEntry);
         
-        // Nachher-Snippet (Â±10 Zeilen um EinfÃ¼gestelle)
+        // Nachher-Snippet (±10 Zeilen um Einfügestelle)
         const linesAfter = currentReviewHtml.split('\n');
         const afterSnippet = linesAfter.slice(snippetStart, snippetEnd + 1).join('\n');
         
@@ -2160,7 +2160,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tag ignorieren
     function ignoreTag(index, tagType, problemElement) {
-        // Keine HTML-Ã„nderung, nur visuell
+        // Keine HTML-Änderung, nur visuell
         problemElement.style.opacity = '0.3';
         problemElement.style.pointerEvents = 'none';
         problemElement.style.textDecoration = 'line-through';
@@ -2170,10 +2170,10 @@ document.addEventListener('DOMContentLoaded', () => {
         manualActionLog.push(logEntry);
         
         // BUG #8 FIX: updateActionCounter() NICHT aufrufen und Undo-Button NICHT aktivieren.
-        // "Ignorieren" Ã¤ndert nichts am HTML â€“ es gibt also nichts rÃ¼ckgÃ¤ngig zu machen.
-        // Nur den Commit-Button updaten falls nÃ¶tig (zÃ¤hlt nicht als echte Aktion).
+        // "Ignorieren" ändert nichts am HTML – es gibt also nichts rückgängig zu machen.
+        // Nur den Commit-Button updaten falls nötig (zählt nicht als echte Aktion).
         if (commitReviewChangesBtn) {
-            // Commit nur aktivieren wenn echte HTML-Ã„nderungen vorhanden (History > 0)
+            // Commit nur aktivieren wenn echte HTML-Änderungen vorhanden (History > 0)
             commitReviewChangesBtn.disabled = tagReviewHistory.length === 0;
         }
     }
@@ -2192,7 +2192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // HTML Beautifier (nur fÃ¼r Anzeige, Ã¤ndert NICHT currentReviewHtml)
+    // HTML Beautifier (nur für Anzeige, ändert NICHT currentReviewHtml)
     function formatHtmlForDisplay(htmlString) {
         if (!htmlString) return '';
         
@@ -2228,12 +2228,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isSelfClosing = selfClosingTags.includes(tagName) || tagContent.endsWith('/>');
                 const isInline = inlineTags.includes(tagName);
                 
-                // EinrÃ¼ckung anpassen
+                // Einrückung anpassen
                 if (isClosingTag) {
                     indentLevel = Math.max(0, indentLevel - 1);
                 }
                 
-                // Neue Zeile vor Tag (auÃŸer inline oder nach closing tag)
+                // Neue Zeile vor Tag (außer inline oder nach closing tag)
                 if (!isInline && (formatted.length > 0 && !lastWasClosingTag)) {
                     formatted += '\n' + INDENT.repeat(indentLevel);
                 } else if (isClosingTag && !isInline) {
@@ -2242,7 +2242,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 formatted += tagContent;
                 
-                // EinrÃ¼ckung erhÃ¶hen fÃ¼r nÃ¤chstes Element
+                // Einrückung erhöhen für nächstes Element
                 if (!isClosingTag && !isSelfClosing && !isInline) {
                     indentLevel++;
                 }
@@ -2253,7 +2253,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Innerhalb eines Tags
                 tagContent += char;
             } else {
-                // Text-Inhalt (auÃŸerhalb von Tags)
+                // Text-Inhalt (außerhalb von Tags)
                 const trimmed = char.trim();
                 if (trimmed) {
                     formatted += char;
@@ -2277,18 +2277,18 @@ document.addEventListener('DOMContentLoaded', () => {
             codePreviewContainer.style.display = 'block';
             webPreviewContainer.style.display = 'none';
             
-            // 2. Extrahiere Ausschnitt um insertPosition (Â±400 Zeichen)
+            // 2. Extrahiere Ausschnitt um insertPosition (±400 Zeichen)
             const contextLength = 400;
             const startPos = Math.max(0, insertPosition - contextLength);
             const endPos = Math.min(currentReviewHtml.length, insertPosition + contextLength);
             const beforeInsert = currentReviewHtml.substring(startPos, insertPosition);
             const afterInsert = currentReviewHtml.substring(insertPosition, endPos);
             
-            // 3. Formatiere Ausschnitt fÃ¼r bessere Lesbarkeit
+            // 3. Formatiere Ausschnitt für bessere Lesbarkeit
             const snippetToFormat = beforeInsert + afterInsert;
             const formattedSnippet = formatHtmlForDisplay(snippetToFormat);
             
-            // 4. Markiere EinfÃ¼gestelle mit >>> INSERT HERE <<<
+            // 4. Markiere Einfügestelle mit >>> INSERT HERE <<<
             // Finde die Position im formatierten Snippet
             const formattedBeforeLength = formatHtmlForDisplay(beforeInsert).length;
             const highlightedSnippet = 
@@ -2310,9 +2310,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }, 50);
             
-            // 6. Iframe-Scroll mit temporÃ¤rem Marker (nur transient!)
+            // 6. Iframe-Scroll mit temporärem Marker (nur transient!)
             try {
-                // Erstelle temporÃ¤ren Marker (nur fÃ¼r iframe, nie im Download!)
+                // Erstelle temporären Marker (nur für iframe, nie im Download!)
                 const markerId = '__manus_temp_marker__';
                 const htmlWithMarker = 
                     currentReviewHtml.substring(0, insertPosition) + 
@@ -2355,15 +2355,15 @@ document.addEventListener('DOMContentLoaded', () => {
             webPreviewFrame.srcdoc = currentReviewHtml;
             
             // Code-Preview: NICHT den kompletten HTML anzeigen
-            // Nur ein Hinweis, dass kompletter HTML per Button verfÃ¼gbar ist
+            // Nur ein Hinweis, dass kompletter HTML per Button verfügbar ist
             codePreviewContent.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">' +
-                '<p>ðŸ“ Code-Snippets werden nach jeder Aktion angezeigt.</p>' +
+                '<p>📝 Code-Snippets werden nach jeder Aktion angezeigt.</p>' +
                 '<button id="showFullHtmlBtn" style="margin-top: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
-                'ðŸ“„ Kompletten HTML anzeigen' +
+                '📄 Kompletten HTML anzeigen' +
                 '</button>' +
                 '</div>';
             
-            // Event-Listener fÃ¼r "Kompletten HTML anzeigen" Button
+            // Event-Listener für "Kompletten HTML anzeigen" Button
             const showFullHtmlBtn = document.getElementById('showFullHtmlBtn');
             if (showFullHtmlBtn) {
                 showFullHtmlBtn.addEventListener('click', () => {
@@ -2372,7 +2372,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     function renderHtml() {
                         const htmlToShow = isFormatted ? formatHtmlForDisplay(currentReviewHtml) : currentReviewHtml;
-                        const toggleLabel = isFormatted ? 'ðŸ“ Original anzeigen' : 'âœ¨ Formatiert anzeigen';
+                        const toggleLabel = isFormatted ? '📝 Original anzeigen' : '✨ Formatiert anzeigen';
                         
                         codePreviewContent.innerHTML = 
                             '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">' +
@@ -2380,7 +2380,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             toggleLabel +
                             '</button>' +
                             '<button id="hideFullHtmlBtn" style="padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
-                            'âœ–ï¸ SchlieÃŸen' +
+                            '✖️ Schließen' +
                             '</button>' +
                             '</div>' +
                             '<pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 600px; overflow-y: auto; padding: 15px; background: #f5f5f5; border-radius: 4px; font-family: monospace; font-size: 12px; line-height: 1.5;">' +
@@ -2396,7 +2396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                         }
                         
-                        // SchlieÃŸen-Button Event-Listener
+                        // Schließen-Button Event-Listener
                         const hideFullHtmlBtn = document.getElementById('hideFullHtmlBtn');
                         if (hideFullHtmlBtn) {
                             hideFullHtmlBtn.addEventListener('click', () => {
@@ -2412,7 +2412,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Fallback auf Code-Preview bei Fehler
             console.error('Preview rendering failed:', error);
             showCodePreview.click();
-            webPreviewContainer.innerHTML = '<div class="preview-error">âš ï¸ Web-Rendering fehlgeschlagen. Code-Preview wird angezeigt.</div>';
+            webPreviewContainer.innerHTML = '<div class="preview-error">⚠️ Web-Rendering fehlgeschlagen. Code-Preview wird angezeigt.</div>';
         }
     }
     
@@ -2423,10 +2423,10 @@ document.addEventListener('DOMContentLoaded', () => {
     showAssetReviewBtn.disabled = true;
     showAssetReviewBtn.title = 'Erst Template verarbeiten';
     
-    // Asset-Review Ã¶ffnen
+    // Asset-Review öffnen
     showAssetReviewBtn.addEventListener('click', () => {
         if (!processingResult) {
-            showInspectorToast('âš ï¸ Bitte erst Template verarbeiten.');
+            showInspectorToast('⚠️ Bitte erst Template verarbeiten.');
             return;
         }
         
@@ -2437,11 +2437,11 @@ document.addEventListener('DOMContentLoaded', () => {
         assetReviewActionLog = [];
         assetReviewDirty = false;
         
-        // Buttons zurÃ¼cksetzen
+        // Buttons zurücksetzen
         assetUndoBtn.disabled = true;
         assetCommitBtn.disabled = true;
         
-        // Counter zurÃ¼cksetzen
+        // Counter zurücksetzen
         updateAssetActionsCounter();
         
         // Analysiere und zeige Assets
@@ -2450,15 +2450,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updateAssetPreview();
         
-        // Ã–ffne Modal
+        // Öffne Modal
         assetReviewModal.style.display = 'flex';
     });
     
-    // Modal schlieÃŸen
+    // Modal schließen
     closeAssetReviewModal.addEventListener('click', () => {
         // Warnung wenn uncommitted changes
         if (assetReviewDirty) {
-            const confirm = window.confirm('âš ï¸ Es gibt nicht Ã¼bernommene Ã„nderungen. Wirklich schlieÃŸen?');
+            const confirm = window.confirm('⚠️ Es gibt nicht übernommene Änderungen. Wirklich schließen?');
             if (!confirm) return;
             
             // Sauberes Verwerfen: Reset staged state
@@ -2467,11 +2467,11 @@ document.addEventListener('DOMContentLoaded', () => {
             assetReviewActionLog = [];
             assetReviewDirty = false;
             
-            // Buttons zurÃ¼cksetzen
+            // Buttons zurücksetzen
             assetUndoBtn.disabled = true;
             assetCommitBtn.disabled = true;
             
-            // Counter zurÃ¼cksetzen
+            // Counter zurücksetzen
             updateAssetActionsCounter();
             
             console.log('[ASSET] Staged changes discarded');
@@ -2479,7 +2479,7 @@ document.addEventListener('DOMContentLoaded', () => {
         assetReviewModal.style.display = 'none';
     });
     
-    // Overlay-Klick zum SchlieÃŸen
+    // Overlay-Klick zum Schließen
     assetReviewModal.addEventListener('click', (e) => {
         if (e.target === assetReviewModal) {
             closeAssetReviewModal.click();
@@ -2518,13 +2518,13 @@ document.addEventListener('DOMContentLoaded', () => {
             assetCodePreviewContent.textContent = formatHtmlForDisplay(assetReviewStagedHtml);
         } catch (error) {
             console.error('Asset Preview rendering failed:', error);
-            assetWebPreviewContainer.innerHTML = '<div class="preview-error">âš ï¸ Web-Rendering fehlgeschlagen.</div>';
+            assetWebPreviewContainer.innerHTML = '<div class="preview-error">⚠️ Web-Rendering fehlgeschlagen.</div>';
         }
     }
     
     // Analysiere und zeige Assets
     function analyzeAndDisplayAssets() {
-        // Preheader prÃ¼fen
+        // Preheader prüfen
         displayPreheaderInfo();
         
         // Bilder auflisten
@@ -2533,16 +2533,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Links auflisten
         displayLinks();
         
-        // Tracking/Ã–ffnerpixel anzeigen
+        // Tracking/Öffnerpixel anzeigen
         displayTrackingInfo();
     }
     
     // Preheader Info anzeigen (nur Check, keine Auto-Fixes)
     function displayPreheaderInfo() {
-        // ZÃ¤hle %preheader% Vorkommen
+        // Zähle %preheader% Vorkommen
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
         
-        // ZÃ¤hle Preheader Divs mit display:none
+        // Zähle Preheader Divs mit display:none
         const preheaderDivRegex = /<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/gi;
         const preheaderDivMatches = assetReviewStagedHtml.match(preheaderDivRegex) || [];
         const preheaderDivCount = preheaderDivMatches.length;
@@ -2551,13 +2551,13 @@ document.addEventListener('DOMContentLoaded', () => {
         let statusClass = '';
         
         if (preheaderPlaceholderCount === 0 && preheaderDivCount === 0) {
-            statusText = 'âœ… Kein Preheader gefunden (optional, ok)';
+            statusText = '✅ Kein Preheader gefunden (optional, ok)';
             statusClass = 'status-ok';
         } else if (preheaderPlaceholderCount === 1 || preheaderDivCount === 1) {
-            statusText = `âœ… Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
+            statusText = `✅ Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
             statusClass = 'status-ok';
         } else {
-            statusText = `âš ï¸ Mehrere Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
+            statusText = `⚠️ Mehrere Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
             statusClass = 'status-warn';
         }
         
@@ -2579,7 +2579,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (assetImages.length === 0) {
-            imagesList.innerHTML = '<div class="no-items">â„¹ï¸ Keine Bilder gefunden</div>';
+            imagesList.innerHTML = '<div class="no-items">ℹ️ Keine Bilder gefunden</div>';
             return;
         }
         
@@ -2592,14 +2592,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const endPos = Math.min(assetReviewStagedHtml.length, position + rawTag.length + contextLength);
             const snippet = assetReviewStagedHtml.substring(startPos, endPos);
             
-            // Defensive PrÃ¼fung: Ist dieses Bild bereits verlinkt?
+            // Defensive Prüfung: Ist dieses Bild bereits verlinkt?
             const beforeImg = assetReviewStagedHtml.substring(Math.max(0, position - 200), position);
             const afterImg = assetReviewStagedHtml.substring(position + rawTag.length, Math.min(assetReviewStagedHtml.length, position + rawTag.length + 200));
             const isLinked = /<a[^>]*>\s*$/i.test(beforeImg) && /^\s*<\/a>/i.test(afterImg);
             
             const linkButtonHtml = isLinked 
-                ? '<button class="btn-link-disabled" disabled title="Bild ist bereits verlinkt">âž¥ Link um Bild legen</button>'
-                : `<button class="btn-link" onclick="event.stopPropagation(); toggleImageLinkPanel(${index})"><span>âž¥</span> Link um Bild legen</button>`;
+                ? '<button class="btn-link-disabled" disabled title="Bild ist bereits verlinkt">➥ Link um Bild legen</button>'
+                : `<button class="btn-link" onclick="event.stopPropagation(); toggleImageLinkPanel(${index})"><span>➥</span> Link um Bild legen</button>`;
             
             html += `
                 <div class="asset-item" data-index="${index}" data-position="${position}" data-type="img" data-value="${escapeHtml(src).replace(/"/g, '&quot;')}">
@@ -2610,13 +2610,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${linkButtonHtml}
                         </div>
                     </div>
-                    <div class="asset-src">ðŸ”— ${escapeHtml(src)}</div>
+                    <div class="asset-src">🔗 ${escapeHtml(src)}</div>
                     <div class="asset-snippet"><code>${escapeHtml(snippet)}</code></div>
                     
                     <!-- Inline Link-Panel (initial versteckt) -->
                     <div class="image-link-panel" id="imageLinkPanel${index}" style="display: none;">
                         <div class="edit-panel-warning">
-                            âš ï¸ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Verlinkung nur auf explizite Anweisung.
+                            ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Verlinkung nur auf explizite Anweisung.
                         </div>
                         
                         <div class="edit-panel-field">
@@ -2642,7 +2642,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         imagesList.innerHTML = html;
         
-        // Item-Klick-Handler hinzufÃ¼gen
+        // Item-Klick-Handler hinzufügen
         imagesList.querySelectorAll('.asset-item').forEach(item => {
             item.addEventListener('click', handleAssetItemClick);
         });
@@ -2654,7 +2654,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const linkMatches = [...assetReviewStagedHtml.matchAll(linkRegex)];
         
         if (linkMatches.length === 0) {
-            linksList.innerHTML = '<div class="no-items">â„¹ï¸ Keine Links gefunden</div>';
+            linksList.innerHTML = '<div class="no-items">ℹ️ Keine Links gefunden</div>';
             return;
         }
         
@@ -2676,7 +2676,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <strong>LINK ${index + 1}</strong>
                         <button class="btn-replace" onclick="event.stopPropagation(); replaceLinkHref(${index}, ${position}, '${escapeHtml(href).replace(/'/g, "\\'")}')">Link ersetzen</button>
                     </div>
-                    <div class="asset-src">ðŸ”— ${escapeHtml(href)}</div>
+                    <div class="asset-src">🔗 ${escapeHtml(href)}</div>
                     <div class="asset-snippet"><code>${escapeHtml(snippet)}</code></div>
                 </div>
             `;
@@ -2684,7 +2684,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         linksList.innerHTML = html;
         
-        // Item-Klick-Handler hinzufÃ¼gen
+        // Item-Klick-Handler hinzufügen
         linksList.querySelectorAll('.asset-item').forEach(item => {
             item.addEventListener('click', handleAssetItemClick);
         });
@@ -2708,14 +2708,14 @@ document.addEventListener('DOMContentLoaded', () => {
         assetCodePreviewContainer.style.display = 'block';
         assetWebPreviewContainer.style.display = 'none';
         
-        // 2. Erzeuge Snippet Â±10 Zeilen rund um Position
+        // 2. Erzeuge Snippet ±10 Zeilen rund um Position
         const lines = assetReviewStagedHtml.split('\n');
         let currentPos = 0;
         let targetLine = -1;
         
         // Finde Zeile mit der Position
         for (let i = 0; i < lines.length; i++) {
-            const lineLength = lines[i].length + 1; // +1 fÃ¼r \n
+            const lineLength = lines[i].length + 1; // +1 für \n
             if (currentPos <= position && position < currentPos + lineLength) {
                 targetLine = i;
                 break;
@@ -2728,7 +2728,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Snippet Â±10 Zeilen
+        // Snippet ±10 Zeilen
         const startLine = Math.max(0, targetLine - 10);
         const endLine = Math.min(lines.length, targetLine + 11);
         const snippetLines = lines.slice(startLine, endLine);
@@ -2797,7 +2797,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Tracking/Ã–ffnerpixel anzeigen (editierbar)
+    // Tracking/Öffnerpixel anzeigen (editierbar)
     function displayTrackingInfo() {
         // Suche nach 1x1 Pixel img oder typischen Pixel-Mustern
         const pixelRegex = /<img[^>]*(?:width=["']1["']|height=["']1["'])[^>]*>/gi;
@@ -2805,13 +2805,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (pixelMatches.length === 0) {
             trackingInfo.innerHTML = `
-                <div class="status-info">â„¹ï¸ Kein Ã–ffnerpixel gefunden</div>
-                <button class="btn-insert-pixel" onclick="togglePixelInsertPanel()">âž¥ Ã–ffnerpixel einfÃ¼gen</button>
+                <div class="status-info">ℹ️ Kein Öffnerpixel gefunden</div>
+                <button class="btn-insert-pixel" onclick="togglePixelInsertPanel()">➥ Öffnerpixel einfügen</button>
                 
                 <!-- Inline Insert-Panel (initial versteckt) -->
                 <div class="pixel-insert-panel" id="pixelInsertPanel" style="display: none;">
                     <div class="edit-panel-warning">
-                        âš ï¸ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. EinfÃ¼gung nur auf explizite Anweisung.
+                        ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Einfügung nur auf explizite Anweisung.
                     </div>
                     
                     <div class="edit-panel-toggle">
@@ -2842,7 +2842,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             
-            // Event-Listener fÃ¼r Insert-Mode Toggle
+            // Event-Listener für Insert-Mode Toggle
             const urlRadio = document.querySelector('input[name="insertMode"][value="url"]');
             const tagRadio = document.querySelector('input[name="insertMode"][value="tag"]');
             const urlField = document.getElementById('insertUrlField');
@@ -2860,13 +2860,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             let html = `
-                <div class="status-ok">âœ… ${pixelMatches.length} Ã–ffnerpixel gefunden</div>
-                <button class="btn-insert-pixel" onclick="togglePixelInsertPanel()" style="margin-top: 10px;">âž¥ Ã–ffnerpixel zusÃ¤tzlich einfÃ¼gen</button>
+                <div class="status-ok">✅ ${pixelMatches.length} Öffnerpixel gefunden</div>
+                <button class="btn-insert-pixel" onclick="togglePixelInsertPanel()" style="margin-top: 10px;">➥ Öffnerpixel zusätzlich einfügen</button>
                 
                 <!-- Inline Insert-Panel (initial versteckt) -->
                 <div class="pixel-insert-panel" id="pixelInsertPanel" style="display: none;">
                     <div class="edit-panel-warning">
-                        âš ï¸ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. EinfÃ¼gung nur auf explizite Anweisung.
+                        ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Einfügung nur auf explizite Anweisung.
                     </div>
                     
                     <div class="edit-panel-toggle">
@@ -2912,14 +2912,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="pixel-item" data-index="${index}" data-position="${position}">
                         <div class="pixel-header">
                             <strong>Pixel ${index + 1}</strong>
-                            <button class="btn-edit-pixel" onclick="togglePixelEditPanel(${index})"><span>âœï¸</span> Ã–ffnerpixel bearbeiten</button>
+                            <button class="btn-edit-pixel" onclick="togglePixelEditPanel(${index})"><span>✏️</span> Öffnerpixel bearbeiten</button>
                         </div>
                         <div class="pixel-snippet"><code>${escapeHtml(rawTag)}</code></div>
                         
                         <!-- Inline Edit-Panel (initial versteckt) -->
                         <div class="pixel-edit-panel" id="pixelEditPanel${index}" style="display: none;">
                             <div class="edit-panel-warning">
-                                âš ï¸ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Ã„nderungen nur auf explizite Anweisung.
+                                ⚠️ <strong>Hinweis:</strong> Tracking wird nicht automatisch validiert. Änderungen nur auf explizite Anweisung.
                             </div>
                             
                             <div class="edit-panel-toggle">
@@ -2953,7 +2953,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             trackingInfo.innerHTML = html;
             
-            // Event-Listener fÃ¼r Edit-Mode Toggle
+            // Event-Listener für Edit-Mode Toggle
             pixelMatches.forEach((match, index) => {
                 const srcRadio = document.querySelector(`input[name="editMode${index}"][value="src"]`);
                 const tagRadio = document.querySelector(`input[name="editMode${index}"][value="tag"]`);
@@ -2972,7 +2972,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // Event-Listener fÃ¼r Insert-Mode Toggle (wenn Pixel gefunden)
+            // Event-Listener für Insert-Mode Toggle (wenn Pixel gefunden)
             const urlRadioFound = document.querySelector('input[name="insertModeFound"][value="url"]');
             const tagRadioFound = document.querySelector('input[name="insertModeFound"][value="tag"]');
             const urlFieldFound = document.getElementById('insertUrlFieldFound');
@@ -3030,7 +3030,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const url = urlInput.value.trim();
             if (!url) {
-                showInspectorToast('âš ï¸ Bitte eine Pixel-URL eingeben.');
+                showInspectorToast('⚠️ Bitte eine Pixel-URL eingeben.');
                 return;
             }
             // Minimaler Pixel-Tag
@@ -3044,7 +3044,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const tag = tagTextarea.value.trim();
             if (!tag) {
-                showInspectorToast('âš ï¸ Bitte einen img-Tag eingeben.');
+                showInspectorToast('⚠️ Bitte einen img-Tag eingeben.');
                 return;
             }
             pixelToInsert = tag;
@@ -3053,41 +3053,41 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Sicherheitsabfrage
         const confirmMsg = actionType === 'url' 
-            ? `Wirklich Ã–ffnerpixel einfÃ¼gen?\n\nPixel: ${pixelToInsert}`
-            : `Wirklich img-Tag einfÃ¼gen?\n\nTag: ${pixelToInsert}`;
+            ? `Wirklich Öffnerpixel einfügen?\n\nPixel: ${pixelToInsert}`
+            : `Wirklich img-Tag einfügen?\n\nTag: ${pixelToInsert}`;
         
         if (!confirm(confirmMsg)) {
             console.log('[ASSET] User cancelled pixel insert');
             return;
         }
         
-        // Vor Ã„nderung: History speichern
+        // Vor Änderung: History speichern
         assetReviewHistory.push(assetReviewStagedHtml);
         
-        // Finde EinfÃ¼gepunkt: direkt nach <body> oder nach Preheader
+        // Finde Einfügepunkt: direkt nach <body> oder nach Preheader
         const bodyMatch = assetReviewStagedHtml.match(/<body[^>]*>/i);
         if (!bodyMatch) {
-            showInspectorToast('âŒ Kein <body> Tag gefunden. EinfÃ¼gung nicht mÃ¶glich.');
+            showInspectorToast('❌ Kein <body> Tag gefunden. Einfügung nicht möglich.');
             return;
         }
         
         const bodyEndPos = bodyMatch.index + bodyMatch[0].length;
         
-        // PrÃ¼fe ob direkt nach <body> ein Preheader-Block existiert
+        // Prüfe ob direkt nach <body> ein Preheader-Block existiert
         const afterBody = assetReviewStagedHtml.substring(bodyEndPos);
         const preheaderRegex = /^\s*<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/i;
         const preheaderMatch = afterBody.match(preheaderRegex);
         
         let insertPosition = bodyEndPos;
         if (preheaderMatch) {
-            // Nach Preheader einfÃ¼gen
+            // Nach Preheader einfügen
             insertPosition = bodyEndPos + preheaderMatch[0].length;
             console.log('[ASSET] Preheader found, inserting after preheader');
         } else {
             console.log('[ASSET] No preheader found, inserting directly after <body>');
         }
         
-        // EinfÃ¼gen
+        // Einfügen
         const before = assetReviewStagedHtml.substring(0, insertPosition);
         const after = assetReviewStagedHtml.substring(insertPosition);
         const newHtml = before + '\n' + pixelToInsert + '\n' + after;
@@ -3115,13 +3115,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Previews aktualisieren
         updateAssetPreview();
         
-        // Panel schlieÃŸen
+        // Panel schließen
         togglePixelInsertPanel();
         
         // Neu analysieren
         analyzeAndDisplayAssets();
         
-        // Jump-to-Mechanik: Code-Snippet auf die EinfÃ¼gestelle springen
+        // Jump-to-Mechanik: Code-Snippet auf die Einfügestelle springen
         jumpToPixelLocation(insertPosition, pixelToInsert, 'insert');
     };
     
@@ -3154,7 +3154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const targetUrl = urlInput.value.trim();
         if (!targetUrl) {
-            showInspectorToast('âš ï¸ Bitte eine Ziel-URL eingeben.');
+            showInspectorToast('⚠️ Bitte eine Ziel-URL eingeben.');
             return;
         }
         
@@ -3163,21 +3163,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const allowPlaceholder = placeholderCheckbox ? placeholderCheckbox.checked : false;
         
         if (!allowPlaceholder) {
-            // PrÃ¼fe ob URL Platzhalter enthÃ¤lt
+            // Prüfe ob URL Platzhalter enthält
             if (targetUrl.includes('%') || targetUrl.includes('{{') || targetUrl.includes('}}')) {
-                showInspectorToast('âš ï¸ URL enthÃ¤lt Platzhalter (%, {{ oder }}). Bitte ersetzen.');
+                showInspectorToast('⚠️ URL enthält Platzhalter (%, {{ oder }}). Bitte ersetzen.');
                 console.warn('[ASSET] Placeholder detected but not allowed:', targetUrl);
                 return;
             }
         }
         
-        // Defensive PrÃ¼fung: Ist das Bild bereits verlinkt?
+        // Defensive Prüfung: Ist das Bild bereits verlinkt?
         const beforeImg = assetReviewStagedHtml.substring(Math.max(0, position - 200), position);
         const afterImg = assetReviewStagedHtml.substring(position + originalImgTag.length, Math.min(assetReviewStagedHtml.length, position + originalImgTag.length + 200));
         const isLinked = /<a[^>]*>\s*$/i.test(beforeImg) && /^\s*<\/a>/i.test(afterImg);
         
         if (isLinked) {
-            showInspectorToast('âš ï¸ Bild mÃ¶glicherweise bereits verlinkt. Ã„nderung abgebrochen.');
+            showInspectorToast('⚠️ Bild möglicherweise bereits verlinkt. Änderung abgebrochen.');
             console.warn('[ASSET] Image appears to be already linked, aborting');
             return;
         }
@@ -3192,10 +3192,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Vor Ã„nderung: History speichern
+        // Vor Änderung: History speichern
         assetReviewHistory.push(assetReviewStagedHtml);
         
-        // Exakte Ersetzung: <img> â†’ <a href="..."><img></a>
+        // Exakte Ersetzung: <img> → <a href="..."><img></a>
         const wrappedImg = `<a href="${targetUrl}">${originalImgTag}</a>`;
         
         // Ersetze nur dieses eine Vorkommen an der Position
@@ -3221,13 +3221,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Previews aktualisieren
         updateAssetPreview();
         
-        // Panel schlieÃŸen
+        // Panel schließen
         toggleImageLinkPanel(index);
         
         // Neu analysieren
         analyzeAndDisplayAssets();
         
-        // Jump-to-Mechanik: Code-Snippet auf die geÃ¤nderte Stelle springen
+        // Jump-to-Mechanik: Code-Snippet auf die geänderte Stelle springen
         jumpToPixelLocation(position, wrappedImg, 'link-wrap');
     };
     
@@ -3263,7 +3263,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             newValue = newSrcInput.value.trim();
             if (!newValue) {
-                showInspectorToast('âš ï¸ Bitte einen neuen src-Wert eingeben.');
+                showInspectorToast('⚠️ Bitte einen neuen src-Wert eingeben.');
                 return;
             }
             actionType = 'src';
@@ -3275,7 +3275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             newValue = newTagTextarea.value.trim();
             if (!newValue) {
-                showInspectorToast('âš ï¸ Bitte einen neuen img-Tag eingeben.');
+                showInspectorToast('⚠️ Bitte einen neuen img-Tag eingeben.');
                 return;
             }
             actionType = 'tag';
@@ -3291,10 +3291,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Vor Ã„nderung: History speichern
+        // Vor Änderung: History speichern
         assetReviewHistory.push(assetReviewStagedHtml);
         
-        // Ersetzung durchfÃ¼hren (nur dieses eine Vorkommen)
+        // Ersetzung durchführen (nur dieses eine Vorkommen)
         let newHtml = '';
         if (actionType === 'src') {
             // Nur src ersetzen
@@ -3334,17 +3334,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Previews aktualisieren
         updateAssetPreview();
         
-        // Panel schlieÃŸen
+        // Panel schließen
         togglePixelEditPanel(index);
         
         // Neu analysieren (damit die Liste aktualisiert wird)
         analyzeAndDisplayAssets();
         
-        // Jump-to-Mechanik: Code-Snippet auf die geÃ¤nderte Stelle springen
+        // Jump-to-Mechanik: Code-Snippet auf die geänderte Stelle springen
         jumpToPixelLocation(position, newValue, actionType);
     };
     
-    // Jump-to-Mechanik fÃ¼r bearbeitete Pixel
+    // Jump-to-Mechanik für bearbeitete Pixel
     function jumpToPixelLocation(position, value, actionType) {
         console.log(`[ASSET] jumpToPixelLocation: position=${position}, actionType=${actionType}`);
         
@@ -3354,14 +3354,14 @@ document.addEventListener('DOMContentLoaded', () => {
         assetCodePreviewContainer.style.display = 'block';
         assetWebPreviewContainer.style.display = 'none';
         
-        // Erzeuge Snippet Â±10 Zeilen rund um Position
+        // Erzeuge Snippet ±10 Zeilen rund um Position
         const lines = assetReviewStagedHtml.split('\n');
         let currentPos = 0;
         let targetLine = -1;
         
         // Finde Zeile mit der Position
         for (let i = 0; i < lines.length; i++) {
-            const lineLength = lines[i].length + 1; // +1 fÃ¼r \n
+            const lineLength = lines[i].length + 1; // +1 für \n
             if (currentPos <= position && position < currentPos + lineLength) {
                 targetLine = i;
                 break;
@@ -3374,7 +3374,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Snippet Â±10 Zeilen
+        // Snippet ±10 Zeilen
         const startLine = Math.max(0, targetLine - 10);
         const endLine = Math.min(lines.length, targetLine + 11);
         const snippetLines = lines.slice(startLine, endLine);
@@ -3408,7 +3408,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Undo letzte Ã„nderung
+    // Undo letzte Änderung
     assetUndoBtn.addEventListener('click', () => {
         if (assetReviewHistory.length === 0) {
             console.warn('[ASSET] Keine History vorhanden');
@@ -3433,15 +3433,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Undo-Button deaktivieren wenn keine History mehr
         assetUndoBtn.disabled = assetReviewHistory.length === 0;
         
-        // Dirty-Flag prÃ¼fen
+        // Dirty-Flag prüfen
         assetReviewDirty = assetReviewActionLog.length > 0;
         assetCommitBtn.disabled = !assetReviewDirty;
     });
     
-    // Ã„nderungen Ã¼bernehmen (Commit)
+    // Änderungen übernehmen (Commit)
     assetCommitBtn.addEventListener('click', () => {
         if (!assetReviewDirty) {
-            console.warn('[ASSET] Keine Ã„nderungen zum Committen');
+            console.warn('[ASSET] Keine Änderungen zum Committen');
             return;
         }
         
@@ -3451,8 +3451,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Erweitere Report mit Phase C Informationen
         extendReportWithPhaseC();
         
-        // BestÃ¤tigung
-        showInspectorToast('âœ… Ã„nderungen Ã¼bernommen.');
+        // Bestätigung
+        showInspectorToast('✅ Änderungen übernommen.');
         
         // Reset dirty flag
         assetReviewDirty = false;
@@ -3462,7 +3462,7 @@ document.addEventListener('DOMContentLoaded', () => {
         assetReviewOriginalHtml = assetReviewStagedHtml;
     });
     
-    // Globale Funktionen fÃ¼r Bild- und Link-Ersetzung (mÃ¼ssen global sein wegen onclick)
+    // Globale Funktionen für Bild- und Link-Ersetzung (müssen global sein wegen onclick)
     window.replaceImageSrc = function(imageIndex) {
         // Hole rawTag und position aus globalem Array
         if (!assetImages[imageIndex]) {
@@ -3471,10 +3471,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const { position, rawTag: imgTag, src: oldSrc } = assetImages[imageIndex];
         
-        const newSrc = prompt(`ðŸ–¼ï¸ Neuen Bildpfad eingeben:\n\nAktuell: ${oldSrc}`, oldSrc);
+        const newSrc = prompt(`🖼️ Neuen Bildpfad eingeben:\n\nAktuell: ${oldSrc}`, oldSrc);
         if (!newSrc || newSrc === oldSrc) return;
         
-        const confirm = window.confirm(`âš ï¸ Wirklich ersetzen?\n\nAlt: ${oldSrc}\nNeu: ${newSrc}`);
+        const confirm = window.confirm(`⚠️ Wirklich ersetzen?\n\nAlt: ${oldSrc}\nNeu: ${newSrc}`);
         if (!confirm) return;
         
         // Push aktuellen State in History
@@ -3502,10 +3502,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     window.replaceLinkHref = function(index, position, oldHref) {
-        const newHref = prompt(`ðŸ”— Neuen Link eingeben:\n\nAktuell: ${oldHref}`, oldHref);
+        const newHref = prompt(`🔗 Neuen Link eingeben:\n\nAktuell: ${oldHref}`, oldHref);
         if (!newHref || newHref === oldHref) return;
         
-        const confirm = window.confirm(`âš ï¸ Wirklich ersetzen?\n\nAlt: ${oldHref}\nNeu: ${newHref}`);
+        const confirm = window.confirm(`⚠️ Wirklich ersetzen?\n\nAlt: ${oldHref}\nNeu: ${newHref}`);
         if (!confirm) return;
         
         // Push aktuellen State in History
@@ -3546,7 +3546,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function extendReportWithPhaseC() {
         if (!processingResult) return;
         
-        // ZÃ¤hle Preheader
+        // Zähle Preheader
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
         const preheaderDivRegex = /<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/gi;
         const preheaderDivCount = (assetReviewStagedHtml.match(preheaderDivRegex) || []).length;
@@ -3586,19 +3586,19 @@ document.addEventListener('DOMContentLoaded', () => {
         showInspectorBtn.title = 'Erst Template verarbeiten';
     }
     
-    // Inspector Ã¶ffnen
+    // Inspector öffnen
     if (showInspectorBtn) {
         showInspectorBtn.addEventListener('click', () => {
             if (!processingResult) {
-                showInspectorToast('âš ï¸ Bitte erst Template verarbeiten.');
+                showInspectorToast('⚠️ Bitte erst Template verarbeiten.');
                 return;
             }
             
             console.log('[INSPECTOR] Opening Inspector...');
             
-            // BUG #1 FIX: Nur beim allerersten Ã–ffnen initialisieren.
+            // BUG #1 FIX: Nur beim allerersten Öffnen initialisieren.
             // Wenn currentWorkingHtml bereits gesetzt ist (= User hat schon gearbeitet),
-            // NICHT Ã¼berschreiben â€“ sonst gehen alle Ã„nderungen verloren!
+            // NICHT überschreiben – sonst gehen alle Änderungen verloren!
             if (!currentWorkingHtml) {
                 currentWorkingHtml = processingResult.optimizedHtml;
                 console.log('[INSPECTOR] First open: currentWorkingHtml initialized from optimizedHtml');
@@ -3637,10 +3637,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (anyPending) {
             globalFinalizeBtn.disabled = false;
-            globalFinalizeBtn.title = 'Alle offenen Ã„nderungen Ã¼bernehmen';
+            globalFinalizeBtn.title = 'Alle offenen Änderungen übernehmen';
         } else {
             globalFinalizeBtn.disabled = true;
-            globalFinalizeBtn.title = 'Keine offenen Ã„nderungen';
+            globalFinalizeBtn.title = 'Keine offenen Änderungen';
         }
         
         console.log('[FINALIZE] Button updated: anyPending=' + anyPending);
@@ -3661,8 +3661,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (editorPending) pendingTabs.push('Editor');
         
         const confirmed = confirm(
-            'Es gibt nicht Ã¼bernommene Ã„nderungen in: ' + pendingTabs.join(', ') + '.\n\n' +
-            'MÃ¶chten Sie diese jetzt Ã¼bernehmen?'
+            'Es gibt nicht übernommene Änderungen in: ' + pendingTabs.join(', ') + '.\n\n' +
+            'Möchten Sie diese jetzt übernehmen?'
         );
         
         if (!confirmed) {
@@ -3670,7 +3670,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Commit in Reihenfolge: Tracking â†’ Images â†’ Editor
+        // Commit in Reihenfolge: Tracking → Images → Editor
         const committedTabs = [];
         
         if (trackingPending) {
@@ -3711,7 +3711,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Phase 12: EIN Erfolgshinweis als Toast (kein Alert)
         if (committedTabs.length > 0) {
-            showInspectorToast('âœ… Finalisiert: ' + committedTabs.join(', '));
+            showInspectorToast('✅ Finalisiert: ' + committedTabs.join(', '));
         }
         
         console.log('[FINALIZE] Completed: ' + committedTabs.join(', '));
@@ -3730,12 +3730,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (commitChangesBtn) {
         commitChangesBtn.addEventListener('click', () => {
             // BUG #3 FIX: Direkt finalizeAllPendingTabs aufrufen statt
-            // globalFinalizeBtn.click() â€“ der Button ist disabled wenn nichts
+            // globalFinalizeBtn.click() – der Button ist disabled wenn nichts
             // pending ist und ein Click darauf passiert lautlos gar nichts.
             const anyPending = trackingPending || imagesPending || editorPending;
             if (!anyPending) {
                 // Klares Feedback statt lautlosem Nichts
-                showInspectorToast('â„¹ï¸ Keine offenen Ã„nderungen zum Ãœbernehmen');
+                showInspectorToast('ℹ️ Keine offenen Änderungen zum Übernehmen');
                 return;
             }
             finalizeAllPendingTabs();
@@ -3760,24 +3760,24 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (anyPending) {
             downloadManualOptimized.disabled = true;
-            downloadManualOptimized.title = 'Bitte zuerst Ã„nderungen Ã¼bernehmen';
+            downloadManualOptimized.title = 'Bitte zuerst Änderungen übernehmen';
         } else {
             downloadManualOptimized.disabled = false;
             downloadManualOptimized.title = 'Download manuell optimiertes Template';
         }
     }
     
-    // Gespeicherte Cursor-Position aus dem iframe (fÃ¼r Platzhalter-EinfÃ¼gung)
+    // Gespeicherte Cursor-Position aus dem iframe (für Platzhalter-Einfügung)
     let savedCursorNodeId = null;
 
-    // PostMessage Listener fÃ¼r SELECT_ELEMENT (Phase 6 + Phase 8)
+    // PostMessage Listener für SELECT_ELEMENT (Phase 6 + Phase 8)
     window.addEventListener('message', function(event) {
         if (event.data.type === 'SELECT_ELEMENT') {
-            // Editor Tab: Element-Auswahl fÃ¼r Block-Editing
+            // Editor Tab: Element-Auswahl für Block-Editing
             if (currentInspectorTab === 'editor') {
                 handleEditorElementSelection(event.data);
             }
-            // Tracking Tab: Element-Auswahl fÃ¼r Link-Insert (Phase 8B)
+            // Tracking Tab: Element-Auswahl für Link-Insert (Phase 8B)
             else if (currentInspectorTab === 'tracking' && trackingInsertMode) {
                 handleTrackingElementSelection(event.data);
             }
@@ -3794,7 +3794,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.data.type === 'CURSOR_SAVED') {
             savedCursorNodeId = event.data.nodeId;
         }
-        // PLACEHOLDER_DONE: iframe hat Platzhalter an Cursor-Position eingefÃ¼gt
+        // PLACEHOLDER_DONE: iframe hat Platzhalter an Cursor-Position eingefügt
         else if (event.data.type === 'PLACEHOLDER_DONE') {
             if (currentInspectorTab === 'editor' && editorTabHtml) {
                 const r = findElementByQaNodeId(editorTabHtml, event.data.qaNodeId);
@@ -3803,7 +3803,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const tmp = new DOMParser().parseFromString(event.data.outerHTML, 'text/html');
                     const updatedEl = tmp.body.firstChild;
                     if (updatedEl) {
-                        // Ãœbertrage den neuen innerHTML (ohne qa-node-id Manipulationen)
+                        // Übertrage den neuen innerHTML (ohne qa-node-id Manipulationen)
                         r.element.innerHTML = updatedEl.innerHTML;
                         editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
                     }
@@ -3811,7 +3811,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setEditorPending(true);
                 // NUR linke Seite neu rendern, NICHT die Vorschau!
                 showEditorTab(document.getElementById('editorContent'));
-                showInspectorToast('âœ… Platzhalter eingefÃ¼gt: ' + event.data.placeholder);
+                showInspectorToast('✅ Platzhalter eingefügt: ' + event.data.placeholder);
             }
         }
     });
@@ -3835,9 +3835,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (hasPending) {
             const discard = confirm(
-                `âš ï¸ Es gibt nicht Ã¼bernommene Ã„nderungen im ${tabName}-Tab.\n\n` +
-                'MÃ¶chten Sie diese verwerfen?\n\n' +
-                'Verwerfen = Ã„nderungen gehen verloren\n' +
+                `⚠️ Es gibt nicht übernommene Änderungen im ${tabName}-Tab.\n\n` +
+                'Möchten Sie diese verwerfen?\n\n' +
+                'Verwerfen = Änderungen gehen verloren\n' +
                 'Abbrechen = Im Tab bleiben'
             );
             
@@ -3864,9 +3864,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             updateGlobalPendingIndicator();
-            // BUG #7 FIX: Klares Feedback dass Ã„nderungen verworfen wurden
+            // BUG #7 FIX: Klares Feedback dass Änderungen verworfen wurden
             const tabNames = { tracking: 'Tracking', images: 'Bilder', editor: 'Editor' };
-            showInspectorToast(`âš ï¸ Ã„nderungen in "${tabNames[fromTab] || fromTab}" verworfen`);
+            showInspectorToast(`⚠️ Änderungen in "${tabNames[fromTab] || fromTab}" verworfen`);
             console.log('[INSPECTOR] Pending changes discarded for:', fromTab);
         }
         
@@ -3892,7 +3892,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (panel) panel.style.display = 'none';
         });
         
-        // Aktiviere gewÃ¤hlten Tab
+        // Aktiviere gewählten Tab
         currentInspectorTab = tabName;
         
         if (tabName === 'tracking' && trackingTab && trackingPanel) {
@@ -3922,7 +3922,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tagReviewTab) tagReviewTab.addEventListener('click', () => switchInspectorTab('tagreview'));
     if (editorTab) editorTab.addEventListener('click', () => switchInspectorTab('editor'));
     
-    // Load Tab Content (Placeholder fÃ¼r Phase 3-7)
+    // Load Tab Content (Placeholder für Phase 3-7)
     function loadInspectorTabContent(tabName) {
         console.log('[INSPECTOR] Loading content for tab:', tabName);
         
@@ -3949,7 +3949,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Phase 13 P1: WÃ¤hle HTML-Quelle strikt nach Tab (mit Initialisierung)
+        // Phase 13 P1: Wähle HTML-Quelle strikt nach Tab (mit Initialisierung)
         let sourceHtml = currentWorkingHtml;
         let sourceLabel = 'current';
         
@@ -3982,10 +3982,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            // Erzeuge annotierte Preview-Version (nur fÃ¼r iframe, nicht fÃ¼r Downloads)
+            // Erzeuge annotierte Preview-Version (nur für iframe, nicht für Downloads)
             const annotatedHtml = generateAnnotatedPreview(sourceHtml, currentInspectorTab);
             
-            // Null-Check: Falls Script-Syntax kaputt ist, gibt generateAnnotatedPreview null zurÃ¼ck
+            // Null-Check: Falls Script-Syntax kaputt ist, gibt generateAnnotatedPreview null zurück
             if (!annotatedHtml) {
                 console.error('[PREVIEW] generateAnnotatedPreview returned null - script syntax invalid');
                 showPreviewFallback();
@@ -3996,11 +3996,14 @@ document.addEventListener('DOMContentLoaded', () => {
             previewReady = false;
             pendingPreviewMessages = []; // BUG #2 FIX: Array leeren
             
-            // OUTLOOK-FIX: Nur Script-Inhalt auf Escaping pruefen, nicht das gesamte HTML
-            const _scriptMatch = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-            const _scriptBody  = _scriptMatch ? _scriptMatch[1] : '';
-            if (_scriptBody.includes('&amp;&amp;') || _scriptBody.includes('&lt;')) {
-                console.error('[PREVIEW] Script content was HTML-escaped - aborting!');
+            // Debug-Guard: Prüfe ob Script escaped wurde BEVOR srcdoc gesetzt wird
+            const _scriptMatch1 = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+            const _scriptContent1 = _scriptMatch1 ? _scriptMatch1[1] : '';
+            if (_scriptContent1.includes('&amp;&amp;') || _scriptContent1.includes('&lt;')) {
+                console.error('[PREVIEW] Script got escaped - aborting!');
+                console.error('[PREVIEW] contains &amp;&amp;:', annotatedHtml.includes('&amp;&amp;'));
+                console.error('[PREVIEW] contains &lt;:', annotatedHtml.includes('&lt;'));
+                console.error('[PREVIEW] First 500 chars of annotatedHtml:', annotatedHtml.substring(0, 500));
                 showPreviewFallback();
                 return;
             }
@@ -4020,7 +4023,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // BUG #2 FIX: Alle wartenden Messages senden (nicht nur eine)
                 if (pendingPreviewMessages.length > 0 && inspectorPreviewFrame.contentWindow) {
                     console.log('[INSPECTOR] Sending', pendingPreviewMessages.length, 'pending messages');
-                    // Nur die letzte senden â€“ alle vorherigen sind Ã¼berholt
+                    // Nur die letzte senden – alle vorherigen sind überholt
                     const lastMessage = pendingPreviewMessages[pendingPreviewMessages.length - 1];
                     inspectorPreviewFrame.contentWindow.postMessage(lastMessage, '*');
                     pendingPreviewMessages = [];
@@ -4040,9 +4043,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Erzeuge annotierte Preview-Version mit data-qa-link-id und data-qa-img-id
     function generateAnnotatedPreview(html, tabName) {
         const parser = new DOMParser();
-        let doc = parser.parseFromString(html, 'text/html');  // FIX: let statt const (wird spÃ¤ter neu zugewiesen)
+        let doc = parser.parseFromString(html, 'text/html');  // FIX: let statt const (wird später neu zugewiesen)
         
-        // Phase 13 P7: Strip <script> tags fÃ¼r Preview-Security (nur in srcdoc, nicht in committed HTML)
+        // Phase 13 P7: Strip <script> tags für Preview-Security (nur in srcdoc, nicht in committed HTML)
         const scripts = doc.querySelectorAll('script');
         scripts.forEach(script => script.remove());
         if (window.DEV_MODE && scripts.length > 0) {
@@ -4063,14 +4066,14 @@ document.addEventListener('DOMContentLoaded', () => {
             img.setAttribute('data-qa-img-id', id);
         });
         
-        // FÃ¼ge Fix-Marker ein (Phase 5)
+        // Füge Fix-Marker ein (Phase 5)
         // Hole autoFixes aus processingResult
         const autoFixes = (processingResult && processingResult.autoFixes) ? processingResult.autoFixes : [];
         if (autoFixes.length > 0) {
             // Sortiere autoFixes nach insertPosition (absteigend) um Offset-Probleme zu vermeiden
             const sortedFixes = [...autoFixes].sort((a, b) => b.insertPosition - a.insertPosition);
             
-            // Serialisiere HTML zu String fÃ¼r Marker-EinfÃ¼gung
+            // Serialisiere HTML zu String für Marker-Einfügung
             let htmlString = doc.documentElement.outerHTML;
             
             sortedFixes.forEach(fix => {
@@ -4079,14 +4082,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const index = htmlString.indexOf(searchPattern);
                 
                 if (index !== -1) {
-                    // FÃ¼ge Marker NACH inserted ein
+                    // Füge Marker NACH inserted ein
                     const markerPos = index + fix.beforeCtx.length + fix.inserted.length;
                     const marker = `<span data-qa-fix-id="${fix.id}" style="display:inline-block;width:0;height:0;position:relative;"></span>`;
                     htmlString = htmlString.substring(0, markerPos) + marker + htmlString.substring(markerPos);
                 }
             });
             
-            // Parse zurÃ¼ck zu DOM
+            // Parse zurück zu DOM
             doc = parser.parseFromString(htmlString, 'text/html');
             console.log('[INSPECTOR] Inserted ' + sortedFixes.length + ' fix markers');
         }
@@ -4108,7 +4111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // EDITOR MODE: Direkt editierbare Textelemente (Preview-only)
         if (tabName === 'editor') {
-            // Alle Textelemente direkt contenteditable machen (kein Wrapper nÃ¶tig)
+            // Alle Textelemente direkt contenteditable machen (kein Wrapper nötig)
             const editableSelectors = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'span'];
             const structuralTags = ['table', 'tr', 'td', 'tbody', 'thead', 'tfoot'];
             
@@ -4130,15 +4133,15 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[EDITOR] Made text elements directly editable');
         }
         
-        // FÃ¼ge Highlight-Script in <head> ein
+        // Füge Highlight-Script in <head> ein
         const highlightScript = doc.createElement('script');
         
         // Baue Script als Array von Zeilen (verhindert Syntax-Fehler)
         const scriptLines = [];
-        scriptLines.push('// Highlight-Script fÃ¼r Inspector Preview');
+        scriptLines.push('// Highlight-Script für Inspector Preview');
         scriptLines.push('window.addEventListener("message", function(event) {');
         scriptLines.push('  try {');
-        scriptLines.push('    // Helper: Zeige Locate-Overlay Ã¼ber Element');
+        scriptLines.push('    // Helper: Zeige Locate-Overlay über Element');
         scriptLines.push('    function showLocateOverlayForElement(element) {');
         scriptLines.push('      document.querySelectorAll(".qa-locate-overlay").forEach(function(o) { o.remove(); });');
         scriptLines.push('      var rect = element.getBoundingClientRect();');
@@ -4258,13 +4261,13 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('        console.warn("[PREVIEW] UPDATE_ELEMENT failed - element not found:", qaNodeId);');
         scriptLines.push('      }');
         scriptLines.push('    }');
-        scriptLines.push('    // INSERT_AT_CURSOR: Platzhalter an Cursor-Position einfÃ¼gen');
+        scriptLines.push('    // INSERT_AT_CURSOR: Platzhalter an Cursor-Position einfügen');
         scriptLines.push('    if (event.data.type === "INSERT_AT_CURSOR") {');
         scriptLines.push('      var ph = event.data.placeholder;');
         scriptLines.push('      var targetId = event.data.targetNodeId;');
         scriptLines.push('      var sel = window.getSelection();');
         scriptLines.push('      var inserted = false;');
-        scriptLines.push('      // An gespeicherter Cursor-Position einfÃ¼gen wenn mÃ¶glich');
+        scriptLines.push('      // An gespeicherter Cursor-Position einfügen wenn möglich');
         scriptLines.push('      if (_cursorRange && _cursorNodeId === targetId && sel) {');
         scriptLines.push('        try {');
         scriptLines.push('          sel.removeAllRanges();');
@@ -4284,7 +4287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('        var fallbackEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']");');
         scriptLines.push('        if (fallbackEl) { fallbackEl.appendChild(document.createTextNode(" " + ph)); inserted = true; }');
         scriptLines.push('      }');
-        scriptLines.push('      // Aktualisiertes HTML zurÃ¼ckmelden');
+        scriptLines.push('      // Aktualisiertes HTML zurückmelden');
         scriptLines.push('      if (inserted) {');
         scriptLines.push('        var updEl = document.querySelector("[data-qa-node-id=\'" + targetId + "\']");');
         scriptLines.push('        if (updEl) {');
@@ -4298,7 +4301,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('});');
         scriptLines.push('');
 
-        scriptLines.push('// Click Handler fÃ¼r Element-Auswahl');
+        scriptLines.push('// Click Handler für Element-Auswahl');
         scriptLines.push('document.addEventListener("click", function(event) {');
         scriptLines.push('  try {');
         scriptLines.push('    // Bei Klick in editierbares Element: Auswahl senden OHNE preventDefault');
@@ -4326,7 +4329,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('          href: href,');
         scriptLines.push('          src: src');
         scriptLines.push('        }, "*");');
-        scriptLines.push('        // Nur preventDefault wenn NICHT editierbar (sonst kein Cursor-Setzen mÃ¶glich)');
+        scriptLines.push('        // Nur preventDefault wenn NICHT editierbar (sonst kein Cursor-Setzen möglich)');
         scriptLines.push('        if (!isEditable) { event.preventDefault(); }');
         scriptLines.push('        event.stopPropagation();');
         scriptLines.push('        break;');
@@ -4359,10 +4362,10 @@ document.addEventListener('DOMContentLoaded', () => {
             scriptLines.push('});');
         }
 
-        // EDITOR MODE: Blur handler - sendet geÃ¤nderten Text ans Elternfenster
+        // EDITOR MODE: Blur handler - sendet geänderten Text ans Elternfenster
         if (tabName === 'editor') {
             scriptLines.push('');
-            scriptLines.push('// Editor Mode: Text-Ã„nderungen per blur Ã¼bertragen');
+            scriptLines.push('// Editor Mode: Text-Änderungen per blur übertragen');
             scriptLines.push('document.addEventListener("blur", function(e) {');
             scriptLines.push('  var el = e.target;');
             scriptLines.push('  if (el && el.getAttribute("data-qa-editable") === "true") {');
@@ -4380,7 +4383,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         highlightScript.textContent = scriptLines.join('\n');
         
-        // Syntax-Test vor dem EinfÃ¼gen
+        // Syntax-Test vor dem Einfügen
         try {
             new Function(highlightScript.textContent);
             console.log('[INSPECTOR] Preview script syntax valid');
@@ -4390,7 +4393,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return null; // Abbruch wenn Syntax kaputt
         }
         
-        // FÃ¼ge Highlight-Style in <head> ein
+        // Füge Highlight-Style in <head> ein
         const highlightStyle = doc.createElement('style');
         highlightStyle.textContent = `
             .qa-highlight {
@@ -4430,17 +4433,19 @@ document.addEventListener('DOMContentLoaded', () => {
             head.appendChild(highlightStyle);
         }
         
-        // Serialisiere zurÃ¼ck zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
+        // Serialisiere zurück zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
         const annotatedHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         
-        // Debug-Guard: PrÃ¼fe ob Script escaped wurde
-        if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
+        // Debug-Guard: Prüfe ob Script escaped wurde
+        const _scriptMatch2 = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+        const _scriptContent2 = _scriptMatch2 ? _scriptMatch2[1] : '';
+        if (_scriptContent2.includes('&amp;&amp;') || _scriptContent2.includes('&lt;')) {
             console.error('[PREVIEW] Script was HTML-escaped! This will cause SyntaxError.');
             console.error('[PREVIEW] Found entities in srcdoc:', {
                 hasAmpAmp: annotatedHtml.includes('&amp;&amp;'),
                 hasLt: annotatedHtml.includes('&lt;')
             });
-            // Trotzdem zurÃ¼ckgeben, aber mit Warning
+            // Trotzdem zurückgeben, aber mit Warning
         }
         
         console.log('[INSPECTOR] Generated annotated preview with ' + anchors.length + ' link annotations and ' + images.length + ' image annotations');
@@ -4454,9 +4459,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         previewContainer.innerHTML = `
             <div style="padding: 40px; text-align: center; color: #e74c3c;">
-                <h3>âš ï¸ Preview konnte nicht geladen werden</h3>
-                <p>Das HTML enthÃ¤lt mÃ¶glicherweise ungÃ¼ltige Syntax.</p>
-                <p>Bitte Ã¼berprÃ¼fen Sie die Downloads.</p>
+                <h3>⚠️ Preview konnte nicht geladen werden</h3>
+                <p>Das HTML enthält möglicherweise ungültige Syntax.</p>
+                <p>Bitte überprüfen Sie die Downloads.</p>
             </div>
         `;
     }
@@ -4481,7 +4486,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Extrahiere Links aus trackingTabHtml
         const links = extractLinksFromHTML(trackingTabHtml);
         
-        // Erkenne Ã–ffnerpixel
+        // Erkenne Öffnerpixel
         const trackingPixel = detectTrackingPixel(trackingTabHtml);
         
         // Render Tracking Tab
@@ -4489,20 +4494,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Sektion 1: Klick-Links
         html += '<div class="tracking-section">';
-        html += '<h3>ðŸ“§ Klick-Links (' + links.length + ')</h3>';
+        html += '<h3>📧 Klick-Links (' + links.length + ')</h3>';
         
         // Phase 8B: Link Insert UI
         html += '<div class="tracking-insert-section">';
         if (!trackingInsertMode) {
-            html += '<button id="trackingStartInsert" class="btn-tracking-insert">âž¤ Element in Preview auswÃ¤hlen</button>';
+            html += '<button id="trackingStartInsert" class="btn-tracking-insert">➤ Element in Preview auswählen</button>';
         } else if (!trackingSelectedElement) {
             html += '<div class="tracking-insert-hint">';
-            html += 'ðŸ‘‰ <strong>Klicke rechts im Template auf das Element, das verlinkt werden soll.</strong>';
-            html += '<button id="trackingCancelInsert" class="btn-tracking-cancel">âŒ Abbrechen</button>';
+            html += '👉 <strong>Klicke rechts im Template auf das Element, das verlinkt werden soll.</strong>';
+            html += '<button id="trackingCancelInsert" class="btn-tracking-cancel">❌ Abbrechen</button>';
             html += '</div>';
         } else {
             html += '<div class="tracking-insert-selected">';
-            html += '<div class="tracking-insert-selected-header">âœ“ AusgewÃ¤hltes Element:</div>';
+            html += '<div class="tracking-insert-selected-header">✓ Ausgewähltes Element:</div>';
             html += '<div class="tracking-insert-selected-info">';
             html += '<strong>Typ:</strong> &lt;' + trackingSelectedElement.tagName + '&gt;<br>';
             if (trackingSelectedElement.text) {
@@ -4514,8 +4519,8 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '</div>';
             html += '<div class="tracking-insert-controls">';
             html += '<input type="text" id="trackingInsertUrl" class="tracking-insert-input" placeholder="Ziel-URL eingeben...">';
-            html += '<button id="trackingInsertApply" class="btn-tracking-insert-apply">âž• Link um Element legen</button>';
-            html += '<button id="trackingCancelInsert" class="btn-tracking-cancel">âŒ Abbrechen</button>';
+            html += '<button id="trackingInsertApply" class="btn-tracking-insert-apply">➕ Link um Element legen</button>';
+            html += '<button id="trackingCancelInsert" class="btn-tracking-cancel">❌ Abbrechen</button>';
             html += '</div>';
             html += '</div>';
         }
@@ -4534,12 +4539,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '<div class="tracking-link-href-display">';
                 html += '<strong>Aktuell:</strong> ';
                 html += '<code title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</code>';
-                html += '<button class="btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">ðŸ“‹ Kopieren</button>';
+                html += '<button class="btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
                 html += '</div>';
                 html += '<div class="tracking-link-edit-controls">';
                 html += '<input type="text" class="tracking-link-input" placeholder="Neue URL eingeben..." data-link-id="' + link.id + '">';
-                html += '<button class="btn-tracking-apply" data-link-id="' + link.id + '">âœ“ Anwenden</button>';
-                html += '<button class="btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">ðŸ‘ï¸ Locate</button>';
+                html += '<button class="btn-tracking-apply" data-link-id="' + link.id + '">✓ Anwenden</button>';
+                html += '<button class="btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">👁️ Locate</button>';
                 html += '</div>';
                 html += '</div>';
             });
@@ -4547,31 +4552,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         html += '</div>';
         
-        // Sektion 2: Ã–ffnerpixel
+        // Sektion 2: Öffnerpixel
         html += '<div class="tracking-section">';
-        html += '<h3>ðŸ‘ï¸ Ã–ffnerpixel</h3>';
+        html += '<h3>👁️ Öffnerpixel</h3>';
         
         if (trackingPixel) {
             html += '<div class="tracking-pixel-info">';
-            html += '<div class="tracking-pixel-status tracking-pixel-found">âœ“ Ã–ffnerpixel gefunden</div>';
+            html += '<div class="tracking-pixel-status tracking-pixel-found">✓ Öffnerpixel gefunden</div>';
             html += '<div class="tracking-pixel-details">';
             html += '<strong>Typ:</strong> ' + trackingPixel.type + '<br>';
             html += '<strong>Aktuell:</strong> <code>' + escapeHtml(trackingPixel.url.substring(0, 80)) + (trackingPixel.url.length > 80 ? '...' : '') + '</code>';
             html += '</div>';
             html += '<div class="tracking-pixel-edit-controls">';
             html += '<input type="text" id="trackingPixelInput" class="tracking-pixel-input" placeholder="Neue Pixel-URL eingeben..." value="' + escapeHtml(trackingPixel.url) + '">';
-            html += '<button id="trackingPixelApply" class="btn-tracking-apply">âœ“ Anwenden</button>';
+            html += '<button id="trackingPixelApply" class="btn-tracking-apply">✓ Anwenden</button>';
             html += '</div>';
             html += '</div>';
         } else {
             // Phase 8A: Pixel Insert UI (nur wenn fehlt)
             html += '<div class="tracking-pixel-info">';
-            html += '<div class="tracking-pixel-status tracking-pixel-missing">âš  Kein Ã–ffnerpixel gefunden</div>';
+            html += '<div class="tracking-pixel-status tracking-pixel-missing">⚠ Kein Öffnerpixel gefunden</div>';
             html += '<div class="tracking-pixel-insert-controls">';
             html += '<input type="text" id="trackingPixelInsertInput" class="tracking-pixel-input" placeholder="Pixel-URL eingeben...">';
-            html += '<button id="trackingPixelInsert" class="btn-tracking-insert-apply">âž• Pixel einfÃ¼gen</button>';
+            html += '<button id="trackingPixelInsert" class="btn-tracking-insert-apply">➕ Pixel einfügen</button>';
             html += '</div>';
-            html += '<p class="tracking-note">â„¹ï¸ Pixel wird nach &lt;body&gt; eingefÃ¼gt (unsichtbarer 1x1 Block).</p>';
+            html += '<p class="tracking-note">ℹ️ Pixel wird nach &lt;body&gt; eingefügt (unsichtbarer 1x1 Block).</p>';
             html += '</div>';
         }
         html += '</div>';
@@ -4579,15 +4584,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Undo Button
         if (trackingHistory.length > 0) {
             html += '<div class="tracking-undo-section">';
-            html += '<button id="trackingUndo" class="btn-tracking-undo">â†¶ Undo (' + trackingHistory.length + ')</button>';
+            html += '<button id="trackingUndo" class="btn-tracking-undo">↶ Undo (' + trackingHistory.length + ')</button>';
             html += '</div>';
         }
         
         // Commit Button (nur wenn pending)
         if (trackingPending) {
             html += '<div class="tracking-commit-section">';
-            html += '<button id="trackingCommit" class="btn-tracking-commit">âœ“ Ã„nderungen in diesem Tab Ã¼bernehmen</button>';
-            html += '<p class="tracking-commit-hint">âš ï¸ Ã„nderungen werden erst nach Commit in Downloads Ã¼bernommen.</p>';
+            html += '<button id="trackingCommit" class="btn-tracking-commit">✓ Änderungen in diesem Tab übernehmen</button>';
+            html += '<p class="tracking-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
             html += '</div>';
         }
         
@@ -4664,7 +4669,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
     
-    // Event Listener fÃ¼r Tracking Tab Edit (Phase 7A)
+    // Event Listener für Tracking Tab Edit (Phase 7A)
     function attachTrackingEditListeners() {
         // Copy Buttons
         document.querySelectorAll('.btn-tracking-copy').forEach(btn => {
@@ -4672,7 +4677,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 const href = this.getAttribute('data-href');
                 navigator.clipboard.writeText(href).then(() => {
-                    showInspectorToast('âœ… URL in Zwischenablage kopiert!');
+                    showInspectorToast('✅ URL in Zwischenablage kopiert!');
                 }).catch(err => {
                     console.error('Copy failed:', err);
                 });
@@ -4688,7 +4693,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newHref = input ? input.value.trim() : '';
                 
                 if (!newHref) {
-                    showInspectorToast('âš ï¸ Bitte neue URL eingeben.');
+                    showInspectorToast('⚠️ Bitte neue URL eingeben.');
                     return;
                 }
                 
@@ -4714,7 +4719,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newUrl = input ? input.value.trim() : '';
                 
                 if (!newUrl) {
-                    showInspectorToast('âš ï¸ Bitte neue Pixel-URL eingeben.');
+                    showInspectorToast('⚠️ Bitte neue Pixel-URL eingeben.');
                     return;
                 }
                 
@@ -4742,7 +4747,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const pixelUrl = input ? input.value.trim() : '';
                 
                 if (!pixelUrl) {
-                    showInspectorToast('âš ï¸ Bitte Pixel-URL eingeben.');
+                    showInspectorToast('⚠️ Bitte Pixel-URL eingeben.');
                     return;
                 }
                 
@@ -4778,7 +4783,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const targetUrl = input ? input.value.trim() : '';
                 
                 if (!targetUrl) {
-                    showInspectorToast('âš ï¸ Bitte Ziel-URL eingeben.');
+                    showInspectorToast('⚠️ Bitte Ziel-URL eingeben.');
                     return;
                 }
                 
@@ -4822,97 +4827,80 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace
-    function handleTrackingLinkReplace(linkId, newHref) {
-        console.log('[INSPECTOR] Replacing link:', linkId, 'with:', newHref);
-
-        trackingHistory.push(trackingTabHtml);
-
-        const linkIndex = parseInt(linkId.substring(1)) - 1;
-        const hrefRegex = /(<a\s[^>]*href=")([^"]*?)(")/gi;
-        let currentIndex = 0;
-        let oldHref = null;
-        let found = false;
-
-        const result = trackingTabHtml.replace(hrefRegex, (fullMatch, before, href, after) => {
-            if (currentIndex === linkIndex) {
-                oldHref = href;
-                found = true;
-                currentIndex++;
-                return before + newHref + after;
-            }
-            currentIndex++;
-            return fullMatch;
-        });
-
-        if (found) {
-            trackingTabHtml = result;
-            checkTrackingPending();
-            updateInspectorPreview();
-            showTrackingTab(trackingContent);
-            console.log('[INSPECTOR] Link replaced:', oldHref, '->', newHref);
-        } else {
-            trackingHistory.pop();
-            console.error('[INSPECTOR] Link not found:', linkId);
-            showInspectorToast('Fehler: Link nicht gefunden.');
+    // Handle Link Replace (Phase 7A)
+    // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace für handleTrackingLinkReplace
+function handleTrackingLinkReplace(linkId, newHref) {
+    const currentHtml = htmlEditor.getValue();
+    // String-basierter Regex-Replace - kein DOMParser (zerstört MSO/VML)
+    const linkRegex = new RegExp('(<a[^>]*?data-tracking-id=["\'"]?' + linkId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\'"]?[^>]*?href=)["\'"]([^"\'"]*)["\'"](', 'gi');
+    const linkRegex2 = new RegExp('(<a[^>]*?href=)["\'"]([^"\'"]*)["\'"](([^>]*?data-tracking-id=["\'"]?' + linkId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\'"]?)', 'gi');
+    
+    let newHtml = currentHtml;
+    let replaced = false;
+    
+    // Suche nach Link mit data-tracking-id
+    const idEscaped = linkId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fullTagRegex = new RegExp('<a([^>]*?)>', 'gi');
+    newHtml = currentHtml.replace(fullTagRegex, (match, attrs) => {
+        if (attrs.includes(linkId) || attrs.includes('data-tracking-id="' + linkId + '"') || attrs.includes("data-tracking-id='" + linkId + "'")) {
+            replaced = true;
+            return match.replace(/href=["\']([^"\']*)["\']/i, 'href="' + newHref.replace(/"/g, '&quot;') + '"');
         }
+        return match;
+    });
+    
+    if (replaced) {
+        htmlEditor.setValue(newHtml);
+        updatePreview();
     }
-
-        // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace
+}
+    
+    // Handle Pixel Replace (Phase 7A)
     function handleTrackingPixelReplace(newUrl) {
         console.log('[INSPECTOR] Replacing pixel URL with:', newUrl);
-
+        
+        // Speichere in History
         trackingHistory.push(trackingTabHtml);
-
-        const imgRegex = /<img([^>]*?)>/gi;
-        let found = false;
-        let oldSrc = null;
-
-        const result = trackingTabHtml.replace(imgRegex, (fullMatch, attrs) => {
-            if (found) return fullMatch;
-
-            const widthMatch  = attrs.match(/width="(\d+)"/i);
-            const heightMatch = attrs.match(/height="(\d+)"/i);
-            const styleMatch  = attrs.match(/style="([^"]*)"/i);
-            const srcMatch    = attrs.match(/src="([^"]*)"/i);
-
-            const width  = widthMatch  ? widthMatch[1]  : null;
-            const height = heightMatch ? heightMatch[1] : null;
-            const style  = styleMatch  ? styleMatch[1]  : '';
-            const src    = srcMatch    ? srcMatch[1]    : '';
-
-            const is1x1 = (width === '1' && height === '1') ||
-                          style.includes('width:1px') ||
-                          style.includes('height:1px');
-
-            const hasTrackingUrl = src.includes('track') ||
-                                   src.includes('pixel') ||
-                                   src.includes('open')  ||
-                                   src.includes('beacon');
-
+        
+        // OUTLOOK-FIX: Kein DOMParser - imgRegex auf trackingTabHtml
+        const imgRegex = /<img([^>]*?)\/?>/gi;
+        let replaced = false;
+        
+        const newHtml = trackingTabHtml.replace(imgRegex, (match, attrs) => {
+            const widthMatch = attrs.match(/width=["'](\d+)["']/i);
+            const heightMatch = attrs.match(/height=["'](\d+)["']/i);
+            const srcMatch = attrs.match(/src=["'"]([^"\']*)["\']/i);
+            const styleMatch = attrs.match(/style=["'"]([^"\']*)["\']/i);
+            
+            const is1x1 = (widthMatch && widthMatch[1] === '1' && heightMatch && heightMatch[1] === '1') ||
+                          (styleMatch && (styleMatch[1].includes('width:1px') || styleMatch[1].includes('height:1px')));
+            const hasTrackingUrl = srcMatch && (
+                srcMatch[1].includes('track') || srcMatch[1].includes('pixel') ||
+                srcMatch[1].includes('open') || srcMatch[1].includes('beacon')
+            );
+            
             if (is1x1 || hasTrackingUrl) {
-                oldSrc = src;
-                found = true;
-                const newAttrs = attrs.replace(/src="[^"]*"/, 'src="' + newUrl + '"');
-                return '<img' + newAttrs + '>';
+                replaced = true;
+                const oldSrc = srcMatch ? srcMatch[1] : '';
+                console.log('[INSPECTOR] Pixel replaced:', oldSrc, '->', newUrl);
+                return match.replace(/src=["'"]([^"\']*)["\']/i, 'src="' + newUrl.replace(/"/g, '&quot;') + '"');
             }
-            return fullMatch;
+            return match;
         });
-
-        if (found) {
-            trackingTabHtml = result;
+        
+        if (replaced) {
+            trackingTabHtml = newHtml;
             checkTrackingPending();
             updateInspectorPreview();
             showTrackingTab(trackingContent);
-            console.log('[INSPECTOR] Pixel replaced:', oldSrc, '->', newUrl);
         } else {
-            trackingHistory.pop();
             console.error('[INSPECTOR] Tracking pixel not found');
-            showInspectorToast('Fehler: Kein Tracking-Pixel gefunden.');
+            trackingHistory.pop();
         }
     }
-
-        function handleTrackingUndo() {
+    
+    // Handle Tracking Undo (Phase 7A)
+    function handleTrackingUndo() {
         if (trackingHistory.length === 0) return;
         
         // Restore previous state
@@ -4939,10 +4927,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         
-        // Commit: trackingTabHtml â†’ currentWorkingHtml
+        // Commit: trackingTabHtml → currentWorkingHtml
         currentWorkingHtml = trackingTabHtml;
         
-        // Sync: trackingTabHtml = currentWorkingHtml (fÃ¼r nÃ¤chste Ã„nderungen)
+        // Sync: trackingTabHtml = currentWorkingHtml (für nächste Änderungen)
         trackingTabHtml = currentWorkingHtml;
         
         // Reset Tracking State
@@ -4972,7 +4960,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         
-        // Commit: imagesTabHtml â†’ currentWorkingHtml
+        // Commit: imagesTabHtml → currentWorkingHtml
         currentWorkingHtml = imagesTabHtml;
         
         // Sync: imagesTabHtml = currentWorkingHtml
@@ -5003,7 +4991,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         
-        // Commit: editorTabHtml â†’ currentWorkingHtml
+        // Commit: editorTabHtml → currentWorkingHtml
         // KERN-BUG FIX: qa-node-ids entfernen bevor ins finale HTML gespeichert wird
         currentWorkingHtml = stripQaNodeIds(editorTabHtml);
         
@@ -5014,7 +5002,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editorHistory = [];
         editorSelectedElement = null;
         
-        // Pending zurÃ¼cksetzen
+        // Pending zurücksetzen
         setEditorPending(false);
         
         // Log Commit (Phase 11 B6)
@@ -5034,7 +5022,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleTrackingCommit() {
         if (!trackingPending) return;
         
-        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausfÃ¼hren
+        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausführen
         const success = commitTrackingChanges();
         
         if (success) {
@@ -5051,7 +5039,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateInspectorPreview();
             
             // Phase 12: Inline Toast statt Alert
-            showInspectorToast('âœ… Committed');
+            showInspectorToast('✅ Committed');
         }
     }
     
@@ -5059,59 +5047,59 @@ document.addEventListener('DOMContentLoaded', () => {
     // PHASE 8: TRACKING INSERT HANDLERS
     // ============================================
     
-    // OUTLOOK-FIX: Kein DOMParser - reiner String-Insert
+    // Handle Pixel Insert (Phase 8A)
     function handleTrackingPixelInsert(pixelUrl) {
         console.log('[INSPECTOR] Inserting tracking pixel:', pixelUrl);
-
+        
+        // Speichere in History
         trackingHistory.push(trackingTabHtml);
-
-        // Pruefen ob bereits ein 1x1 Pixel existiert
-        const imgRegex = /<img([^>]*?)>/gi;
+        
+        // OUTLOOK-FIX: Kein DOMParser - String-basiertes Check + Insert
+        
+        // Prüfe ob bereits ein 1x1 Pixel existiert
+        const imgRegex = /<img([^>]*?)\/?>/gi;
         let imgMatch;
         while ((imgMatch = imgRegex.exec(trackingTabHtml)) !== null) {
             const attrs = imgMatch[1];
-            const widthMatch  = attrs.match(/width="(\d+)"/i);
-            const heightMatch = attrs.match(/height="(\d+)"/i);
-            const styleMatch  = attrs.match(/style="([^"]*)"/i);
-            const width  = widthMatch  ? widthMatch[1]  : null;
-            const height = heightMatch ? heightMatch[1] : null;
-            const style  = styleMatch  ? styleMatch[1]  : '';
-
-            if ((width === '1' && height === '1') ||
-                style.includes('width:1px') ||
-                style.includes('height:1px')) {
-                showInspectorToast('1x1 Pixel existiert bereits. Bitte "Ersetzen" verwenden.');
+            const widthMatch = attrs.match(/width=["'](\d+)["']/i);
+            const heightMatch = attrs.match(/height=["'](\d+)["']/i);
+            const styleMatch = attrs.match(/style=["'"]([^"\']*)["\']/i);
+            const is1x1 = (widthMatch && widthMatch[1] === '1' && heightMatch && heightMatch[1] === '1') ||
+                          (styleMatch && (styleMatch[1].includes('width:1px') || styleMatch[1].includes('height:1px')));
+            if (is1x1) {
+                showInspectorToast('\u26a0\ufe0f 1x1 Pixel existiert bereits. Bitte \"Ersetzen\" verwenden.');
                 trackingHistory.pop();
                 return;
             }
         }
-
-        const bodyMatch = trackingTabHtml.match(/<body[^>]*>/i);
-        if (!bodyMatch) {
-            showInspectorToast('Fehler: Kein <body> Tag gefunden.');
+        
+        // Prüfe ob <body> Tag vorhanden
+        const bodyTagRegex = /(<body[^>]*>)/i;
+        if (!bodyTagRegex.test(trackingTabHtml)) {
+            showInspectorToast('\u274c Kein <body> Tag gefunden.');
             trackingHistory.pop();
             return;
         }
-
-        const pixelBlock =
-            '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">' +
-            '<img src="' + pixelUrl + '" width="1" height="1" style="display:block;" alt="">' +
+        
+        // Erstelle Pixel-Block als String
+        const pixelBlock = '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">' +
+            '<img src="' + pixelUrl.replace(/"/g, '&quot;') + '" width="1" height="1" style="display:block;" alt="" />' +
             '</div>';
-
-        const bodyTagEnd = trackingTabHtml.indexOf(bodyMatch[0]) + bodyMatch[0].length;
-        trackingTabHtml = trackingTabHtml.slice(0, bodyTagEnd) + '\n' + pixelBlock + trackingTabHtml.slice(bodyTagEnd);
-
+        
+        // Füge nach <body> ein
+        trackingTabHtml = trackingTabHtml.replace(bodyTagRegex, '$1\n' + pixelBlock);
+        
         checkTrackingPending();
         updateInspectorPreview();
         showTrackingTab(trackingContent);
-
+        
         console.log('[INSPECTOR] Pixel inserted:', pixelUrl);
     }
-
-        // Handle Link Insert (Phase 8B)
+    
+    // Handle Link Insert (Phase 8B)
     function handleTrackingLinkInsert(targetUrl) {
         if (!trackingSelectedElement) {
-            showInspectorToast('âš ï¸ Kein Element ausgewÃ¤hlt.');
+            showInspectorToast('⚠️ Kein Element ausgewählt.');
             return;
         }
         
@@ -5125,14 +5113,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const doc = parser.parseFromString(trackingTabHtml, 'text/html');
         
         // Finde Element via qaNodeId (ohne data-qa-node-id, da nicht in trackingTabHtml)
-        // Wir mÃ¼ssen das Element via Index finden (N001 -> 1. klickbares Element, etc.)
+        // Wir müssen das Element via Index finden (N001 -> 1. klickbares Element, etc.)
         const nodeIndex = parseInt(trackingSelectedElement.qaNodeId.substring(1)) - 1;
         
         // Sammle alle klickbaren Elemente (gleiche Logik wie in generateAnnotatedPreview)
         const clickableElements = doc.querySelectorAll('a, img, button, table, td, tr, div');
         
         if (nodeIndex < 0 || nodeIndex >= clickableElements.length) {
-            showInspectorToast('âš ï¸ Element nicht gefunden.');
+            showInspectorToast('⚠️ Element nicht gefunden.');
             trackingHistory.pop();
             return;
         }
@@ -5143,7 +5131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let parent = element.parentElement;
         while (parent) {
             if (parent.tagName.toLowerCase() === 'a') {
-                showInspectorToast('âš ï¸ Element ist bereits verlinkt.');
+                showInspectorToast('⚠️ Element ist bereits verlinkt.');
                 trackingHistory.pop();
                 return;
             }
@@ -5161,12 +5149,12 @@ document.addEventListener('DOMContentLoaded', () => {
             parent2.insertBefore(link, element);
             link.appendChild(element);
         } else {
-            showInspectorToast('âš ï¸ Element hat kein Parent-Element.');
+            showInspectorToast('⚠️ Element hat kein Parent-Element.');
             trackingHistory.pop();
             return;
         }
         
-        // Serialisiere zurÃ¼ck
+        // Serialisiere zurück
         // BUG #4 FIX: outerHTML statt XMLSerializer
         trackingTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         
@@ -5191,7 +5179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleTrackingElementSelection(data) {
         console.log('[INSPECTOR] Tracking element selected:', data);
         
-        // Speichere ausgewÃ¤hltes Element
+        // Speichere ausgewähltes Element
         trackingSelectedElement = {
             qaNodeId: data.qaNodeId,
             tagName: data.tagName,
@@ -5240,7 +5228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Sektion 1: IMG src
         html += '<div class="images-section">';
-        html += '<h3>ðŸ–¼ï¸ IMG src (' + images.length + ')</h3>';
+        html += '<h3>🖼️ IMG src (' + images.length + ')</h3>';
         
         if (images.length === 0) {
             html += '<p class="images-empty">Keine Bilder gefunden.</p>';
@@ -5258,9 +5246,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '</div>';
                 html += '<div class="image-edit-controls">';
                 html += '<input type="text" class="image-src-input" placeholder="Neue src URL eingeben..." data-img-id="' + img.id + '">';
-                html += '<button class="btn-image-apply" data-img-id="' + img.id + '">âœ“ Anwenden</button>';
-                html += '<button class="btn-image-remove" data-img-id="' + img.id + '">ðŸ—‘ï¸ Entfernen</button>';
-                html += '<button class="btn-image-locate" data-img-id="' + img.id + '" data-src="' + escapeHtml(img.src) + '">ðŸ‘ï¸ Locate</button>';
+                html += '<button class="btn-image-apply" data-img-id="' + img.id + '">✓ Anwenden</button>';
+                html += '<button class="btn-image-remove" data-img-id="' + img.id + '">🗑️ Entfernen</button>';
+                html += '<button class="btn-image-locate" data-img-id="' + img.id + '" data-src="' + escapeHtml(img.src) + '">👁️ Locate</button>';
                 html += '</div>';
                 html += '</div>';
             });
@@ -5271,7 +5259,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Sektion 2: Background Images (optional, read-only)
         if (bgImages.length > 0) {
             html += '<div class="images-section">';
-            html += '<h3>ðŸŽ¨ Background Images (' + bgImages.length + ')</h3>';
+            html += '<h3>🎨 Background Images (' + bgImages.length + ')</h3>';
             html += '<div class="bg-images-list">';
             bgImages.forEach(bg => {
                 html += '<div class="bg-image-item">';
@@ -5280,22 +5268,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '</div>';
             });
             html += '</div>';
-            html += '<p class="images-note">â„¹ï¸ Background Images sind read-only.</p>';
+            html += '<p class="images-note">ℹ️ Background Images sind read-only.</p>';
             html += '</div>';
         }
         
         // Undo Button
         if (imagesHistory.length > 0) {
             html += '<div class="images-undo-section">';
-            html += '<button id="imagesUndo" class="btn-images-undo">â†¶ Undo (' + imagesHistory.length + ')</button>';
+            html += '<button id="imagesUndo" class="btn-images-undo">↶ Undo (' + imagesHistory.length + ')</button>';
             html += '</div>';
         }
         
         // Commit Button (nur wenn pending)
         if (imagesPending) {
             html += '<div class="images-commit-section">';
-            html += '<button id="imagesCommit" class="btn-images-commit">âœ“ Ã„nderungen in diesem Tab Ã¼bernehmen</button>';
-            html += '<p class="images-commit-hint">âš ï¸ Ã„nderungen werden erst nach Commit in Downloads Ã¼bernommen.</p>';
+            html += '<button id="imagesCommit" class="btn-images-commit">✓ Änderungen in diesem Tab übernehmen</button>';
+            html += '<p class="images-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
             html += '</div>';
         }
         
@@ -5359,7 +5347,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // Suche in <style> BlÃ¶cken
+            // Suche in <style> Blöcken
             const styleElements = doc.querySelectorAll('style');
             styleElements.forEach(styleEl => {
                 const cssText = styleEl.textContent || '';
@@ -5385,7 +5373,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return bgImages;
     }
     
-    // Event Listener fÃ¼r Images Tab Edit (Phase 7B)
+    // Event Listener für Images Tab Edit (Phase 7B)
     function attachImagesEditListeners() {
         // Apply Buttons (Images)
         document.querySelectorAll('.btn-image-apply').forEach(btn => {
@@ -5396,7 +5384,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newSrc = input ? input.value.trim() : '';
                 
                 if (!newSrc) {
-                    showInspectorToast('âš ï¸ Bitte neue src URL eingeben.');
+                    showInspectorToast('⚠️ Bitte neue src URL eingeben.');
                     return;
                 }
                 
@@ -5410,7 +5398,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 const imgId = this.getAttribute('data-img-id');
                 
-                const confirmed = confirm('Bild entfernen?\n\nDies lÃ¶scht nur den <img> Tag, nicht die umliegende Struktur.');
+                const confirmed = confirm('Bild entfernen?\n\nDies löscht nur den <img> Tag, nicht die umliegende Struktur.');
                 if (!confirmed) return;
                 
                 handleImageRemove(imgId);
@@ -5497,7 +5485,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Ersetze src
             img.setAttribute('src', newSrc);
             
-            // Serialisiere zurÃ¼ck
+            // Serialisiere zurück
             // BUG #4 FIX: outerHTML statt XMLSerializer
             imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
@@ -5538,7 +5526,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Entferne <img> Tag
             img.remove();
             
-            // Serialisiere zurÃ¼ck
+            // Serialisiere zurück
             // BUG #4 FIX: outerHTML statt XMLSerializer
             imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
             
@@ -5582,7 +5570,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleImagesCommit() {
         if (!imagesPending) return;
         
-        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausfÃ¼hren
+        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausführen
         const success = commitImagesChanges();
         
         if (success) {
@@ -5599,7 +5587,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateInspectorPreview();
             
             // Phase 12: Inline Toast statt Alert
-            showInspectorToast('âœ… Committed');
+            showInspectorToast('✅ Committed');
         }
     }
     
@@ -5624,10 +5612,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Sektion A: Automatisch geschlossene Tags
         html += '<div class="tagreview-section">';
-        html += '<h3>âš™ï¸ Automatisch geschlossene Tags (' + autoFixes.length + ')</h3>';
+        html += '<h3>⚙️ Automatisch geschlossene Tags (' + autoFixes.length + ')</h3>';
         
         if (autoFixes.length === 0) {
-            html += '<p class="tagreview-empty">âœ… Keine automatischen Tag-SchlieÃŸungen durchgefÃ¼hrt.</p>';
+            html += '<p class="tagreview-empty">✅ Keine automatischen Tag-Schließungen durchgeführt.</p>';
         } else {
             html += '<div class="tagreview-fixes-list">';
             autoFixes.forEach(fix => {
@@ -5644,8 +5632,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '<pre>' + escapeHtml(fix.snippetBefore) + '<span style="background:#4caf50;color:white;">' + escapeHtml(fix.inserted) + '</span></pre>';
                 html += '</div>';
                 html += '<div class="tagreview-fix-actions">';
-                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">â†¶ Undo</button>';
-                html += '<button class="btn-tagreview-keep" data-fix-id="' + fix.id + '">âœ“ Behalten</button>';
+                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Undo</button>';
+                html += '<button class="btn-tagreview-keep" data-fix-id="' + fix.id + '">✓ Behalten</button>';
                 html += '</div>';
                 html += '</div>';
             });
@@ -5656,7 +5644,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Sektion B: Manuelle Aktionen
         if (manualActions.length > 0) {
             html += '<div class="tagreview-section">';
-            html += '<h3>ðŸ“ Manuelle Aktionen (' + manualActions.length + ')</h3>';
+            html += '<h3>📝 Manuelle Aktionen (' + manualActions.length + ')</h3>';
             html += '<div class="tagreview-actions-list">';
             manualActions.forEach((action, index) => {
                 html += '<div class="tagreview-action-item">';
@@ -5672,14 +5660,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         tagreviewContent.innerHTML = html;
         
-        // Event Listener fÃ¼r Fix-Klicks (Locate)
+        // Event Listener für Fix-Klicks (Locate)
         attachTagReviewFixListeners(autoFixes);
         
-        // Event Listener fÃ¼r Undo/Keep Buttons
+        // Event Listener für Undo/Keep Buttons
         attachTagReviewActionListeners(autoFixes);
     }
     
-    // Event Listener fÃ¼r Fix-Klicks (Locate)
+    // Event Listener für Fix-Klicks (Locate)
     function attachTagReviewFixListeners(autoFixes) {
         const fixItems = document.querySelectorAll('.tagreview-fix-item');
         
@@ -5695,7 +5683,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Event Listener fÃ¼r Undo/Keep Buttons
+    // Event Listener für Undo/Keep Buttons
     function attachTagReviewActionListeners(autoFixes) {
         // Undo Buttons
         const undoButtons = document.querySelectorAll('.btn-tagreview-undo');
@@ -5730,7 +5718,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const index = currentWorkingHtml.indexOf(searchPattern);
         
         if (index === -1) {
-            showInspectorToast('âŒ Fehler: Fix konnte nicht rÃ¼ckgÃ¤ngig gemacht werden.');
+            showInspectorToast('❌ Fehler: Fix konnte nicht rückgängig gemacht werden.');
             return;
         }
         
@@ -5741,7 +5729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Log (falls manualActionLog existiert)
         if (typeof manualActionLog !== 'undefined') {
-            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${fix.id} rÃ¼ckgÃ¤ngig gemacht (Inspector)`;
+            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${fix.id} rückgängig gemacht (Inspector)`;
             manualActionLog.push(logEntry);
         }
         
@@ -5752,7 +5740,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Markierung
         const undoneLabel = document.createElement('span');
-        undoneLabel.textContent = 'â†¶ RÃ¼ckgÃ¤ngig gemacht';
+        undoneLabel.textContent = '↶ Rückgängig gemacht';
         undoneLabel.style.color = '#f44336';
         undoneLabel.style.fontWeight = 'bold';
         undoneLabel.style.marginLeft = '10px';
@@ -5779,7 +5767,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Markierung
         const acceptedLabel = document.createElement('span');
-        acceptedLabel.textContent = 'âœ“ Akzeptiert';
+        acceptedLabel.textContent = '✓ Akzeptiert';
         acceptedLabel.style.color = '#4caf50';
         acceptedLabel.style.fontWeight = 'bold';
         acceptedLabel.style.marginLeft = '10px';
@@ -5850,60 +5838,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let html = '<div class="editor-tab-content">';
 
-        // â”€â”€ Kopfbereich â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Kopfbereich ───────────────────────────────────────────────
         if (!editorSelectedElement) {
             html += '<div class="editor-hint editor-hint-idle">';
-            html += '<span style="font-size:28px">ðŸ‘†</span>';
+            html += '<span style="font-size:28px">👆</span>';
             html += '<p><strong>Element anklicken</strong></p>';
-            html += '<p style="color:#888;font-size:13px">Klicke in der Vorschau rechts auf einen Text, ein Bild oder einen Button â€“ dann erscheinen hier die Bearbeitungsoptionen.</p>';
+            html += '<p style="color:#888;font-size:13px">Klicke in der Vorschau rechts auf einen Text, ein Bild oder einen Button – dann erscheinen hier die Bearbeitungsoptionen.</p>';
             html += '</div>';
         }
 
-        // â”€â”€ AusgewÃ¤hltes Element â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Ausgewähltes Element ──────────────────────────────────────
         if (editorSelectedElement) {
-            const tagIcons = { a:'ðŸ”—', img:'ðŸ–¼ï¸', button:'ðŸ”˜', div:'ðŸ“¦', td:'ðŸ“‹', table:'ðŸ“Š', tr:'â†”ï¸' };
-            const icon = tagIcons[editorSelectedElement.tagName] || 'ðŸ·ï¸';
+            const tagIcons = { a:'🔗', img:'🖼️', button:'🔘', div:'📦', td:'📋', table:'📊', tr:'↔️' };
+            const icon = tagIcons[editorSelectedElement.tagName] || '🏷️';
 
             html += '<div class="editor-selection-card">';
 
             // Typ-Badge
-            html += '<div class="editor-type-badge">' + icon + ' <strong>' + escapeHtml(editorSelectedElement.tagName.toUpperCase()) + '</strong> ausgewÃ¤hlt</div>';
+            html += '<div class="editor-type-badge">' + icon + ' <strong>' + escapeHtml(editorSelectedElement.tagName.toUpperCase()) + '</strong> ausgewählt</div>';
 
             // Textvorschau (wenn vorhanden)
             if (editorSelectedElement.text && editorSelectedElement.text.trim()) {
-                const preview = editorSelectedElement.text.substring(0, 80) + (editorSelectedElement.text.length > 80 ? 'â€¦' : '');
-                html += '<div class="editor-preview-text">ðŸ“ ' + escapeHtml(preview) + '</div>';
+                const preview = editorSelectedElement.text.substring(0, 80) + (editorSelectedElement.text.length > 80 ? '…' : '');
+                html += '<div class="editor-preview-text">📝 ' + escapeHtml(preview) + '</div>';
             }
 
-            // â”€â”€ Link-Editor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Link-Editor ──────────────────────────────────────────
             if (editorSelectedElement.tagName === 'a') {
                 html += '<div class="editor-action-group">';
-                html += '<h4>ðŸ”— Link-URL Ã¤ndern</h4>';
+                html += '<h4>🔗 Link-URL ändern</h4>';
                 html += '<input type="text" id="editorLinkUrl" class="editor-input" value="' + escapeHtml(editorSelectedElement.href) + '" placeholder="https://example.com" />';
                 html += '<div class="editor-btn-row">';
-                html += '<button id="editorUpdateLink" class="btn-editor-primary">âœ“ Speichern</button>';
-                html += '<button id="editorClearLink" class="btn-editor-secondary">âˆ… URL leeren</button>';
+                html += '<button id="editorUpdateLink" class="btn-editor-primary">✓ Speichern</button>';
+                html += '<button id="editorClearLink" class="btn-editor-secondary">∅ URL leeren</button>';
                 html += '<button id="editorRemoveLink" class="btn-editor-secondary">Link entfernen</button>';
                 html += '</div>';
                 html += '</div>';
             }
 
-            // â”€â”€ Bild-Editor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Bild-Editor ──────────────────────────────────────────
             if (editorSelectedElement.tagName === 'img') {
                 html += '<div class="editor-action-group">';
-                html += '<h4>ðŸ–¼ï¸ Bild-URL Ã¤ndern</h4>';
+                html += '<h4>🖼️ Bild-URL ändern</h4>';
                 html += '<input type="text" id="editorImageSrc" class="editor-input" value="' + escapeHtml(editorSelectedElement.src) + '" placeholder="https://example.com/bild.jpg" />';
                 html += '<div class="editor-btn-row">';
-                html += '<button id="editorUpdateImage" class="btn-editor-primary">âœ“ Speichern</button>';
-                html += '<button id="editorRemoveImage" class="btn-editor-danger">ðŸ—‘ï¸ Bild lÃ¶schen</button>';
+                html += '<button id="editorUpdateImage" class="btn-editor-primary">✓ Speichern</button>';
+                html += '<button id="editorRemoveImage" class="btn-editor-danger">🗑️ Bild löschen</button>';
                 html += '</div>';
                 html += '</div>';
             }
 
-            // â”€â”€ Platzhalter einfÃ¼gen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Platzhalter einfügen ──────────────────────────────────
             html += '<div class="editor-action-group">';
-            html += '<h4>ðŸŽ¯ Platzhalter einfÃ¼gen</h4>';
-            html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Wird an das ausgewÃ¤hlte Element angehÃ¤ngt.</p>';
+            html += '<h4>🎯 Platzhalter einfügen</h4>';
+            html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Wird an das ausgewählte Element angehängt.</p>';
             const placeholders = [
                 '%anrede%','%titel%','%vorname%','%nachname%','%firma%',
                 '%strasse%','%plz%','%ort%','%land%','%email%',
@@ -5912,35 +5900,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 '%produkt%','%menge%','%lieferdatum%','%tracking%','%link%'
             ];
             html += '<select id="editorPlaceholderSelect" class="editor-input">';
-            html += '<option value="">-- Platzhalter auswÃ¤hlen --</option>';
+            html += '<option value="">-- Platzhalter auswählen --</option>';
             placeholders.forEach(function(ph) {
                 html += '<option value="' + escapeHtml(ph) + '">' + escapeHtml(ph) + '</option>';
             });
             html += '</select>';
-            html += '<button id="editorInsertPlaceholder" class="btn-editor-primary" style="margin-top:8px;width:100%">âž• EinfÃ¼gen</button>';
+            html += '<button id="editorInsertPlaceholder" class="btn-editor-primary" style="margin-top:8px;width:100%">➕ Einfügen</button>';
             html += '</div>';
 
-            // â”€â”€ Block lÃ¶schen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Block löschen ─────────────────────────────────────────
             html += '<div class="editor-action-group editor-action-danger-zone">';
-            html += '<h4>âš ï¸ Element entfernen</h4>';
-            html += '<p style="color:#888;font-size:12px;margin:0 0 8px">LÃ¶scht das angeklickte Element komplett aus dem Template. Kann mit Undo rÃ¼ckgÃ¤ngig gemacht werden.</p>';
-            html += '<button id="editorDeleteBlock" class="btn-editor-danger" style="width:100%">ðŸ—‘ï¸ Element lÃ¶schen</button>';
+            html += '<h4>⚠️ Element entfernen</h4>';
+            html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Löscht das angeklickte Element komplett aus dem Template. Kann mit Undo rückgängig gemacht werden.</p>';
+            html += '<button id="editorDeleteBlock" class="btn-editor-danger" style="width:100%">🗑️ Element löschen</button>';
             html += '</div>';
 
             html += '</div>'; // end editor-selection-card
         }
 
-        // â”€â”€ Undo / Commit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Undo / Commit ─────────────────────────────────────────────
         html += '<div class="editor-footer-actions">';
         if (editorHistory.length > 0) {
-            html += '<button id="editorUndo" class="btn-editor-secondary">â†¶ RÃ¼ckgÃ¤ngig (' + editorHistory.length + ')</button>';
+            html += '<button id="editorUndo" class="btn-editor-secondary">↶ Rückgängig (' + editorHistory.length + ')</button>';
         }
         if (editorPending) {
-            html += '<button id="editorCommit" class="btn-editor-commit">âœ… Ã„nderungen Ã¼bernehmen</button>';
+            html += '<button id="editorCommit" class="btn-editor-commit">✅ Änderungen übernehmen</button>';
         } else if (editorHistory.length === 0 && !editorSelectedElement) {
             // nothing
         } else if (!editorPending) {
-            html += '<div class="editor-saved-badge">âœ… Alles gespeichert</div>';
+            html += '<div class="editor-saved-badge">✅ Alles gespeichert</div>';
         }
         html += '</div>';
 
@@ -5949,7 +5937,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editorContent.innerHTML = html;
         attachEditorActionListeners();
     }
-    // Event Listener fÃ¼r Editor Aktionen
+    // Event Listener für Editor Aktionen
     function attachEditorActionListeners() {
         const deleteBtn = document.getElementById('editorDeleteBlock');
         const undoBtn = document.getElementById('editorUndo');
@@ -6093,13 +6081,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ec = document.getElementById('editorContent');
         if (!ec) {
-            showInspectorToast('âŒ DEBUG: editorContent nicht gefunden!');
+            showInspectorToast('❌ DEBUG: editorContent nicht gefunden!');
             return;
         }
         showEditorTab(ec);
     }
     
-    // Extrahiere Block (Â±30 Zeilen) aus HTML
+    // Extrahiere Block (±30 Zeilen) aus HTML
     function extractBlockFromHtml(html, qaNodeId) {
         if (!html || !qaNodeId) return null;
         
@@ -6109,20 +6097,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (index === -1) return null;
         
-        // Finde Start des Tags (rÃ¼ckwÃ¤rts bis <)
+        // Finde Start des Tags (rückwärts bis <)
         let tagStart = index;
         while (tagStart > 0 && html[tagStart] !== '<') {
             tagStart--;
         }
         
-        // Finde Ende des Tags (vorwÃ¤rts bis >)
+        // Finde Ende des Tags (vorwärts bis >)
         let tagEnd = index;
         while (tagEnd < html.length && html[tagEnd] !== '>') {
             tagEnd++;
         }
         tagEnd++; // Include >
         
-        // ZÃ¤hle Zeilen vor und nach
+        // Zähle Zeilen vor und nach
         const linesBefore = 30;
         const linesAfter = 30;
         
@@ -6157,7 +6145,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkEditorPending() {
         // editorPending wird direkt als Flag gesetzt (nicht per String-Vergleich),
         // weil der DOMParser HTML beim Parsen normalisiert und der Vergleich
-        // dadurch immer "pending" liefern wÃ¼rde - auch ohne echte Ã„nderung.
+        // dadurch immer "pending" liefern würde - auch ohne echte Änderung.
         // Aufruf mit setEditorPending(true/false) statt checkEditorPending().
     }
 
@@ -6175,7 +6163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleEditorDeleteBlock() {
         if (!editorSelectedElement) return;
         
-        const confirmed = confirm('Element lÃ¶schen? Kann mit RÃ¼ckgÃ¤ngig wiederhergestellt werden.');
+        const confirmed = confirm('Element löschen? Kann mit Rückgängig wiederhergestellt werden.');
         if (!confirmed) return;
         
         editorHistory.push(editorTabHtml);
@@ -6189,10 +6177,10 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement = null;
             updateInspectorPreview();
             showEditorTab(document.getElementById('editorContent'));
-            showInspectorToast('âœ… Element gelÃ¶scht');
+            showInspectorToast('✅ Element gelöscht');
         } else {
             editorHistory.pop();
-            showInspectorToast('âš ï¸ Element nicht gefunden â€“ bitte erneut anklicken.');
+            showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.');
         }
     }
     
@@ -6206,7 +6194,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newUrl = document.getElementById('editorLinkUrl').value;
         
         if (!newUrl) {
-            showInspectorToast('âš ï¸ Bitte eine URL eingeben.');
+            showInspectorToast('⚠️ Bitte eine URL eingeben.');
             return;
         }
         
@@ -6221,7 +6209,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editorSelectedElement.href = newUrl;
             showEditorTab(document.getElementById('editorContent'));
             updateElementInPreview(editorSelectedElement.qaNodeId, _el1.outerHTML);
-        } else { editorHistory.pop(); showInspectorToast('âš ï¸ Element nicht gefunden â€“ bitte erneut anklicken.'); }
+        } else { editorHistory.pop(); showInspectorToast('⚠️ Element nicht gefunden – bitte erneut anklicken.'); }
     }
     
     function handleEditorClearLink() {
@@ -6265,7 +6253,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSrc = document.getElementById('editorImageSrc').value;
         
         if (!newSrc) {
-            showInspectorToast('âš ï¸ Bitte eine Bild-URL eingeben.');
+            showInspectorToast('⚠️ Bitte eine Bild-URL eingeben.');
             return;
         }
         
@@ -6309,15 +6297,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const placeholder = select.value;
         
         if (!placeholder) {
-            showInspectorToast('âš ï¸ Bitte einen Platzhalter auswÃ¤hlen.');
+            showInspectorToast('⚠️ Bitte einen Platzhalter auswählen.');
             return;
         }
 
-        // Speichere in History (fÃ¼r Undo)
+        // Speichere in History (für Undo)
         editorHistory.push(editorTabHtml);
 
-        // Sende an iframe â€“ der fÃ¼gt an der echten Cursor-Position ein
-        // und meldet per PLACEHOLDER_DONE das aktualisierte HTML zurÃ¼ck
+        // Sende an iframe – der fügt an der echten Cursor-Position ein
+        // und meldet per PLACEHOLDER_DONE das aktualisierte HTML zurück
         const iframe = document.getElementById('inspectorPreviewFrame');
         if (iframe && iframe.contentWindow) {
             iframe.contentWindow.postMessage({
@@ -6327,7 +6315,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, '*');
         } else {
             editorHistory.pop();
-            showInspectorToast('âŒ Vorschau nicht bereit.');
+            showInspectorToast('❌ Vorschau nicht bereit.');
         }
     }
     
@@ -6349,7 +6337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Handle Replace Block (deaktiviert - Button wurde aus UI entfernt)
     function handleEditorReplaceBlock() {
-        showInspectorToast('â„¹ï¸ Funktion nicht verfÃ¼gbar.');
+        showInspectorToast('ℹ️ Funktion nicht verfügbar.');
         return;
         // eslint-disable-next-line no-unreachable
         
@@ -6361,18 +6349,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const newBlock = prompt(
             'Block ersetzen:\n\n' +
             'Bearbeiten Sie den Block-Inhalt unten:\n\n' +
-            '(Hinweis: Verwenden Sie einen externen Editor fÃ¼r grÃ¶ÃŸere Ã„nderungen)',
+            '(Hinweis: Verwenden Sie einen externen Editor für größere Änderungen)',
             blockSnippet
         );
         
         if (newBlock === null) return; // Cancel
         
-        // BestÃ¤tigung mit Vorher/Nachher
+        // Bestätigung mit Vorher/Nachher
         const confirmed = confirm(
             'Block ersetzen?\n\n' +
             'VORHER:\n' + blockSnippet.substring(0, 200) + '...\n\n' +
             'NACHHER:\n' + newBlock.substring(0, 200) + '...\n\n' +
-            'BestÃ¤tigen?'
+            'Bestätigen?'
         );
         
         if (!confirmed) return;
@@ -6388,7 +6376,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check Pending (Phase 10)
         setEditorPending(true);
         
-        // Auswahl zurÃ¼cksetzen
+        // Auswahl zurücksetzen
         editorSelectedElement = null;
         
         // Update Preview
@@ -6408,10 +6396,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore previous state
         editorTabHtml = editorHistory.pop();
         
-        // Wenn keine History mehr â†’ zurÃ¼ck auf committed Stand
+        // Wenn keine History mehr → zurück auf committed Stand
         setEditorPending(editorHistory.length > 0);
         
-        // Auswahl zurÃ¼cksetzen
+        // Auswahl zurücksetzen
         editorSelectedElement = null;
         
         // Update Preview
@@ -6428,7 +6416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleEditorCommit() {
         if (!editorPending) return;
         
-        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausfÃ¼hren
+        // Phase 12 FIX 1: Kein confirm(), Commit sofort ausführen
         const success = commitEditorChanges();
         
         if (success) {
@@ -6445,7 +6433,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateInspectorPreview();
             
             // Phase 12: Inline Toast statt Alert
-            showInspectorToast('âœ… Committed');
+            showInspectorToast('✅ Committed');
         }
     }
     
@@ -6467,7 +6455,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const lenCurrent = currentWorkingHtml?.length || 0;
         const anyPending = trackingPending || imagesPending || editorPending;
         
-        // PrÃ¼fe ob Downloads currentWorkingHtml verwenden
+        // Prüfe ob Downloads currentWorkingHtml verwenden
         const downloadSourceOK = (currentWorkingHtml !== null && currentWorkingHtml !== undefined);
         
         console.log('='.repeat(60));
@@ -6480,7 +6468,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Phase 12: Inline Toast Funktion (statt Alert)
     function showInspectorToast(message) {
-        // PrÃ¼fe ob Toast-Container existiert, sonst erstelle ihn
+        // Prüfe ob Toast-Container existiert, sonst erstelle ihn
         let toastContainer = document.getElementById('inspectorToastContainer');
         if (!toastContainer) {
             toastContainer = document.createElement('div');
@@ -6490,11 +6478,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // BUG #5 FIX: Farbe je nach Nachrichtentyp bestimmen
-        // âŒ = Fehler (rot), âš ï¸ = Warnung (orange), â„¹ï¸ = Info (blau), alles andere = Erfolg (grÃ¼n)
-        let bgColor = '#2ecc71'; // Standard: grÃ¼n (Erfolg)
-        if (message.startsWith('âŒ')) bgColor = '#e74c3c';      // rot
-        else if (message.startsWith('âš ï¸')) bgColor = '#e67e22'; // orange
-        else if (message.startsWith('â„¹ï¸')) bgColor = '#3498db'; // blau
+        // ❌ = Fehler (rot), ⚠️ = Warnung (orange), ℹ️ = Info (blau), alles andere = Erfolg (grün)
+        let bgColor = '#2ecc71'; // Standard: grün (Erfolg)
+        if (message.startsWith('❌')) bgColor = '#e74c3c';      // rot
+        else if (message.startsWith('⚠️')) bgColor = '#e67e22'; // orange
+        else if (message.startsWith('ℹ️')) bgColor = '#3498db'; // blau
         
         // Erstelle Toast
         const toast = document.createElement('div');
@@ -6511,7 +6499,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         toast.textContent = message;
         
-        // FÃ¼ge CSS Animation hinzu (falls noch nicht vorhanden)
+        // Füge CSS Animation hinzu (falls noch nicht vorhanden)
         if (!document.getElementById('toastAnimationStyle')) {
             const style = document.createElement('style');
             style.id = 'toastAnimationStyle';
@@ -6607,7 +6595,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function prepareHighlightAPI() {
         // Wird in Phase 3+ verwendet
-        // Placeholder fÃ¼r spÃ¤tere Implementierung
+        // Placeholder für spätere Implementierung
     }
 });
 
