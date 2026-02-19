@@ -336,18 +336,15 @@ class TemplateProcessor {
         if (!hasBodyClose) {
             // </body> fehlt: vor </html> einfügen oder ans Ende
             if (hasHtmlClose) {
-                this.html = this.html.replace(/<\/html>/i, '</body>
-</html>');
+                this.html = this.html.replace(/<\/html>/i, '</body>\n</html>');
             } else {
-                this.html = this.html.trimEnd() + '
-</body>';
+                this.html = this.html.trimEnd() + '\n</body>';
             }
             fixes.push('</body>');
         }
 
         if (!hasHtmlClose) {
-            this.html = this.html.trimEnd() + '
-</html>';
+            this.html = this.html.trimEnd() + '\n</html>';
             fixes.push('</html>');
         }
 
