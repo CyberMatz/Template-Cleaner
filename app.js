@@ -5120,7 +5120,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                handleTrackingLinkReplace(linkId, newHref);
+                // Auto-Korrektur: https:// voranstellen wenn Protokoll fehlt
+                let correctedHref = newHref;
+                if (!/^https?:\/\//i.test(correctedHref) && !/^mailto:/i.test(correctedHref) && !/^tel:/i.test(correctedHref) && !/^\$\{/i.test(correctedHref) && !/^#/.test(correctedHref)) {
+                    correctedHref = 'https://' + correctedHref;
+                    input.value = correctedHref; // Zeige dem User die korrigierte URL
+                }
+                
+                handleTrackingLinkReplace(linkId, correctedHref);
             });
         });
         
@@ -5146,7 +5153,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                handleTrackingPixelReplace(newUrl);
+                // Auto-Korrektur: https:// voranstellen wenn Protokoll fehlt
+                let correctedUrl = newUrl;
+                if (!/^https?:\/\//i.test(correctedUrl)) {
+                    correctedUrl = 'https://' + correctedUrl;
+                    input.value = correctedUrl;
+                }
+                
+                handleTrackingPixelReplace(correctedUrl);
             });
         }
         
@@ -5174,7 +5188,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                handleTrackingPixelInsert(pixelUrl);
+                // Auto-Korrektur: https:// voranstellen wenn Protokoll fehlt
+                let correctedPixelUrl = pixelUrl;
+                if (!/^https?:\/\//i.test(correctedPixelUrl)) {
+                    correctedPixelUrl = 'https://' + correctedPixelUrl;
+                    input.value = correctedPixelUrl;
+                }
+                
+                handleTrackingPixelInsert(correctedPixelUrl);
             });
         }
         
@@ -5210,7 +5231,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                handleTrackingLinkInsert(targetUrl);
+                // Auto-Korrektur: https:// voranstellen wenn Protokoll fehlt
+                let correctedTargetUrl = targetUrl;
+                if (!/^https?:\/\//i.test(correctedTargetUrl) && !/^mailto:/i.test(correctedTargetUrl) && !/^tel:/i.test(correctedTargetUrl)) {
+                    correctedTargetUrl = 'https://' + correctedTargetUrl;
+                    input.value = correctedTargetUrl;
+                }
+                
+                handleTrackingLinkInsert(correctedTargetUrl);
             });
         }
     }
