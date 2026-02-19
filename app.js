@@ -3996,12 +3996,17 @@ document.addEventListener('DOMContentLoaded', () => {
             previewReady = false;
             pendingPreviewMessages = []; // BUG #2 FIX: Array leeren
             
-            // Debug-Guard: PrÃ¼fe ob Script escaped wurde BEVOR srcdoc gesetzt wird
-            if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
-                console.error('[PREVIEW] Script got escaped - aborting!');
-                console.error('[PREVIEW] contains &amp;&amp;:', annotatedHtml.includes('&amp;&amp;'));
-                console.error('[PREVIEW] contains &lt;:', annotatedHtml.includes('&lt;'));
-                console.error('[PREVIEW] First 500 chars of annotatedHtml:', annotatedHtml.substring(0, 500));
+            // Debug-Guard: Pruefe ob Script-Inhalt escaped wurde BEVOR srcdoc gesetzt wird
+            // FIX: Nur innerhalb von <script>-Tags pruefen, nicht im gesamten HTML
+            // (Templates enthalten regulaer &lt; z.B. in Preheader-Text oder Vergleichen)
+            const scriptTagMatch = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+            const scriptContent = scriptTagMatch ? scriptTagMatch[1] : '';
+            const scriptEscaped = scriptContent.includes('&amp;&amp;') || scriptContent.includes('&lt;');
+            
+            if (scriptEscaped) {
+                console.error('[PREVIEW] Script content was HTML-escaped - aborting!');
+                console.error('[PREVIEW] Script contains &amp;&amp;:', scriptContent.includes('&amp;&amp;'));
+                console.error('[PREVIEW] Script contains &lt;:', scriptContent.includes('&lt;'));
                 showPreviewFallback();
                 return;
             }
@@ -4434,14 +4439,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Serialisiere zurÃ¼ck zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
         const annotatedHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         
-        // Debug-Guard: PrÃ¼fe ob Script escaped wurde
-        if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
-            console.error('[PREVIEW] Script was HTML-escaped! This will cause SyntaxError.');
-            console.error('[PREVIEW] Found entities in srcdoc:', {
-                hasAmpAmp: annotatedHtml.includes('&amp;&amp;'),
-                hasLt: annotatedHtml.includes('&lt;')
+        // Debug-Guard: Pruefe ob Script-Inhalt escaped wurde (nur innerhalb <script>-Tags)
+        const _scriptCheck = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+        const _scriptBody = _scriptCheck ? _scriptCheck[1] : '';
+        if (_scriptBody.includes('&amp;&amp;') || _scriptBody.includes('&lt;')) {
+            console.error('[PREVIEW] Script content was HTML-escaped! This will cause SyntaxError.');
+            console.error('[PREVIEW] Found entities in script:', {
+                hasAmpAmp: _scriptBody.includes('&amp;&amp;'),
+                hasLt: _scriptBody.includes('&lt;')
             });
-            // Trotzdem zurÃ¼ckgeben, aber mit Warning
         }
         
         console.log('[INSPECTOR] Generated annotated preview with ' + anchors.length + ' link annotations and ' + images.length + ' image annotations');
