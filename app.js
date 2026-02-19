@@ -30,6 +30,9 @@ class TemplateProcessor {
 
     // Phase A: Automatische Korrekturen
     phaseA_SafeFix() {
+        // P00: HTML-Struktur reparieren (fehlende </body>/</html>, CSS-Komma-Fehler)
+        this.checkHtmlStructure();
+
         // P01: DOCTYPE
         this.checkDoctype();
 
@@ -92,6 +95,23 @@ class TemplateProcessor {
 
         // P15: Inline Styles Check
         this.checkInlineStyles();
+    }
+
+    // P00: CSS-Fehler reparieren (muss VOR allen anderen Checks laufen)
+    checkHtmlStructure() {
+        const fixes = [];
+
+        // CSS: Komma statt Punkt in Dezimalzahlen – z.B. "2,1rem" → "2.1rem"
+        if (/(\d),(\d)(rem|em|px|%|pt|vh|vw)/.test(this.html)) {
+            this.html = this.html.replace(/(\d),(\d)(rem|em|px|%|pt|vh|vw)/g, '$1.$2$3');
+            fixes.push('CSS-Dezimalkomma korrigiert (z.B. 2,1rem → 2.1rem)');
+        }
+
+        if (fixes.length > 0) {
+            this.addCheck('P00_CSS_FIX', 'FIXED', fixes.join(' | '));
+        } else {
+            this.addCheck('P00_CSS_FIX', 'PASS', 'CSS-Grundwerte korrekt');
+        }
     }
 
     // P01: DOCTYPE Check
@@ -406,64 +426,74 @@ class TemplateProcessor {
     // P07/P08: Tag-Balancing
     checkTagBalancing() {
         const id = this.checklistType === 'dpl' ? 'P08_TAG_BALANCING' : 'P07_TAG_BALANCING';
-        const tags = ['table', 'tr', 'td', 'a', 'div'];
-        let fixed = false;
-        
-        // Auto-Fixes Array initialisieren (falls noch nicht vorhanden)
-        if (!this.autoFixes) {
-            this.autoFixes = [];
+        const tags = ['body', 'html', 'table', 'tbody', 'tr', 'td', 'div', 'a'];
+        let fixedTags = [];
+
+        if (!this.autoFixes) this.autoFixes = [];
+
+        // ── Schritt 1: body/html am Ende ergänzen falls fehlend ──────────
+        // (muss VOR dem Zählen passieren, damit spätere Checks funktionieren)
+        const hasBody    = /<body[^>]*>/i.test(this.html);
+        const hasBodyEnd = /<\/body>/i.test(this.html);
+        const hasHtmlEnd = /<\/html>/i.test(this.html);
+
+        if (hasBody && !hasBodyEnd) {
+            if (hasHtmlEnd) {
+                this.html = this.html.replace(/<\/html>/i, '</body>\n</html>');
+            } else {
+                this.html = this.html.trimEnd() + '\n</body>\n</html>\n';
+            }
+            fixedTags.push('</body>', '</html>');
+        } else if (!hasHtmlEnd) {
+            this.html = this.html.trimEnd() + '\n</html>\n';
+            fixedTags.push('</html>');
         }
 
-        tags.forEach(tag => {
-            const openRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
-            const closeRegex = new RegExp(`</${tag}>`, 'gi');
-            const openCount = (this.html.match(openRegex) || []).length;
+        // ── Schritt 2: Strukturelle Tags balancieren ──────────────────────
+        // Strategie: fehlende Closing-Tags VOR dem nächsten sinnvollen
+        // schließenden Eltern-Tag einfügen, nicht ans rohe Ende.
+        const structuralTags = ['table', 'tbody', 'tr', 'td', 'div', 'a'];
+
+        structuralTags.forEach(tag => {
+                  const openRegex  = new RegExp('<' + tag + '[^>]*>', 'gi');
+            const closeRegex = new RegExp('</' + tag + '>', 'gi');
+            const openCount  = (this.html.match(openRegex)  || []).length;
             const closeCount = (this.html.match(closeRegex) || []).length;
 
-            if (openCount !== closeCount) {
-                // Versuche zu balancieren (einfache Heuristik)
-                if (openCount > closeCount) {
-                    // Fehlende Closing-Tags
-                    const diff = openCount - closeCount;
-                    for (let i = 0; i < diff; i++) {
-                        const insertPosition = this.html.length;
-                        const inserted = `</${tag}>`;
-                        
-                        // Context speichern (50 chars vor und nach)
-                        const beforeCtx = this.html.substring(Math.max(0, insertPosition - 50), insertPosition);
-                        const afterCtx = '';  // Am Ende gibt es kein afterCtx
-                        
-                        // Snippet für Anzeige (200 chars vor)
-                        const snippetBefore = this.html.substring(Math.max(0, insertPosition - 200), insertPosition);
-                        
-                        // Auto-Fix Event speichern
-                        this.autoFixes.push({
-                            id: `AF${(this.autoFixes.length + 1).toString().padStart(2, '0')}`,
-                            type: 'AUTO_TAG_CLOSE',
-                            tag: tag,
-                            inserted: inserted,
-                            beforeCtx: beforeCtx,
-                            afterCtx: afterCtx,
-                            insertPosition: insertPosition,
-                            snippetBefore: snippetBefore,
-                            snippetAfter: inserted
-                        });
-                        
-                        // Tag einfügen
-                        this.html += inserted;
-                    }
-                    fixed = true;
-                }
+            if (openCount > closeCount) {
+                const diff = openCount - closeCount;
+
+                // Einfügeposition: direkt vor </body> (nicht ans rohe Ende)
+                // → optisch korrekt, Template bleibt unverändert sichtbar
+                const insertBefore = this.html.search(/<\/body>/i) > -1
+                    ? this.html.search(/<\/body>/i)
+                    : this.html.length;
+
+                const closing = ('</' + tag + '>').repeat(diff);
+
+                // Context für AutoFix-Log
+                const beforeCtx = this.html.substring(Math.max(0, insertBefore - 50), insertBefore);
+                this.autoFixes.push({
+                    id: 'AF' + (this.autoFixes.length + 1).toString().padStart(2, '0'),
+                    type: 'AUTO_TAG_CLOSE',
+                    tag,
+                    inserted: closing,
+                    beforeCtx,
+                    afterCtx: '</body>',
+                    insertPosition: insertBefore
+                });
+
+                this.html = this.html.slice(0, insertBefore) + closing + this.html.slice(insertBefore);
+                fixedTags.push(diff + 'x </' + tag + '>');
             }
         });
 
-        if (fixed) {
-            this.addCheck(id, 'FIXED', 'Tag-Balancing korrigiert');
+        if (fixedTags.length > 0) {
+            this.addCheck(id, 'FIXED', 'Tag-Balancing: ' + fixedTags.join(', ') + ' ergänzt');
         } else {
             this.addCheck(id, 'PASS', 'Tag-Balancing korrekt');
         }
     }
-
     // P08/P09: Image Alt-Attribute (Erweitert)
     checkImageAltAttributes() {
         const id = this.checklistType === 'dpl' ? 'P09_IMAGE_ALT' : 'P08_IMAGE_ALT';
