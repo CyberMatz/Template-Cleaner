@@ -47,6 +47,9 @@ class TemplateProcessor {
             this.checkOutlookConditionalComments();
         }
 
+        // Dokumentstruktur reparieren (fehlende </body>, </html>)
+        this.checkDocumentStructure();
+
         // P05/P07: Footer Platzhalter
         this.checkFooterPlaceholder();
 
@@ -324,6 +327,35 @@ class TemplateProcessor {
         }
     }
 
+    // Dokumentstruktur: fehlende </body> und </html> ergänzen
+    checkDocumentStructure() {
+        const hasBodyClose = /<\/body>/i.test(this.html);
+        const hasHtmlClose = /<\/html>/i.test(this.html);
+        const fixes = [];
+
+        if (!hasBodyClose) {
+            // </body> fehlt: vor </html> einfügen oder ans Ende
+            if (hasHtmlClose) {
+                this.html = this.html.replace(/<\/html>/i, '</body>
+</html>');
+            } else {
+                this.html = this.html.trimEnd() + '
+</body>';
+            }
+            fixes.push('</body>');
+        }
+
+        if (!hasHtmlClose) {
+            this.html = this.html.trimEnd() + '
+</html>';
+            fixes.push('</html>');
+        }
+
+        if (fixes.length > 0) {
+            this.addCheck('P_DOC_STRUCTURE', 'FIXED', 'Fehlende Schließ-Tags ergänzt: ' + fixes.join(', '));
+        }
+    }
+
     // P05/P07: Footer Platzhalter
     checkFooterPlaceholder() {
         const id = this.checklistType === 'dpl' ? 'P07_FOOTER' : 'P05_FOOTER';
@@ -385,7 +417,7 @@ class TemplateProcessor {
                 }
             }
             
-            // Fallback: Vor </body> einfügen
+            // Fallback 1: Vor </body> einfügen
             if (!insertPos) {
                 const bodyCloseMatch = this.html.match(/<\/body>/i);
                 if (bodyCloseMatch) {
@@ -393,10 +425,23 @@ class TemplateProcessor {
                 }
             }
             
-            if (insertPos) {
+            // Fallback 2: Vor </html> einfügen (kein </body> vorhanden)
+            if (!insertPos) {
+                const htmlCloseMatch = this.html.match(/<\/html>/i);
+                if (htmlCloseMatch) {
+                    insertPos = this.html.lastIndexOf(htmlCloseMatch[0]);
+                }
+            }
+            
+            // Fallback 3: Ans Ende anhängen (kein </body> und kein </html>)
+            if (!insertPos && this.html.trim().length > 0) {
+                insertPos = this.html.length;
+            }
+            
+            if (insertPos !== undefined && insertPos !== null && insertPos >= 0) {
                 const footerWrapper = '\n<table width="100%" border="0" cellpadding="0" cellspacing="0" align="center"><tr><td><center>%footer%</center></td></tr></table>\n';
                 this.html = this.html.slice(0, insertPos) + footerWrapper + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Footer-Platzhalter eingefügt');
+                this.addCheck(id, 'FIXED', 'Footer-Platzhalter eingefügt (Ende des HTML)');
             } else {
                 this.addCheck(id, 'FAIL', 'Einfügeposition für Footer nicht gefunden');
             }
