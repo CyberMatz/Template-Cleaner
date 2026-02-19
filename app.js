@@ -4045,14 +4045,18 @@ document.addEventListener('DOMContentLoaded', () => {
             previewReady = false;
             pendingPreviewMessages = []; // BUG #2 FIX: Array leeren
             
-            // Debug-Guard: Prüfe ob Script escaped wurde BEVOR srcdoc gesetzt wird
-            if (annotatedHtml.includes('&amp;&amp;') || annotatedHtml.includes('&lt;')) {
-                console.error('[PREVIEW] Script got escaped - aborting!');
-                console.error('[PREVIEW] contains &amp;&amp;:', annotatedHtml.includes('&amp;&amp;'));
-                console.error('[PREVIEW] contains &lt;:', annotatedHtml.includes('&lt;'));
-                console.error('[PREVIEW] First 500 chars of annotatedHtml:', annotatedHtml.substring(0, 500));
-                showPreviewFallback();
-                return;
+            // Debug-Guard: Prüfe ob das injizierte Script escaped wurde
+            // WICHTIG: Nur script-spezifische Escapes prüfen, nicht &lt; im HTML-Content
+            // (legitimer HTML-Inhalt wie &lt;&lt;&lt; darf nicht als Fehler gelten)
+            const scriptStart = annotatedHtml.indexOf('<script');
+            const scriptEnd   = annotatedHtml.lastIndexOf('</script>');
+            if (scriptStart > -1 && scriptEnd > scriptStart) {
+                const scriptContent = annotatedHtml.substring(scriptStart, scriptEnd);
+                if (scriptContent.includes('&amp;&amp;') || scriptContent.includes('&lt;/')) {
+                    console.error('[PREVIEW] Script got escaped - aborting!');
+                    showPreviewFallback();
+                    return;
+                }
             }
             
             console.log('[PREVIEW] Script is NOT escaped - setting srcdoc');
