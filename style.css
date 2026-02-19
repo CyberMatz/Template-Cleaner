@@ -1332,3 +1332,23 @@ body {
     transition: background 0.2s;
 }
 .btn-mark-as-cta:hover { background: #512c62; }
+
+.button-unrecognized-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-locate-link {
+    padding: 6px 12px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+.btn-locate-link:hover { background: #1976D2; }

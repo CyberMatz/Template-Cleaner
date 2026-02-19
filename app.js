@@ -4579,19 +4579,49 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('      }');
         scriptLines.push('    }');
         scriptLines.push('');
-        scriptLines.push('    // HIGHLIGHT_BUTTON (CTA Buttons)');
+        scriptLines.push('    // HIGHLIGHT_BUTTON (CTA Buttons - Typ A: a mit bg-color, Typ B: td mit bgcolor + a)');
         scriptLines.push('    if (event.data.type === "HIGHLIGHT_BUTTON") {');
         scriptLines.push('      var btnIndex = event.data.index;');
-        scriptLines.push('      // Finde alle Links mit background-color (= CTA Buttons)');
+        scriptLines.push('      var ctaElements = [];');
+        scriptLines.push('      // Typ A: Links mit background-color im style');
         scriptLines.push('      var allLinks = Array.from(document.querySelectorAll("a[style]"));');
-        scriptLines.push('      var ctaLinks = allLinks.filter(function(a) {');
+        scriptLines.push('      allLinks.forEach(function(a) {');
         scriptLines.push('        var s = (a.getAttribute("style") || "").toLowerCase();');
-        scriptLines.push('        return /background(-color)?\\s*:/.test(s) && (/padding/.test(s) || /display\\s*:\\s*(block|inline-block)/.test(s));');
+        scriptLines.push('        if (/background(-color)?\\s*:/.test(s) && (/padding/.test(s) || /display\\s*:\\s*(block|inline-block)/.test(s))) {');
+        scriptLines.push('          ctaElements.push(a);');
+        scriptLines.push('        }');
         scriptLines.push('      });');
-        scriptLines.push('      if (btnIndex >= 0 && btnIndex < ctaLinks.length) {');
-        scriptLines.push('        var btn = ctaLinks[btnIndex];');
+        scriptLines.push('      // Typ B: td mit bgcolor + align=center + link drin');
+        scriptLines.push('      var allTds = Array.from(document.querySelectorAll("td[bgcolor]"));');
+        scriptLines.push('      allTds.forEach(function(td) {');
+        scriptLines.push('        var align = (td.getAttribute("align") || "").toLowerCase();');
+        scriptLines.push('        var style = (td.getAttribute("style") || "").toLowerCase();');
+        scriptLines.push('        var isCentered = align === "center" || /text-align\\s*:\\s*center/.test(style);');
+        scriptLines.push('        if (!isCentered) return;');
+        scriptLines.push('        var link = td.querySelector("a[href]");');
+        scriptLines.push('        if (!link) return;');
+        scriptLines.push('        var text = link.textContent.trim();');
+        scriptLines.push('        if (!text) return;');
+        scriptLines.push('        // Prüfe ob bereits als Typ A erfasst');
+        scriptLines.push('        if (ctaElements.indexOf(link) >= 0) return;');
+        scriptLines.push('        ctaElements.push(td);');
+        scriptLines.push('      });');
+        scriptLines.push('      if (btnIndex >= 0 && btnIndex < ctaElements.length) {');
+        scriptLines.push('        var btn = ctaElements[btnIndex];');
         scriptLines.push('        btn.scrollIntoView({ block: "center", behavior: "smooth" });');
         scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(btn); }, 180);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // LOCATE_LINK (für nicht-erkannte Links)');
+        scriptLines.push('    if (event.data.type === "LOCATE_LINK") {');
+        scriptLines.push('      var linkIdx = event.data.index;');
+        scriptLines.push('      var allAnchors = Array.from(document.querySelectorAll("a[href]"));');
+        scriptLines.push('      var textLinks = allAnchors.filter(function(a) { return a.textContent.trim().length > 0; });');
+        scriptLines.push('      if (linkIdx >= 0 && linkIdx < textLinks.length) {');
+        scriptLines.push('        var el = textLinks[linkIdx];');
+        scriptLines.push('        el.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(el); }, 180);');
         scriptLines.push('      }');
         scriptLines.push('    }');
         scriptLines.push('');
@@ -6090,7 +6120,7 @@ function handleTrackingLinkReplace(linkId, newHref) {
                 // Action Buttons
                 html += '<div class="button-item-actions">';
                 html += '<button class="btn-button-apply" data-btn-id="' + btn.id + '">✅ Änderungen anwenden</button>';
-                html += '<button class="btn-button-locate" data-btn-id="' + btn.id + '">👁️ Im Preview zeigen</button>';
+                html += '<button class="btn-button-locate" data-btn-id="' + btn.id + '">🔎 Locate</button>';
                 html += '</div>';
                 
                 html += '</div>'; // button-item
@@ -6116,6 +6146,9 @@ function handleTrackingLinkReplace(linkId, newHref) {
         });
         
         if (unrecognizedLinks.length > 0) {
+            // Berechne textLinkIndex: Position unter allen Text-Links im Template
+            const allTextLinks = allLinks.filter(l => l.text);
+            
             html += '<div class="buttons-section" style="margin-top: 16px;">';
             html += '<details class="buttons-manual-section">';
             html += '<summary class="buttons-manual-toggle">🔍 Nicht erkannte Links (' + unrecognizedLinks.length + ') – manuell als Button markieren</summary>';
@@ -6124,12 +6157,17 @@ function handleTrackingLinkReplace(linkId, newHref) {
             
             unrecognizedLinks.forEach((link, idx) => {
                 const linkId = 'UL' + String(idx + 1).padStart(3, '0');
+                // textLinkIndex = Position dieses Links in allTextLinks
+                const textLinkIdx = allTextLinks.findIndex(tl => tl.globalIndex === link.globalIndex);
                 html += '<div class="button-unrecognized-item" data-link-id="' + linkId + '">';
                 html += '<div class="button-unrecognized-info">';
                 html += '<span class="button-unrecognized-text">' + escapeHtml(link.text) + '</span>';
                 html += '<code class="button-unrecognized-href" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.length > 50 ? link.href.substring(0, 47) + '...' : link.href) + '</code>';
                 html += '</div>';
+                html += '<div class="button-unrecognized-actions">';
+                html += '<button class="btn-locate-link" data-link-text-idx="' + textLinkIdx + '" data-link-id="' + linkId + '">🔎 Locate</button>';
                 html += '<button class="btn-mark-as-cta" data-link-idx="' + link.globalIndex + '" data-link-id="' + linkId + '">🏷️ Als CTA markieren</button>';
+                html += '</div>';
                 html += '</div>';
             });
             
@@ -6524,6 +6562,15 @@ function handleTrackingLinkReplace(linkId, newHref) {
                 handleMarkAsCta(linkIdx);
             });
         });
+        
+        // Locate Link Buttons (nicht-erkannte Links)
+        document.querySelectorAll('.btn-locate-link').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const textIdx = parseInt(this.getAttribute('data-link-text-idx'));
+                locateLinkInPreview(textIdx);
+            });
+        });
     }
     
     // Apply: Farbe/Breite/Höhe im VML-Block und HTML-Button ändern
@@ -6576,10 +6623,7 @@ function handleTrackingLinkReplace(linkId, newHref) {
                 '$1$2' + newTextColor
             );
             
-            // 4. Border-radius auf der <td> ändern (wenn vorhanden)
-            // Kein expliziter Input dafür, lassen wir wie ist
-            
-            // 5. Padding (Höhe) auf der <td> anpassen
+            // 4. Padding (Höhe) auf der <td> anpassen
             const currentPadTop = parseInt((oldBtnHtml.match(/padding-top\s*:\s*(\d+)/i) || [])[1] || '15');
             const currentPadBot = parseInt((oldBtnHtml.match(/padding-bottom\s*:\s*(\d+)/i) || [])[1] || '15');
             const currentHeight = currentPadTop + currentPadBot + 20;
@@ -6595,6 +6639,28 @@ function handleTrackingLinkReplace(linkId, newHref) {
                     /padding-bottom\s*:\s*\d+px/i,
                     'padding-bottom: ' + newPadBot + 'px'
                 );
+            }
+            
+            // 5. Breite: Parent <table width="NNN"> ändern
+            if (newWidth !== btnData.width) {
+                const btnPosInHtml = html.indexOf(oldBtnHtml);
+                if (btnPosInHtml >= 0) {
+                    const beforeBtn = html.substring(Math.max(0, btnPosInHtml - 1500), btnPosInHtml);
+                    // Finde die nächste parent <table> mit Pixel-width (rückwärts)
+                    const allTW = [...beforeBtn.matchAll(/<table\b([^>]*width\s*=\s*["']?\d+(?!%)[^>]*)>/gi)];
+                    if (allTW.length > 0) {
+                        const lastTableMatch = allTW[allTW.length - 1];
+                        const oldTableTag = lastTableMatch[0];
+                        const newTableTag = oldTableTag.replace(
+                            /width\s*=\s*["']?\d+["']?/i,
+                            'width="' + newWidth + '"'
+                        );
+                        // Ersetze im beforeBtn-Bereich
+                        const absPos = Math.max(0, btnPosInHtml - 1500) + lastTableMatch.index;
+                        html = html.substring(0, absPos) + newTableTag + html.substring(absPos + oldTableTag.length);
+                        // Recalculate btnPos since html changed
+                    }
+                }
             }
             
         } else {
@@ -6731,6 +6797,23 @@ function handleTrackingLinkReplace(linkId, newHref) {
             type: 'HIGHLIGHT_BUTTON',
             id: btnId,
             index: index
+        };
+        
+        if (!previewReady || !inspectorPreviewFrame.contentWindow) {
+            pendingPreviewMessages.push(message);
+            return;
+        }
+        
+        inspectorPreviewFrame.contentWindow.postMessage(message, '*');
+    }
+    
+    // Locate Link in Preview (für nicht-erkannte Links)
+    function locateLinkInPreview(textLinkIndex) {
+        if (!inspectorPreviewFrame) return;
+        
+        const message = {
+            type: 'LOCATE_LINK',
+            index: textLinkIndex
         };
         
         if (!previewReady || !inspectorPreviewFrame.contentWindow) {
