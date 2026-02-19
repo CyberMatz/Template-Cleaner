@@ -7,16 +7,6 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script>
-  (function () {
-    const PW = "VerySecret";
-    const entered = prompt("Passwort:");
-    if (entered !== PW) {
-      document.documentElement.innerHTML = "";
-    }
-  })();
-</script>
-
     <!-- Header -->
     <header class="main-header">
         <img src="pw-logo.png" alt="PW Logo" class="header-logo">
@@ -208,28 +198,9 @@
     </div>
 
     <!-- ===== LEGACY COMPATIBILITY BLOCK ===== -->
-    <!-- Alle DOM-Elemente, die app.js erwartet, aber im neuen UI nicht sichtbar sind -->
+    <!-- Nur Elemente die AUSSCHLIESSLICH hier definiert sind (tagReviewModal, assetReviewModal) -->
+    <!-- Alle anderen IDs existieren bereits in der sichtbaren UI oben - keine Duplikate! -->
     <div id="legacyCompat" style="display: none;">
-        <!-- Old Results Section Elements -->
-        <section id="resultsSection">
-            <div id="statusBadge"></div>
-            <div id="uploadHint"></div>
-            <div id="reportPreview"></div>
-            <button id="downloadReport"></button>
-            <button id="downloadUnresolved"></button>
-            <button id="downloadFinalOutput"></button>
-            <button id="showDiffBtn"></button>
-            <button id="showTagReviewBtn"></button>
-        </section>
-        
-        <!-- Diff Modal -->
-        <div id="diffModal">
-            <button id="closeDiffModal"></button>
-            <div id="diffPendingHint"></div>
-            <pre id="diffOriginal"></pre>
-            <pre id="diffOptimized"></pre>
-        </div>
-        
         <!-- Tag-Review Modal -->
         <div id="tagReviewModal">
             <button id="closeTagReviewModal"></button>
@@ -272,17 +243,6 @@
             <div id="trackingInfo"></div>
         </div>
         
-        <!-- Global Finalize Button (jetzt in Footer) -->
-        <button id="globalFinalizeBtn"></button>
-        
-        <!-- Global Pending Indicator -->
-        <div id="globalPendingIndicator">
-            <span id="trackingStatusChip"></span>
-            <span id="imagesStatusChip"></span>
-            <span id="tagreviewStatusChip"></span>
-            <span id="editorStatusChip"></span>
-            <div id="pendingWarning"></div>
-        </div>
     </div>
     <!-- ===== END LEGACY COMPATIBILITY BLOCK ===== -->
 

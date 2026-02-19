@@ -62,8 +62,9 @@ class TemplateProcessor {
         // P09: Öffnerpixel (Read-only)
         this.checkOpeningPixel();
 
-        // P06: Anrede-Ersetzung
-        this.checkAnredeReplacement();
+        // P06: Anrede-Ersetzung – deaktiviert, wird manuell über Editor gesetzt
+        // this.checkAnredeReplacement();
+        this.addCheck('P06_ANREDE', 'SKIPPED', 'Anrede-Platzhalter werden manuell gesetzt (automatische Erkennung deaktiviert)');
 
         // P06: Footer Mobile Visibility (nur Standard)
         if (this.checklistType === 'standard') {
@@ -982,12 +983,12 @@ class TemplateProcessor {
         // Verifikation
         const originalBytes = new Blob([this.originalHtml]).size;
         const optimizedBytes = new Blob([this.html]).size;
-        const originalSha256 = this.sha256(this.originalHtml);
-        const optimizedSha256 = this.sha256(this.html);
+        const originalSha256 = this.simpleHash(this.originalHtml);
+        const optimizedSha256 = this.simpleHash(this.html);
 
         report += `--- VERIFICATION ---\n`;
         report += `ORIGINAL_BYTES=${originalBytes} OPTIMIZED_BYTES=${optimizedBytes}\n`;
-        report += `ORIGINAL_SHA256=${originalSha256} OPTIMIZED_SHA256=${optimizedSha256}\n`;
+        report += `ORIGINAL_HASH=${originalSha256} OPTIMIZED_HASH=${optimizedSha256}\n`;
 
         // Unresolved generieren
         let unresolved = '=== UNRESOLVED ISSUES ===\n\n';
@@ -1011,10 +1012,10 @@ class TemplateProcessor {
         };
     }
 
-    // Einfache SHA256-Implementierung (für Browser)
-    sha256(str) {
-        // Vereinfachte Hash-Funktion für Demonstration
-        // In Produktion: crypto.subtle.digest verwenden
+    // Einfache Hash-Funktion zur Änderungs-Erkennung (KEIN kryptografischer Hash)
+    simpleHash(str) {
+        // Einfacher Java-style hashCode – nur zur Änderungs-Erkennung, NICHT kryptografisch sicher
+        // In Produktion: crypto.subtle.digest verwenden für echtes SHA-256
         let hash = 0;
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
@@ -5993,11 +5994,35 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '<h4>🎯 Platzhalter einfügen</h4>';
             html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Wird an das ausgewählte Element angehängt.</p>';
             const placeholders = [
-                '%anrede%','%titel%','%vorname%','%nachname%','%firma%',
-                '%strasse%','%plz%','%ort%','%land%','%email%',
-                '%telefon%','%geburtsdatum%','%kundennummer%','%vertragsnummer%',
-                '%rechnungsnummer%','%datum%','%betrag%','%waehrung%',
-                '%produkt%','%menge%','%lieferdatum%','%tracking%','%link%'
+                // Anrede & Persönlich
+                '%anrede%',
+                '%anredeLiebeblankoklein%',
+                '%anredeLiebeBlanko%',
+                '%briefanredeLiebe%',
+                '%briefanredeGeehrte%',
+                '%anredeGeehrteVN%',
+                '%anredeFR%',
+                // Name & Adresse
+                '%vorname%',
+                '%nachname%',
+                '%strasse%',
+                '%plz%',
+                '%ort%',
+                '%bundesland%',
+                '%land%',
+                // Ort-Varianten (Client-spezifisch)
+                '%client_ort%',
+                '%client_de_ort%',
+                '%client_ort_ihre_stadt%',
+                '%client_ort_ihrer_stadt%',
+                // Kontakt & Profil
+                '%email%',
+                '%geburtstag%',
+                // Datum & Jahr
+                '%aktuellesDatum%',
+                '%current_year%',
+                // Sonstiges
+                '%readonline%'
             ];
             html += '<select id="editorPlaceholderSelect" class="editor-input">';
             html += '<option value="">-- Platzhalter auswählen --</option>';
