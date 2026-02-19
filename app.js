@@ -1084,8 +1084,21 @@ class TemplateProcessor {
             // Dimensions aus td style
             const tdStyle = (cta.tdMatch.match(/<td[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
             
-            const widthMatch = tdStyle.match(/width\s*:\s*(\d+)/i);
-            props.width = widthMatch ? parseInt(widthMatch[1]) : 250;
+            const tdWidthPx = tdStyle.match(/width\s*:\s*(\d+)px/i);
+            if (tdWidthPx) {
+                props.width = parseInt(tdWidthPx[1]);
+            } else {
+                // Suche parent <table width="NNN"> rückwärts (nur Pixel-Werte)
+                const beforeTd = this.html.substring(Math.max(0, cta.index - 1500), cta.index);
+                const allTW = [...beforeTd.matchAll(/<table[^>]*width\s*=\s*["']?(\d+%?)/gi)];
+                props.width = 250;
+                for (let tw = allTW.length - 1; tw >= 0; tw--) {
+                    if (!allTW[tw][1].includes('%')) {
+                        props.width = parseInt(allTW[tw][1]);
+                        break;
+                    }
+                }
+            }
             
             // Höhe aus padding berechnen
             const padTopMatch = tdStyle.match(/padding-top\s*:\s*(\d+)/i);
@@ -4340,6 +4353,15 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[PREVIEW] contains &amp;&amp;:', annotatedHtml.includes('&amp;&amp;'));
             console.log('[PREVIEW] contains &lt;:', annotatedHtml.includes('&lt;'));
             
+            // Scroll-Position merken bevor iframe neu geladen wird
+            let savedScrollTop = 0;
+            try {
+                if (inspectorPreviewFrame.contentWindow && inspectorPreviewFrame.contentDocument) {
+                    const scrollEl = inspectorPreviewFrame.contentDocument.documentElement || inspectorPreviewFrame.contentDocument.body;
+                    if (scrollEl) savedScrollTop = scrollEl.scrollTop || inspectorPreviewFrame.contentWindow.scrollY || 0;
+                }
+            } catch(e) { /* cross-origin or not loaded yet */ }
+            
             // Setze srcdoc mit annotiertem HTML
             inspectorPreviewFrame.srcdoc = annotatedHtml;
             
@@ -4347,6 +4369,14 @@ document.addEventListener('DOMContentLoaded', () => {
             inspectorPreviewFrame.onload = () => {
                 console.log('[INSPECTOR] Preview loaded successfully');
                 previewReady = true;
+                
+                // Scroll-Position wiederherstellen
+                try {
+                    if (savedScrollTop > 0 && inspectorPreviewFrame.contentDocument) {
+                        const scrollEl = inspectorPreviewFrame.contentDocument.documentElement || inspectorPreviewFrame.contentDocument.body;
+                        if (scrollEl) scrollEl.scrollTop = savedScrollTop;
+                    }
+                } catch(e) { /* ignore */ }
                 
                 // BUG #2 FIX: Alle wartenden Messages senden (nicht nur eine)
                 if (pendingPreviewMessages.length > 0 && inspectorPreviewFrame.contentWindow) {
@@ -6059,9 +6089,8 @@ function handleTrackingLinkReplace(linkId, newHref) {
                 
                 // Action Buttons
                 html += '<div class="button-item-actions">';
-                html += '<button class="btn-button-apply" data-btn-id="' + btn.id + '">✓ Änderungen anwenden</button>';
+                html += '<button class="btn-button-apply" data-btn-id="' + btn.id + '">✅ Änderungen anwenden</button>';
                 html += '<button class="btn-button-locate" data-btn-id="' + btn.id + '">👁️ Im Preview zeigen</button>';
-                html += '<button class="btn-button-rebuild" data-btn-id="' + btn.id + '">🔄 VML neu generieren</button>';
                 html += '</div>';
                 
                 html += '</div>'; // button-item
@@ -6071,14 +6100,18 @@ function handleTrackingLinkReplace(linkId, newHref) {
         
         // === Manuelle Markierung: Alle nicht-erkannten Links anzeigen ===
         const allLinks = extractAllLinksFromHTML(buttonsTabHtml);
-        // Filtere Links die bereits als CTA erkannt sind
-        const ctaHrefs = buttons.map(b => b.href);
+        // Filtere Links die bereits als CTA erkannt sind (über Position, nicht href – da hrefs identisch sein können)
         const unrecognizedLinks = allLinks.filter(link => {
-            // Nur Links mit Text (keine Bild-Links), nicht bereits erkannt
+            // Nur Links mit Text (keine Bild-Links)
             if (!link.text) return false;
-            if (ctaHrefs.includes(link.href)) return false;
-            // Keine Tracking-Pixel oder leere Links
+            // Keine leeren Links
             if (!link.href || link.href === '#') return false;
+            // Prüfe ob dieser Link Teil eines erkannten CTA ist (über Position)
+            const isRecognizedCTA = buttons.some(btn => {
+                // Link-Position muss innerhalb des CTA-Match-Bereichs liegen
+                return link.position >= btn.matchIndex && link.position <= (btn.matchIndex + btn.fullMatch.length);
+            });
+            if (isRecognizedCTA) return false;
             return true;
         });
         
@@ -6272,8 +6305,25 @@ function handleTrackingLinkReplace(linkId, newHref) {
             const tcMatch = linkStyleStr.match(/color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
             const textColor = normalizeHex(tcMatch ? tcMatch[1] : '05141f');
             
-            // Dimensions
-            const width = parseInt((tdStyle.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
+            // Dimensions: Width
+            // Bei %-Angaben (width: 100%) → ignorieren, stattdessen parent table width suchen
+            const tdWidthMatch = tdStyle.match(/width\s*:\s*(\d+)px/i);
+            let width = 250;
+            if (tdWidthMatch) {
+                width = parseInt(tdWidthMatch[1]);
+            } else {
+                // Suche parent <table width="NNN"> rückwärts (nur Pixel-Werte)
+                const beforeTd = html.substring(Math.max(0, match.index - 1500), match.index);
+                const allTableWidths = [...beforeTd.matchAll(/<table[^>]*width\s*=\s*["']?(\d+%?)/gi)];
+                // Von hinten nach vorne durchgehen, erste Pixel-Breite (nicht %) nehmen
+                for (let tw = allTableWidths.length - 1; tw >= 0; tw--) {
+                    const val = allTableWidths[tw][1];
+                    if (!val.includes('%')) {
+                        width = parseInt(val);
+                        break;
+                    }
+                }
+            }
             const padTopMatch = tdStyle.match(/padding-top\s*:\s*(\d+)/i);
             const padBotMatch = tdStyle.match(/padding-bottom\s*:\s*(\d+)/i);
             const padGenMatch = tdStyle.match(/padding\s*:\s*(\d+)/i);
@@ -6454,15 +6504,6 @@ function handleTrackingLinkReplace(linkId, newHref) {
             });
         });
         
-        // Rebuild VML Buttons
-        document.querySelectorAll('.btn-button-rebuild').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const btnId = this.getAttribute('data-btn-id');
-                handleButtonRebuildVml(btnId);
-            });
-        });
-        
         // Undo Button
         const undoBtn = document.getElementById('buttonsUndo');
         if (undoBtn) {
@@ -6495,13 +6536,13 @@ function handleTrackingLinkReplace(linkId, newHref) {
         }
         
         // Lese neue Werte aus den Input-Feldern
-        const bgPicker = document.querySelector('.button-color-input[data-btn-id="' + btnId + '"][data-prop="bgColor"]');
-        const textPicker = document.querySelector('.button-color-input[data-btn-id="' + btnId + '"][data-prop="textColor"]');
+        const bgHex = document.querySelector('.button-color-hex[data-btn-id="' + btnId + '"][data-prop="bgColorHex"]');
+        const textHex = document.querySelector('.button-color-hex[data-btn-id="' + btnId + '"][data-prop="textColorHex"]');
         const widthInput = document.querySelector('.button-width-input[data-btn-id="' + btnId + '"]');
         const heightInput = document.querySelector('.button-height-input[data-btn-id="' + btnId + '"]');
         
-        const newBgColor = bgPicker ? bgPicker.value : btnData.bgColor;
-        const newTextColor = textPicker ? textPicker.value : btnData.textColor;
+        const newBgColor = (bgHex && /^#[a-fA-F0-9]{6}$/.test(bgHex.value)) ? bgHex.value : btnData.bgColor;
+        const newTextColor = (textHex && /^#[a-fA-F0-9]{6}$/.test(textHex.value)) ? textHex.value : btnData.textColor;
         const newWidth = widthInput ? parseInt(widthInput.value) : btnData.width;
         const newHeight = heightInput ? parseInt(heightInput.value) : btnData.height;
         
@@ -6509,35 +6550,80 @@ function handleTrackingLinkReplace(linkId, newHref) {
         buttonsHistory.push(buttonsTabHtml);
         
         let html = buttonsTabHtml;
-        
-        // 1. HTML-Button updaten (background-color, color, width)
         const oldBtnHtml = btnData.fullMatch;
         let newBtnHtml = oldBtnHtml;
         
-        // Background Color ersetzen
-        newBtnHtml = newBtnHtml.replace(
-            /background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i,
-            'background-color: ' + newBgColor
-        );
-        
-        // Text Color ersetzen
-        if (/(?:^|;)\s*color\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(newBtnHtml)) {
+        if (btnData.type === 'table') {
+            // === TYP B: Tabellen-basierter Button ===
+            
+            // 1. bgcolor-Attribut auf der <td> ändern
             newBtnHtml = newBtnHtml.replace(
-                /((?:^|;)\s*color\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
-                '$1' + newTextColor
+                /bgcolor\s*=\s*["'][^"']*["']/i,
+                'bgcolor="' + newBgColor + '"'
             );
-        }
-        
-        // Width ersetzen (im style)
-        if (/width\s*:\s*\d+px/i.test(newBtnHtml)) {
-            newBtnHtml = newBtnHtml.replace(/width\s*:\s*\d+px/i, 'width: ' + newWidth + 'px');
+            
+            // 2. Falls background-color im style der <td>: auch updaten
+            if (/background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(newBtnHtml.match(/<td[^>]*>/i)?.[0] || '')) {
+                newBtnHtml = newBtnHtml.replace(
+                    /(background(?:-color)?\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                    '$1' + newBgColor
+                );
+            }
+            
+            // 3. Schriftfarbe im <a> style ändern
+            newBtnHtml = newBtnHtml.replace(
+                /(<a\b[^>]*style\s*=\s*["'][^"']*)(color\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                '$1$2' + newTextColor
+            );
+            
+            // 4. Border-radius auf der <td> ändern (wenn vorhanden)
+            // Kein expliziter Input dafür, lassen wir wie ist
+            
+            // 5. Padding (Höhe) auf der <td> anpassen
+            const currentPadTop = parseInt((oldBtnHtml.match(/padding-top\s*:\s*(\d+)/i) || [])[1] || '15');
+            const currentPadBot = parseInt((oldBtnHtml.match(/padding-bottom\s*:\s*(\d+)/i) || [])[1] || '15');
+            const currentHeight = currentPadTop + currentPadBot + 20;
+            if (newHeight !== currentHeight) {
+                const heightDiff = newHeight - currentHeight;
+                const newPadTop = Math.max(5, currentPadTop + Math.floor(heightDiff / 2));
+                const newPadBot = Math.max(5, currentPadBot + Math.ceil(heightDiff / 2));
+                newBtnHtml = newBtnHtml.replace(
+                    /padding-top\s*:\s*\d+px/i,
+                    'padding-top: ' + newPadTop + 'px'
+                );
+                newBtnHtml = newBtnHtml.replace(
+                    /padding-bottom\s*:\s*\d+px/i,
+                    'padding-bottom: ' + newPadBot + 'px'
+                );
+            }
+            
+        } else {
+            // === TYP A: Inline <a> Button ===
+            
+            // Background Color
+            newBtnHtml = newBtnHtml.replace(
+                /background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i,
+                'background-color: ' + newBgColor
+            );
+            
+            // Text Color
+            if (/(?:^|;)\s*color\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(newBtnHtml)) {
+                newBtnHtml = newBtnHtml.replace(
+                    /((?:^|;)\s*color\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                    '$1' + newTextColor
+                );
+            }
+            
+            // Width
+            if (/width\s*:\s*\d+px/i.test(newBtnHtml)) {
+                newBtnHtml = newBtnHtml.replace(/width\s*:\s*\d+px/i, 'width: ' + newWidth + 'px');
+            }
         }
         
         html = html.replace(oldBtnHtml, newBtnHtml);
         
-        // 2. VML-Block updaten (wenn vorhanden)
+        // === VML-Block automatisch mit-updaten (wenn vorhanden) ===
         if (btnData.hasVml) {
-            // Finde den zugehörigen VML-Block
             const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
             let vmlMatch;
             const btnPos = html.indexOf(newBtnHtml);
@@ -6546,15 +6632,10 @@ function handleTrackingLinkReplace(linkId, newHref) {
                 if (vmlMatch.index + vmlMatch[0].length <= btnPos && (btnPos - (vmlMatch.index + vmlMatch[0].length)) < 500) {
                     let newVml = vmlMatch[1];
                     
-                    // Fillcolor
                     newVml = newVml.replace(/fillcolor\s*=\s*["'][^"']*["']/i, 'fillcolor="' + newBgColor + '"');
-                    // Strokecolor
                     newVml = newVml.replace(/strokecolor\s*=\s*["'][^"']*["']/i, 'strokecolor="' + newBgColor + '"');
-                    // Width im VML style
                     newVml = newVml.replace(/width\s*:\s*\d+px/i, 'width:' + newWidth + 'px');
-                    // Height im VML style
                     newVml = newVml.replace(/height\s*:\s*\d+px/i, 'height:' + newHeight + 'px');
-                    // Text Color im center
                     newVml = newVml.replace(/(color\s*:\s*)#?[a-fA-F0-9]{3,6}/i, '$1' + newTextColor);
                     
                     html = html.replace(vmlMatch[1], newVml);
@@ -6564,17 +6645,11 @@ function handleTrackingLinkReplace(linkId, newHref) {
         }
         
         buttonsTabHtml = html;
-        
-        // Check Pending
         checkButtonsPending();
-        
-        // Update Preview
         updateInspectorPreview();
-        
-        // Re-render
         showButtonsTab(buttonsContent);
         
-        showInspectorToast('✅ Button ' + btnId + ' aktualisiert');
+        showInspectorToast('✅ Button ' + btnId + ' aktualisiert (inkl. Outlook-Version)');
         console.log('[INSPECTOR] Button updated:', btnId);
     }
     
