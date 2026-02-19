@@ -549,7 +549,7 @@ body {
 
 /* ===========================
    LEGACY COMPATIBILITY STYLES
-   (für alte app.js Selektoren)
+   (fÃ¼r alte app.js Selektoren)
    =========================== */
 .tracking-item,
 .image-item,
@@ -690,7 +690,7 @@ body {
     background: #555;
 }
 
-/* Highlight für Click-to-Locate */
+/* Highlight fÃ¼r Click-to-Locate */
 .qa-highlight {
     outline: 3px solid #f2a93b !important;
     outline-offset: 2px;
@@ -828,7 +828,7 @@ body {
     cursor: not-allowed;
 }
 
-/* ── Neue visuelle Editor-UI (kein Quellcode) ───────────────────── */
+/* â”€â”€ Neue visuelle Editor-UI (kein Quellcode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .editor-hint-idle {
     text-align: center;
@@ -974,4 +974,274 @@ body {
     color: #27ae60;
     font-size: 13px;
     padding: 8px;
+}
+
+/* ===========================
+   BUTTONS TAB (VML/CTA)
+   =========================== */
+
+.buttons-legend {
+    background: #f0f4f8;
+    border: 1px solid #d0d9e3;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    line-height: 1.8;
+}
+
+.buttons-legend strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+    color: #333;
+}
+
+.buttons-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.buttons-legend-icon {
+    font-size: 16px;
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.buttons-legend-text {
+    color: #555;
+}
+
+.buttons-tab-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.buttons-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+}
+
+.button-item {
+    background: white;
+    padding: 16px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    border: 2px solid #eee;
+    transition: all 0.2s;
+}
+
+.button-item:hover {
+    border-color: #f2a93b;
+    box-shadow: 0 2px 8px rgba(242, 169, 59, 0.2);
+}
+
+.button-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.button-item-id {
+    font-weight: 700;
+    font-size: 14px;
+    color: #333;
+    background: #f0f0f0;
+    padding: 2px 10px;
+    border-radius: 12px;
+}
+
+.button-status {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.button-status-ok { color: #27ae60; }
+.button-status-warn { color: #f39c12; }
+.button-status-missing { color: #e74c3c; }
+
+.button-text-preview {
+    background: #f8f9fa;
+    border-left: 3px solid #f2a93b;
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+    word-break: break-word;
+}
+
+.button-link-display {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 12px;
+    word-break: break-all;
+}
+
+.button-link-display code {
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.button-edit-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.button-edit-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.button-edit-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+}
+
+.button-edit-group input[type="text"],
+.button-edit-group input[type="number"] {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.button-color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.button-color-input {
+    width: 36px;
+    height: 30px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 2px;
+    cursor: pointer;
+}
+
+.button-color-hex {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+.button-item-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
+.btn-button-apply {
+    padding: 8px 16px;
+    background: #f2a93b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.btn-button-apply:hover { background: #e09930; }
+
+.btn-button-locate {
+    padding: 8px 16px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.btn-button-locate:hover { background: #1976D2; }
+
+.btn-button-rebuild {
+    padding: 8px 16px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.btn-button-rebuild:hover { background: #c0392b; }
+
+.buttons-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 14px;
+}
+
+.buttons-undo-section,
+.buttons-commit-section {
+    margin-top: 10px;
+}
+
+.btn-buttons-undo {
+    padding: 8px 16px;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+.btn-buttons-undo:hover { background: #f57c00; }
+
+.btn-buttons-commit {
+    padding: 10px 20px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    width: 100%;
+}
+.btn-buttons-commit:hover { background: #219a52; }
+
+.buttons-commit-hint {
+    font-size: 12px;
+    color: #e67e22;
+    margin-top: 6px;
+}
+
+.button-vml-info {
+    font-size: 11px;
+    color: #888;
+    background: #fafafa;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-top: 6px;
 }

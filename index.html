@@ -7,19 +7,29 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<script>
+  (function () {
+    const PW = "VerySecret";
+    const entered = prompt("Passwort:");
+    if (entered !== PW) {
+      document.documentElement.innerHTML = "";
+    }
+  })();
+</script>
+
     <!-- Header -->
     <header class="main-header">
         <img src="pw-logo.png" alt="PW Logo" class="header-logo">
-        <h1>Automatische Prüfung und Optimierung von E-Mail-Templates</h1>
+        <h1>Automatische PrÃ¼fung und Optimierung von E-Mail-Templates</h1>
     </header>
 
-    <!-- Main Control Panel (gemäß Scribble) -->
+    <!-- Main Control Panel (gemÃ¤ÃŸ Scribble) -->
     <div class="control-panel">
         <!-- Upload Button -->
         <div class="control-item">
             <input type="file" id="fileInput" accept=".html,.htm" style="display: none;" />
             <button id="uploadBtn" class="btn-upload">
-                📁 Upload Template
+                ðŸ“ Upload Template
             </button>
             <div id="fileName" class="file-name-display"></div>
         </div>
@@ -55,17 +65,17 @@
         <!-- Action Buttons: Links nebeneinander -->
         <div class="control-actions">
             <button id="processBtn" class="btn-action" disabled>
-                ⚙️ Template verarbeiten
+                âš™ï¸ Template verarbeiten
             </button>
             <button id="downloadOptimized" class="btn-download" disabled>
-                ⬇️ Download Optimized Temp.
+                â¬‡ï¸ Download Optimized Temp.
             </button>
         </div>
 
         <!-- Inspector Button: Rechts separat -->
         <div class="control-inspector">
             <button id="showInspectorBtn" class="btn-inspector" disabled>
-                🔍 Open Inspector
+                ðŸ” Open Inspector
             </button>
         </div>
     </div>
@@ -73,7 +83,7 @@
     <!-- Hidden: Upload Hint -->
     <div id="uploadHint" style="display: none;"></div>
 
-    <!-- Hidden: Old Results Section Elements (für Kompatibilität) -->
+    <!-- Hidden: Old Results Section Elements (fÃ¼r KompatibilitÃ¤t) -->
     <div id="resultsSection" style="display: none;">
         <div id="statusBadge"></div>
         <button id="downloadReport" style="display: none;"></button>
@@ -86,7 +96,7 @@
         <div id="reportPreview" style="display: none;"></div>
     </div>
 
-    <!-- Inspector Section (gemäß Scribble) -->
+    <!-- Inspector Section (gemÃ¤ÃŸ Scribble) -->
     <section id="inspectorSection" class="inspector-section" style="display: none;">
         <!-- Tabs -->
         <div class="inspector-tabs">
@@ -102,6 +112,9 @@
             <button id="editorTab" class="inspector-tab" data-tab="editor">
                 Editor
             </button>
+            <button id="buttonsTab" class="inspector-tab" data-tab="buttons">
+                Buttons
+            </button>
         </div>
 
         <!-- 2-Spalten-Layout -->
@@ -113,28 +126,35 @@
                 <!-- Tracking Panel -->
                 <div id="trackingPanel" class="inspector-panel active">
                     <div id="trackingContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
+                        <!-- Wird dynamisch gefÃ¼llt -->
                     </div>
                 </div>
                 
                 <!-- Images Panel -->
                 <div id="imagesPanel" class="inspector-panel" style="display: none;">
                     <div id="imagesContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
+                        <!-- Wird dynamisch gefÃ¼llt -->
                     </div>
                 </div>
                 
                 <!-- Tag-Review Panel -->
                 <div id="tagreviewPanel" class="inspector-panel" style="display: none;">
                     <div id="tagreviewContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
+                        <!-- Wird dynamisch gefÃ¼llt -->
                     </div>
                 </div>
                 
                 <!-- Editor Panel -->
                 <div id="editorPanel" class="inspector-panel" style="display: none;">
                     <div id="editorContent" class="panel-content">
-                        <!-- Wird dynamisch gefüllt -->
+                        <!-- Wird dynamisch gefÃ¼llt -->
+                    </div>
+                </div>
+                
+                <!-- Buttons Panel -->
+                <div id="buttonsPanel" class="inspector-panel" style="display: none;">
+                    <div id="buttonsContent" class="panel-content">
+                        <!-- Wird dynamisch gefÃ¼llt -->
                     </div>
                 </div>
             </div>
@@ -151,15 +171,15 @@
         <!-- Untere Button-Leiste -->
         <div class="inspector-footer">
             <button id="commitChangesBtn" class="btn-footer-left">
-                ✅ Anpassungen übernehmen
+                âœ… Anpassungen Ã¼bernehmen
             </button>
             <button id="downloadManualOptimized" class="btn-footer-right" disabled>
-                ⬇️ Download manuell optimized Temp.
+                â¬‡ï¸ Download manuell optimized Temp.
             </button>
         </div>
     </section>
 
-    <!-- Hidden: Old Inspector Elements (für Kompatibilität) -->
+    <!-- Hidden: Old Inspector Elements (fÃ¼r KompatibilitÃ¤t) -->
     <div style="display: none;">
         <div id="globalPendingIndicator">
             <div id="trackingStatusChip"></div>
@@ -171,26 +191,26 @@
         <button id="globalFinalizeBtn"></button>
     </div>
 
-    <!-- Diff Modal (unverändert für Kompatibilität) -->
+    <!-- Diff Modal (unverÃ¤ndert fÃ¼r KompatibilitÃ¤t) -->
     <div id="diffModal" class="diff-modal" style="display: none;">
         <div class="diff-modal-content">
             <div class="diff-modal-header">
-                <h2>📊 Änderungen zwischen Original und Optimiert</h2>
-                <button id="closeDiffModal" class="close-modal">×</button>
+                <h2>ðŸ“Š Ã„nderungen zwischen Original und Optimiert</h2>
+                <button id="closeDiffModal" class="close-modal">Ã—</button>
             </div>
             <div class="diff-info">
-                ℹ️ Diese Ansicht zeigt nur Änderungen. Es werden keine Anpassungen vorgenommen.
+                â„¹ï¸ Diese Ansicht zeigt nur Ã„nderungen. Es werden keine Anpassungen vorgenommen.
             </div>
             <div id="diffPendingHint" class="diff-pending-hint" style="display: none;">
-                <strong>Hinweis:</strong> Es gibt nicht übernommene Änderungen. Diff zeigt den letzten übernommenen Stand.
+                <strong>Hinweis:</strong> Es gibt nicht Ã¼bernommene Ã„nderungen. Diff zeigt den letzten Ã¼bernommenen Stand.
             </div>
             <div class="diff-container">
                 <div class="diff-pane">
-                    <h3>📄 Original</h3>
+                    <h3>ðŸ“„ Original</h3>
                     <pre id="diffOriginal" class="diff-code"></pre>
                 </div>
                 <div class="diff-pane">
-                    <h3>✅ Optimiert</h3>
+                    <h3>âœ… Optimiert</h3>
                     <pre id="diffOptimized" class="diff-code"></pre>
                 </div>
             </div>
@@ -198,9 +218,28 @@
     </div>
 
     <!-- ===== LEGACY COMPATIBILITY BLOCK ===== -->
-    <!-- Nur Elemente die AUSSCHLIESSLICH hier definiert sind (tagReviewModal, assetReviewModal) -->
-    <!-- Alle anderen IDs existieren bereits in der sichtbaren UI oben - keine Duplikate! -->
+    <!-- Alle DOM-Elemente, die app.js erwartet, aber im neuen UI nicht sichtbar sind -->
     <div id="legacyCompat" style="display: none;">
+        <!-- Old Results Section Elements -->
+        <section id="resultsSection">
+            <div id="statusBadge"></div>
+            <div id="uploadHint"></div>
+            <div id="reportPreview"></div>
+            <button id="downloadReport"></button>
+            <button id="downloadUnresolved"></button>
+            <button id="downloadFinalOutput"></button>
+            <button id="showDiffBtn"></button>
+            <button id="showTagReviewBtn"></button>
+        </section>
+        
+        <!-- Diff Modal -->
+        <div id="diffModal">
+            <button id="closeDiffModal"></button>
+            <div id="diffPendingHint"></div>
+            <pre id="diffOriginal"></pre>
+            <pre id="diffOptimized"></pre>
+        </div>
+        
         <!-- Tag-Review Modal -->
         <div id="tagReviewModal">
             <button id="closeTagReviewModal"></button>
@@ -243,10 +282,22 @@
             <div id="trackingInfo"></div>
         </div>
         
+        <!-- Global Finalize Button (jetzt in Footer) -->
+        <button id="globalFinalizeBtn"></button>
+        
+        <!-- Global Pending Indicator -->
+        <div id="globalPendingIndicator">
+            <span id="trackingStatusChip"></span>
+            <span id="imagesStatusChip"></span>
+            <span id="tagreviewStatusChip"></span>
+            <span id="editorStatusChip"></span>
+            <span id="buttonsStatusChip"></span>
+            <div id="pendingWarning"></div>
+        </div>
     </div>
     <!-- ===== END LEGACY COMPATIBILITY BLOCK ===== -->
 
-    <!-- Toast Container (für Phase 12 Toasts) -->
+    <!-- Toast Container (fÃ¼r Phase 12 Toasts) -->
     <div id="inspectorToast" class="inspector-toast"></div>
 
     <script src="app.js"></script>

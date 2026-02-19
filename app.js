@@ -878,31 +878,246 @@ class TemplateProcessor {
         }
     }
 
-    // P14: CTA Button Fallback Check
+    // P14: CTA Button Fallback Check + Auto-Fix (VML Buttons für Outlook)
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
         
-        // Suche nach VML-Buttons (Outlook)
-        const vmlButtonRegex = /<!--\[if\s+mso\]>[^<]*<v:roundrect[^>]*>/gi;
-        const vmlButtons = this.html.match(vmlButtonRegex);
+        // Schritt 1: Finde alle CTA-artigen Buttons im HTML
+        // Ein CTA ist ein <a>-Tag mit background-color im inline style (= sieht aus wie Button)
+        const ctaRegex = /<a\b[^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+        const ctaMatches = this.html.match(ctaRegex) || [];
         
-        if (!vmlButtons || vmlButtons.length === 0) {
-            this.addCheck(id, 'PASS', 'Keine VML-Buttons gefunden (oder bereits mit Fallback)');
+        // Auch Table-basierte Buttons erkennen: <td> mit bgcolor + <a> drin
+        const tdButtonRegex = /<td\b[^>]*(?:bgcolor\s*=\s*["']#?[a-fA-F0-9]{3,6}["']|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*>[\s\S]*?<a\b[^>]*>[\s\S]*?<\/a>[\s\S]*?<\/td>/gi;
+        const tdMatches = this.html.match(tdButtonRegex) || [];
+        
+        // Vorhandene VML-Buttons erkennen
+        const vmlBlockRegex = /<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
+        const vmlBlocks = this.html.match(vmlBlockRegex) || [];
+        
+        // Zähle CTAs die KEINEN VML-Block in der Nähe haben
+        let ctasWithoutVml = 0;
+        let ctasFixed = 0;
+        let ctasMismatched = 0;
+        
+        // Für jeden CTA prüfen ob ein VML-Block davor existiert
+        // Strategie: Suche nach <a> Tags mit background-color die NICHT
+        // innerhalb von 500 Zeichen nach einem <!--[if mso]> Block stehen
+        
+        // Sammle alle CTA-Positionen
+        const allCtaPositions = [];
+        let match;
+        
+        // Reset regex
+        const ctaRegex2 = /<a\b[^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+        while ((match = ctaRegex2.exec(this.html)) !== null) {
+            // Prüfe ob dies ein echtes Button-Styling hat (padding, display block/inline-block)
+            const fullMatch = match[0];
+            const style = fullMatch.match(/style\s*=\s*["']([^"']*)["']/i);
+            if (style && style[1]) {
+                const styleStr = style[1].toLowerCase();
+                const hasPadding = /padding/.test(styleStr);
+                const hasDisplay = /display\s*:\s*(block|inline-block)/.test(styleStr);
+                const hasBgColor = /background(?:-color)?\s*:/.test(styleStr);
+                
+                // Mindestens background + (padding ODER display) = Button
+                if (hasBgColor && (hasPadding || hasDisplay)) {
+                    allCtaPositions.push({
+                        index: match.index,
+                        endIndex: match.index + fullMatch.length,
+                        fullMatch: fullMatch,
+                        bgColor: match[1],
+                        innerText: match[2].replace(/<[^>]*>/g, '').trim()
+                    });
+                }
+            }
+        }
+        
+        // Sammle alle VML-Block-Positionen
+        const vmlPositions = [];
+        const vmlRegex2 = /<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
+        while ((match = vmlRegex2.exec(this.html)) !== null) {
+            vmlPositions.push({
+                index: match.index,
+                endIndex: match.index + match[0].length,
+                fullMatch: match[0]
+            });
+        }
+        
+        // Prüfe für jeden CTA ob ein VML-Block in der Nähe (davor, max 500 Zeichen) ist
+        for (const cta of allCtaPositions) {
+            let hasVml = false;
+            let vmlBlock = null;
+            
+            for (const vml of vmlPositions) {
+                // VML-Block sollte VOR dem CTA sein und maximal 500 Zeichen davor enden
+                if (vml.endIndex <= cta.index && (cta.index - vml.endIndex) < 500) {
+                    hasVml = true;
+                    vmlBlock = vml;
+                    break;
+                }
+            }
+            
+            if (!hasVml) {
+                // Kein VML-Block gefunden → Auto-Fix: VML-Block generieren
+                ctasWithoutVml++;
+                
+                // Extrahiere Button-Eigenschaften aus dem HTML-Button
+                const btnProps = this._extractButtonProperties(cta.fullMatch);
+                
+                if (btnProps && btnProps.href) {
+                    // Generiere VML-Block
+                    const vmlCode = this._generateVmlButton(btnProps);
+                    
+                    // Füge VML-Block VOR dem CTA ein
+                    // Suche den nächsten Container (td, div) der den Button enthält
+                    this.html = this.html.substring(0, cta.index) + 
+                                vmlCode + '\n' +
+                                this.html.substring(cta.index);
+                    
+                    ctasFixed++;
+                    
+                    // Aktualisiere Positionen (da wir Text eingefügt haben)
+                    const offset = vmlCode.length + 1;
+                    for (const otherCta of allCtaPositions) {
+                        if (otherCta.index > cta.index) {
+                            otherCta.index += offset;
+                            otherCta.endIndex += offset;
+                        }
+                    }
+                    for (const otherVml of vmlPositions) {
+                        if (otherVml.index > cta.index) {
+                            otherVml.index += offset;
+                            otherVml.endIndex += offset;
+                        }
+                    }
+                }
+            } else if (vmlBlock) {
+                // VML vorhanden → Prüfe ob Link übereinstimmt
+                const vmlHref = vmlBlock.fullMatch.match(/href\s*=\s*["']([^"']*)["']/i);
+                const ctaHref = cta.fullMatch.match(/href\s*=\s*["']([^"']*)["']/i);
+                
+                if (vmlHref && ctaHref && vmlHref[1] !== ctaHref[1]) {
+                    // Links stimmen nicht überein → Fix: VML-Link anpassen
+                    const fixedVml = vmlBlock.fullMatch.replace(
+                        /href\s*=\s*["'][^"']*["']/gi,
+                        'href="' + ctaHref[1] + '"'
+                    );
+                    this.html = this.html.substring(0, vmlBlock.index) + 
+                                fixedVml + 
+                                this.html.substring(vmlBlock.endIndex);
+                    
+                    ctasMismatched++;
+                }
+            }
+        }
+        
+        // Ergebnis
+        const totalCtas = allCtaPositions.length;
+        
+        if (totalCtas === 0) {
+            this.addCheck(id, 'PASS', 'Keine CTA-Buttons gefunden');
             return;
         }
         
-        // Prüfe ob HTML-Fallback vorhanden
-        // Einfache Heuristik: Nach jedem VML-Button sollte ein <a> Tag folgen
-        const vmlCount = vmlButtons.length;
-        const fallbackPattern = /<!--\[if\s+mso\]>[^<]*<v:roundrect[^>]*>[\s\S]*?<!\[endif\]-->[\s\S]*?<a[^>]*>/gi;
-        const fallbackMatches = this.html.match(fallbackPattern);
-        const fallbackCount = fallbackMatches ? fallbackMatches.length : 0;
-        
-        if (fallbackCount < vmlCount) {
-            this.addCheck(id, 'WARN', `${vmlCount} VML-Buttons gefunden, aber nur ${fallbackCount} mit HTML-Fallback (Outlook-Kompatibilität prüfen!)`);
+        if (ctasFixed > 0 && ctasMismatched > 0) {
+            this.addCheck(id, 'FIXED', `${ctasFixed} VML-Button(s) für Outlook generiert, ${ctasMismatched} Link(s) synchronisiert (${totalCtas} CTAs gesamt)`);
+        } else if (ctasFixed > 0) {
+            this.addCheck(id, 'FIXED', `${ctasFixed} VML-Button(s) für Outlook automatisch generiert (${totalCtas} CTAs gesamt)`);
+        } else if (ctasMismatched > 0) {
+            this.addCheck(id, 'FIXED', `${ctasMismatched} VML-Link(s) mit HTML-Button synchronisiert (${totalCtas} CTAs gesamt)`);
         } else {
-            this.addCheck(id, 'PASS', `CTA-Buttons mit Outlook-Fallback (${vmlCount} VML-Buttons)`);
+            this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) haben korrekten Outlook-Fallback`);
         }
+    }
+    
+    // Hilfsfunktion: Button-Eigenschaften aus HTML extrahieren
+    _extractButtonProperties(buttonHtml) {
+        const props = {};
+        
+        // href
+        const hrefMatch = buttonHtml.match(/href\s*=\s*["']([^"']*)["']/i);
+        props.href = hrefMatch ? hrefMatch[1] : '';
+        
+        // Text (ohne HTML-Tags)
+        const textMatch = buttonHtml.match(/>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/i);
+        props.text = textMatch ? textMatch[1].replace(/<[^>]*>/g, '').trim() : 'Button';
+        
+        // Style extrahieren
+        const styleMatch = buttonHtml.match(/style\s*=\s*["']([^"']*)["']/i);
+        const style = styleMatch ? styleMatch[1] : '';
+        
+        // Background-Color
+        const bgMatch = style.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+        props.bgColor = bgMatch ? '#' + bgMatch[1] : '#333333';
+        // Normalisiere 3-stellige Hex zu 6-stellig
+        if (props.bgColor.length === 4) {
+            const c = props.bgColor;
+            props.bgColor = '#' + c[1]+c[1] + c[2]+c[2] + c[3]+c[3];
+        }
+        
+        // Text-Color
+        const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+        props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
+        if (props.textColor.length === 4) {
+            const c = props.textColor;
+            props.textColor = '#' + c[1]+c[1] + c[2]+c[2] + c[3]+c[3];
+        }
+        
+        // Width
+        const widthMatch = style.match(/width\s*:\s*(\d+)/i);
+        props.width = widthMatch ? parseInt(widthMatch[1]) : 250;
+        
+        // Height / Padding-basierte Höhe
+        const heightMatch = style.match(/height\s*:\s*(\d+)/i);
+        if (heightMatch) {
+            props.height = parseInt(heightMatch[1]);
+        } else {
+            // Schätze Höhe aus padding
+            const paddingMatch = style.match(/padding\s*:\s*(\d+)/i);
+            const padV = paddingMatch ? parseInt(paddingMatch[1]) : 12;
+            props.height = padV * 2 + 20; // padding oben + unten + Schriftgröße
+        }
+        
+        // Border-Radius
+        const radiusMatch = style.match(/border-radius\s*:\s*(\d+)/i);
+        props.borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
+        
+        // Font-Size
+        const fontSizeMatch = style.match(/font-size\s*:\s*(\d+)/i);
+        props.fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
+        
+        // Font-Family
+        const fontFamilyMatch = style.match(/font-family\s*:\s*([^;'"]+)/i);
+        props.fontFamily = fontFamilyMatch ? fontFamilyMatch[1].trim().split(',')[0].replace(/['"]/g, '') : 'Arial';
+        
+        // Font-Weight
+        const fontWeightMatch = style.match(/font-weight\s*:\s*(\w+)/i);
+        props.fontWeight = fontWeightMatch ? fontWeightMatch[1] : 'bold';
+        
+        return props;
+    }
+    
+    // Hilfsfunktion: VML-Button generieren
+    _generateVmlButton(props) {
+        const arcsize = props.borderRadius > 0 ? Math.round((props.borderRadius / Math.min(props.width, props.height)) * 100) + '%' : '0%';
+        
+        // VML-Block: Outlook sieht nur diesen Teil
+        let vml = '<!--[if mso]>\n';
+        vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
+        vml += 'href="' + props.href + '" ';
+        vml += 'style="height:' + props.height + 'px;v-text-anchor:middle;width:' + props.width + 'px;" ';
+        vml += 'arcsize="' + arcsize + '" ';
+        vml += 'strokecolor="' + props.bgColor + '" ';
+        vml += 'fillcolor="' + props.bgColor + '">\n';
+        vml += '<w:anchorlock/>\n';
+        vml += '<center style="color:' + props.textColor + ';font-family:' + props.fontFamily + ',sans-serif;font-size:' + props.fontSize + 'px;font-weight:' + props.fontWeight + ';">\n';
+        vml += props.text + '\n';
+        vml += '</center>\n';
+        vml += '</v:roundrect>\n';
+        vml += '<![endif]-->';
+        
+        return vml;
     }
 
     // P15: Inline Styles Check
@@ -1114,6 +1329,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagesContent = document.getElementById('imagesContent');
     const tagreviewContent = document.getElementById('tagreviewContent');
     const editorContent = document.getElementById('editorContent');
+    const buttonsTab = document.getElementById('buttonsTab');
+    const buttonsPanel = document.getElementById('buttonsPanel');
+    const buttonsContent = document.getElementById('buttonsContent');
     
     const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
     const commitChangesBtn = document.getElementById('commitChangesBtn');
@@ -1124,6 +1342,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagesStatusChip = document.getElementById('imagesStatusChip');
     const tagreviewStatusChip = document.getElementById('tagreviewStatusChip');
     const editorStatusChip = document.getElementById('editorStatusChip');
+    const buttonsStatusChip = document.getElementById('buttonsStatusChip');
     const pendingWarning = document.getElementById('pendingWarning');
 
     // State-Variablen (KEIN uploadedFile mehr!)
@@ -1170,6 +1389,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let imagesHistory = [];  // Undo History Stack
     let imagesPending = false;  // Pending Changes Flag
     
+    // Buttons Tab State
+    let buttonsTabHtml = null;  // Separate HTML für Buttons Tab
+    let buttonsHistory = [];  // Undo History Stack
+    let buttonsPending = false;  // Pending Changes Flag
+    
     // Phase 11: Global Commit Log & Action Counters
     let globalCommitLog = [];  // TAB_COMMITS History
     
@@ -1200,7 +1424,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('FILE_SELECTED', file.name, file.size, file.type);
             
             // Phase 10: Check for pending changes before loading new file
-            const anyPending = trackingPending || imagesPending || editorPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
             if (anyPending) {
                 const discard = confirm(
                     '⚠️ Es gibt nicht übernommene Änderungen in einem oder mehreren Tabs.\n\n' +
@@ -1464,7 +1688,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Prüfe ob pending Changes existieren
-            const anyPending = trackingPending || imagesPending || editorPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
             
             if (anyPending) {
                 const confirmed = confirm(
@@ -1514,7 +1738,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showDiffBtn.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
             // Phase 11 B4: Prüfe ob pending Changes existieren
-            const anyPending = trackingPending || imagesPending || editorPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
             // diffPendingHint bereits oben deklariert
             
             if (diffPendingHint) {
@@ -3675,7 +3899,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateGlobalFinalizeButton() {
         if (!globalFinalizeBtn) return;
         
-        const anyPending = trackingPending || imagesPending || editorPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
         
         if (anyPending) {
             globalFinalizeBtn.disabled = false;
@@ -3689,7 +3913,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function finalizeAllPendingTabs() {
-        const anyPending = trackingPending || imagesPending || editorPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
         
         if (!anyPending) {
             console.log('[FINALIZE] No pending changes');
@@ -3701,6 +3925,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (trackingPending) pendingTabs.push('Tracking');
         if (imagesPending) pendingTabs.push('Bilder');
         if (editorPending) pendingTabs.push('Editor');
+        if (buttonsPending) pendingTabs.push('Buttons');
         
         const confirmed = confirm(
             'Es gibt nicht übernommene Änderungen in: ' + pendingTabs.join(', ') + '.\n\n' +
@@ -3730,6 +3955,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (success) committedTabs.push('Editor');
         }
         
+        if (buttonsPending) {
+            const success = commitButtonsChanges();
+            if (success) committedTabs.push('Buttons');
+        }
+        
         // Log Global Finalize (Phase 11 B6)
         if (committedTabs.length > 0) {
             const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
@@ -3747,6 +3977,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadInspectorTabContent('images');
         loadInspectorTabContent('tagreview');
         loadInspectorTabContent('editor');
+        loadInspectorTabContent('buttons');
         
         // Update Preview
         updateInspectorPreview();
@@ -3774,7 +4005,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // BUG #3 FIX: Direkt finalizeAllPendingTabs aufrufen statt
             // globalFinalizeBtn.click() – der Button ist disabled wenn nichts
             // pending ist und ein Click darauf passiert lautlos gar nichts.
-            const anyPending = trackingPending || imagesPending || editorPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
             if (!anyPending) {
                 // Klares Feedback statt lautlosem Nichts
                 showInspectorToast('ℹ️ Keine offenen Änderungen zum Übernehmen');
@@ -3798,7 +4029,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateDownloadManualOptimizedButton() {
         if (!downloadManualOptimized) return;
         
-        const anyPending = trackingPending || imagesPending || editorPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
         
         if (anyPending) {
             downloadManualOptimized.disabled = true;
@@ -3873,6 +4104,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (fromTab === 'editor' && editorPending) {
             hasPending = true;
             tabName = 'Editor';
+        } else if (fromTab === 'buttons' && buttonsPending) {
+            hasPending = true;
+            tabName = 'Buttons';
         }
         
         if (hasPending) {
@@ -3903,6 +4137,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 editorHistory = [];
                 editorPending = false;
                 editorSelectedElement = null;
+            } else if (fromTab === 'buttons') {
+                buttonsTabHtml = currentWorkingHtml;
+                buttonsHistory = [];
+                buttonsPending = false;
             }
             
             updateGlobalPendingIndicator();
@@ -3925,12 +4163,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Update Tab Buttons
-        [trackingTab, imagesTab, tagReviewTab, editorTab].forEach(tab => {
+        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab].forEach(tab => {
             if (tab) tab.classList.remove('active');
         });
         
         // Update Panels
-        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel].forEach(panel => {
+        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel].forEach(panel => {
             if (panel) panel.style.display = 'none';
         });
         
@@ -3949,6 +4187,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (tabName === 'editor' && editorTab && editorPanel) {
             editorTab.classList.add('active');
             editorPanel.style.display = 'block';
+        } else if (tabName === 'buttons' && buttonsTab && buttonsPanel) {
+            buttonsTab.classList.add('active');
+            buttonsPanel.style.display = 'block';
         }
         
         // Lade Tab Content
@@ -3963,6 +4204,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (imagesTab) imagesTab.addEventListener('click', () => switchInspectorTab('images'));
     if (tagReviewTab) tagReviewTab.addEventListener('click', () => switchInspectorTab('tagreview'));
     if (editorTab) editorTab.addEventListener('click', () => switchInspectorTab('editor'));
+    if (buttonsTab) buttonsTab.addEventListener('click', () => switchInspectorTab('buttons'));
     
     // Load Tab Content (Placeholder für Phase 3-7)
     function loadInspectorTabContent(tabName) {
@@ -3981,6 +4223,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showTagReviewTab(tagreviewContent);
         } else if (tabName === 'editor' && editorContent) {
             showEditorTab(editorContent);
+        } else if (tabName === 'buttons' && buttonsContent) {
+            showButtonsTab(buttonsContent);
         }
     }
     
@@ -4016,6 +4260,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             sourceHtml = editorTabHtml;
             sourceLabel = 'editor';
+        } else if (currentInspectorTab === 'buttons') {
+            if (!buttonsTabHtml) {
+                buttonsTabHtml = currentWorkingHtml; // Initialisiere sofort
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Buttons initialized from currentWorkingHtml');
+            }
+            sourceHtml = buttonsTabHtml;
+            sourceLabel = 'buttons';
         }
         
         // Phase 13 P1: Debug Log (nur in DEV_MODE)
@@ -4100,6 +4351,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const id = 'L' + String(index + 1).padStart(3, '0');
             anchor.setAttribute('data-qa-link-id', id);
         });
+        
+        // Buttons Tab: CTA-Buttons zusätzlich mit B-IDs annotieren
+        if (tabName === 'buttons') {
+            let btnIndex = 0;
+            // Finde Anker mit background-color (= CTA-Buttons)
+            anchors.forEach(anchor => {
+                const style = anchor.getAttribute('style') || '';
+                const parentTd = anchor.closest('td');
+                const parentStyle = parentTd ? (parentTd.getAttribute('style') || '') : '';
+                const hasBg = /background(?:-color)?:\s*#[0-9a-fA-F]{3,8}/i.test(style) ||
+                              /background(?:-color)?:\s*#[0-9a-fA-F]{3,8}/i.test(parentStyle);
+                if (hasBg) {
+                    btnIndex++;
+                    const btnId = 'B' + String(btnIndex).padStart(3, '0');
+                    anchor.setAttribute('data-qa-link-id', btnId);
+                    if (parentTd) parentTd.setAttribute('data-qa-link-id', btnId);
+                }
+            });
+        }
         
         // Annotiere alle <img> Tags mit data-qa-img-id (Phase 4)
         const images = doc.querySelectorAll('img');
@@ -4241,6 +4511,22 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(element); }, 180);');
         scriptLines.push('      } else {');
         scriptLines.push('        console.warn("[LOCATE] Image not found - ID:", imgId, "src:", src, "Total images:", document.querySelectorAll("img[src]").length);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // HIGHLIGHT_BUTTON (CTA Buttons)');
+        scriptLines.push('    if (event.data.type === "HIGHLIGHT_BUTTON") {');
+        scriptLines.push('      var btnIndex = event.data.index;');
+        scriptLines.push('      // Finde alle Links mit background-color (= CTA Buttons)');
+        scriptLines.push('      var allLinks = Array.from(document.querySelectorAll("a[style]"));');
+        scriptLines.push('      var ctaLinks = allLinks.filter(function(a) {');
+        scriptLines.push('        var s = (a.getAttribute("style") || "").toLowerCase();');
+        scriptLines.push('        return /background(-color)?\\s*:/.test(s) && (/padding/.test(s) || /display\\s*:\\s*(block|inline-block)/.test(s));');
+        scriptLines.push('      });');
+        scriptLines.push('      if (btnIndex >= 0 && btnIndex < ctaLinks.length) {');
+        scriptLines.push('        var btn = ctaLinks[btnIndex];');
+        scriptLines.push('        btn.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(btn); }, 180);');
         scriptLines.push('      }');
         scriptLines.push('    }');
         scriptLines.push('');
@@ -5076,6 +5362,7 @@ function handleTrackingLinkReplace(linkId, newHref) {
             loadInspectorTabContent('images');
             loadInspectorTabContent('tagreview');
             loadInspectorTabContent('editor');
+        loadInspectorTabContent('buttons');
             
             // Update Preview
             updateInspectorPreview();
@@ -5624,6 +5911,7 @@ function handleTrackingLinkReplace(linkId, newHref) {
             loadInspectorTabContent('images');
             loadInspectorTabContent('tagreview');
             loadInspectorTabContent('editor');
+        loadInspectorTabContent('buttons');
             
             // Update Preview
             updateInspectorPreview();
@@ -5633,6 +5921,586 @@ function handleTrackingLinkReplace(linkId, newHref) {
         }
     }
     
+    // ============================================
+    // BUTTONS TAB IMPLEMENTATION (VML/CTA)
+    // ============================================
+    
+    // Zeige Buttons Tab Content
+    function showButtonsTab(buttonsContent) {
+        if (!buttonsContent) return;
+        
+        console.log('[INSPECTOR] Rendering Buttons Tab...');
+        
+        // Initialisiere buttonsTabHtml beim ersten Aufruf
+        if (!buttonsTabHtml) {
+            buttonsTabHtml = currentWorkingHtml;
+            buttonsHistory = [];
+            buttonsPending = false;
+        }
+        
+        // Extrahiere CTA-Buttons
+        const buttons = extractCTAButtonsFromHTML(buttonsTabHtml);
+        
+        // Render Buttons Tab
+        let html = '<div class="buttons-tab-content">';
+        
+        // Legende
+        html += '<div class="buttons-legend">';
+        html += '<strong>Legende – Status der Outlook-Kompatibilität</strong>';
+        html += '<div class="buttons-legend-item"><span class="buttons-legend-icon">✅</span><span class="buttons-legend-text">Outlook-Button (VML) vorhanden und korrekt – Links und Texte stimmen überein.</span></div>';
+        html += '<div class="buttons-legend-item"><span class="buttons-legend-icon">⚠️</span><span class="buttons-legend-text">Outlook-Button vorhanden, aber Link oder Text weicht vom normalen Button ab.</span></div>';
+        html += '<div class="buttons-legend-item"><span class="buttons-legend-icon">❌</span><span class="buttons-legend-text">Kein Outlook-Button vorhanden – wurde automatisch erstellt. Bitte prüfen.</span></div>';
+        html += '</div>';
+        
+        // Sektion: CTA Buttons
+        html += '<div class="buttons-section">';
+        html += '<h3>🔘 CTA-Buttons (' + buttons.length + ')</h3>';
+        
+        if (buttons.length === 0) {
+            html += '<p class="buttons-empty">Keine CTA-Buttons gefunden.<br><small>CTAs sind Links mit Hintergrundfarbe, die wie Buttons aussehen.</small></p>';
+        } else {
+            buttons.forEach(btn => {
+                html += '<div class="button-item" data-btn-id="' + btn.id + '">';
+                
+                // Header mit ID und Status
+                html += '<div class="button-item-header">';
+                html += '<span class="button-item-id">' + btn.id + '</span>';
+                if (btn.vmlStatus === 'ok') {
+                    html += '<span class="button-status button-status-ok">✅ VML korrekt</span>';
+                } else if (btn.vmlStatus === 'mismatch') {
+                    html += '<span class="button-status button-status-warn">⚠️ VML Link/Text abweichend</span>';
+                } else {
+                    html += '<span class="button-status button-status-missing">❌ VML fehlte (auto-erstellt)</span>';
+                }
+                html += '</div>';
+                
+                // Button-Text Vorschau
+                html += '<div class="button-text-preview">' + escapeHtml(btn.text || '(kein Text)') + '</div>';
+                
+                // Link-Anzeige
+                html += '<div class="button-link-display">';
+                html += '<strong>Link:</strong> <code title="' + escapeHtml(btn.href) + '">' + escapeHtml(btn.href.length > 60 ? btn.href.substring(0, 57) + '...' : btn.href) + '</code>';
+                html += '</div>';
+                
+                // Bearbeitungsfelder
+                html += '<div class="button-edit-controls">';
+                
+                // Hintergrundfarbe
+                html += '<div class="button-edit-group">';
+                html += '<label>Hintergrundfarbe</label>';
+                html += '<div class="button-color-row">';
+                html += '<input type="color" class="button-color-input" data-btn-id="' + btn.id + '" data-prop="bgColor" value="' + btn.bgColor + '">';
+                html += '<input type="text" class="button-color-hex" data-btn-id="' + btn.id + '" data-prop="bgColorHex" value="' + btn.bgColor + '" maxlength="7">';
+                html += '</div>';
+                html += '</div>';
+                
+                // Schriftfarbe
+                html += '<div class="button-edit-group">';
+                html += '<label>Schriftfarbe</label>';
+                html += '<div class="button-color-row">';
+                html += '<input type="color" class="button-color-input" data-btn-id="' + btn.id + '" data-prop="textColor" value="' + btn.textColor + '">';
+                html += '<input type="text" class="button-color-hex" data-btn-id="' + btn.id + '" data-prop="textColorHex" value="' + btn.textColor + '" maxlength="7">';
+                html += '</div>';
+                html += '</div>';
+                
+                // Breite
+                html += '<div class="button-edit-group">';
+                html += '<label>Breite (px)</label>';
+                html += '<input type="number" class="button-width-input" data-btn-id="' + btn.id + '" value="' + btn.width + '" min="80" max="600" step="10">';
+                html += '</div>';
+                
+                // Höhe
+                html += '<div class="button-edit-group">';
+                html += '<label>Höhe (px)</label>';
+                html += '<input type="number" class="button-height-input" data-btn-id="' + btn.id + '" value="' + btn.height + '" min="24" max="100" step="2">';
+                html += '</div>';
+                
+                html += '</div>'; // edit-controls
+                
+                // VML-Info
+                if (btn.hasVml) {
+                    html += '<div class="button-vml-info">ℹ️ VML-Block vorhanden (Outlook-Fallback aktiv)</div>';
+                }
+                
+                // Action Buttons
+                html += '<div class="button-item-actions">';
+                html += '<button class="btn-button-apply" data-btn-id="' + btn.id + '">✓ Änderungen anwenden</button>';
+                html += '<button class="btn-button-locate" data-btn-id="' + btn.id + '">👁️ Im Preview zeigen</button>';
+                html += '<button class="btn-button-rebuild" data-btn-id="' + btn.id + '">🔄 VML neu generieren</button>';
+                html += '</div>';
+                
+                html += '</div>'; // button-item
+            });
+        }
+        html += '</div>'; // buttons-section
+        
+        // Undo Button
+        if (buttonsHistory.length > 0) {
+            html += '<div class="buttons-undo-section">';
+            html += '<button id="buttonsUndo" class="btn-buttons-undo">↶ Undo (' + buttonsHistory.length + ')</button>';
+            html += '</div>';
+        }
+        
+        // Commit Button (nur wenn pending)
+        if (buttonsPending) {
+            html += '<div class="buttons-commit-section">';
+            html += '<button id="buttonsCommit" class="btn-buttons-commit">✓ Änderungen in diesem Tab übernehmen</button>';
+            html += '<p class="buttons-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
+            html += '</div>';
+        }
+        
+        html += '</div>'; // buttons-tab-content
+        
+        buttonsContent.innerHTML = html;
+        
+        // Event Listener
+        attachButtonsEditListeners();
+    }
+    
+    // Extrahiere CTA-Buttons aus HTML (String-basiert, da VML in Comments)
+    function extractCTAButtonsFromHTML(html) {
+        if (!html) return [];
+        
+        const buttons = [];
+        let btnIndex = 0;
+        
+        // Finde alle <a>-Tags mit background-color (= CTA-Buttons)
+        const ctaRegex = /<a\b([^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
+        let match;
+        
+        // Sammle VML-Blöcke
+        const vmlBlocks = [];
+        const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
+        let vmlMatch;
+        while ((vmlMatch = vmlRegex.exec(html)) !== null) {
+            // Extrahiere href aus VML
+            const vmlHref = vmlMatch[1].match(/href\s*=\s*["']([^"']*)["']/i);
+            // Extrahiere Text aus VML (im <center> Tag)
+            const vmlText = vmlMatch[1].match(/<center[^>]*>([\s\S]*?)<\/center>/i);
+            vmlBlocks.push({
+                index: vmlMatch.index,
+                endIndex: vmlMatch.index + vmlMatch[0].length,
+                fullMatch: vmlMatch[1],
+                href: vmlHref ? vmlHref[1] : '',
+                text: vmlText ? vmlText[1].replace(/<[^>]*>/g, '').trim() : ''
+            });
+        }
+        
+        while ((match = ctaRegex.exec(html)) !== null) {
+            const fullTag = match[0];
+            const attrs = match[1];
+            const inner = match[2];
+            
+            // Prüfe ob es wirklich ein Button ist (mindestens background + padding/display)
+            const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+            if (!styleMatch) continue;
+            const style = styleMatch[1].toLowerCase();
+            
+            const hasBg = /background(?:-color)?\s*:/.test(style);
+            const hasPadding = /padding/.test(style);
+            const hasDisplay = /display\s*:\s*(block|inline-block)/.test(style);
+            
+            if (!hasBg || (!hasPadding && !hasDisplay)) continue;
+            
+            btnIndex++;
+            const id = 'B' + String(btnIndex).padStart(3, '0');
+            
+            // Extrahiere Eigenschaften
+            const hrefMatch = attrs.match(/href\s*=\s*["']([^"']*)["']/i);
+            const href = hrefMatch ? hrefMatch[1] : '';
+            const text = inner.replace(/<[^>]*>/g, '').trim();
+            
+            // Background Color
+            const bgMatch = style.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            let bgColor = bgMatch ? '#' + bgMatch[1] : '#333333';
+            if (bgColor.length === 4) { const c = bgColor; bgColor = '#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3]; }
+            
+            // Text Color
+            const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+            let textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
+            if (textColor.length === 4) { const c = textColor; textColor = '#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3]; }
+            
+            // Width
+            const widthMatch = style.match(/width\s*:\s*(\d+)/i);
+            const width = widthMatch ? parseInt(widthMatch[1]) : 250;
+            
+            // Height
+            const heightMatch = style.match(/height\s*:\s*(\d+)/i);
+            let height = 44;
+            if (heightMatch) {
+                height = parseInt(heightMatch[1]);
+            } else {
+                const paddingMatch = style.match(/padding\s*:\s*(\d+)/i);
+                const padV = paddingMatch ? parseInt(paddingMatch[1]) : 12;
+                height = padV * 2 + 20;
+            }
+            
+            // Border Radius
+            const radiusMatch = style.match(/border-radius\s*:\s*(\d+)/i);
+            const borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
+            
+            // Font Size
+            const fontSizeMatch = style.match(/font-size\s*:\s*(\d+)/i);
+            const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
+            
+            // Prüfe ob VML-Block in der Nähe
+            let hasVml = false;
+            let vmlStatus = 'missing'; // 'ok', 'mismatch', 'missing'
+            const ctaPos = match.index;
+            
+            for (const vml of vmlBlocks) {
+                if (vml.endIndex <= ctaPos && (ctaPos - vml.endIndex) < 500) {
+                    hasVml = true;
+                    // Prüfe ob href und text übereinstimmen
+                    const hrefMatch2 = vml.href === href;
+                    const textMatch2 = vml.text.toLowerCase() === text.toLowerCase();
+                    vmlStatus = (hrefMatch2 && textMatch2) ? 'ok' : 'mismatch';
+                    break;
+                }
+            }
+            
+            buttons.push({
+                id: id,
+                href: href,
+                text: text,
+                bgColor: bgColor,
+                textColor: textColor,
+                width: width,
+                height: height,
+                borderRadius: borderRadius,
+                fontSize: fontSize,
+                hasVml: hasVml,
+                vmlStatus: vmlStatus,
+                matchIndex: match.index,
+                fullMatch: fullTag
+            });
+        }
+        
+        console.log('[INSPECTOR] Extracted ' + buttons.length + ' CTA buttons');
+        return buttons;
+    }
+    
+    // Event Listener für Buttons Tab
+    function attachButtonsEditListeners() {
+        // Color Picker → Hex Sync
+        document.querySelectorAll('.button-color-input').forEach(picker => {
+            picker.addEventListener('input', function() {
+                const btnId = this.getAttribute('data-btn-id');
+                const prop = this.getAttribute('data-prop');
+                const hexProp = prop + 'Hex';
+                const hexInput = document.querySelector('.button-color-hex[data-btn-id="' + btnId + '"][data-prop="' + hexProp + '"]');
+                if (hexInput) hexInput.value = this.value;
+            });
+        });
+        
+        // Hex → Color Picker Sync
+        document.querySelectorAll('.button-color-hex').forEach(hexInput => {
+            hexInput.addEventListener('input', function() {
+                const btnId = this.getAttribute('data-btn-id');
+                const prop = this.getAttribute('data-prop');
+                const colorProp = prop.replace('Hex', '');
+                const picker = document.querySelector('.button-color-input[data-btn-id="' + btnId + '"][data-prop="' + colorProp + '"]');
+                if (picker && /^#[a-fA-F0-9]{6}$/.test(this.value)) {
+                    picker.value = this.value;
+                }
+            });
+        });
+        
+        // Apply Buttons
+        document.querySelectorAll('.btn-button-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const btnId = this.getAttribute('data-btn-id');
+                handleButtonApply(btnId);
+            });
+        });
+        
+        // Locate Buttons
+        document.querySelectorAll('.btn-button-locate').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const btnId = this.getAttribute('data-btn-id');
+                highlightButtonInPreview(btnId);
+            });
+        });
+        
+        // Rebuild VML Buttons
+        document.querySelectorAll('.btn-button-rebuild').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const btnId = this.getAttribute('data-btn-id');
+                handleButtonRebuildVml(btnId);
+            });
+        });
+        
+        // Undo Button
+        const undoBtn = document.getElementById('buttonsUndo');
+        if (undoBtn) {
+            undoBtn.addEventListener('click', handleButtonsUndo);
+        }
+        
+        // Commit Button
+        const commitBtn = document.getElementById('buttonsCommit');
+        if (commitBtn) {
+            commitBtn.addEventListener('click', handleButtonsCommit);
+        }
+    }
+    
+    // Apply: Farbe/Breite/Höhe im VML-Block und HTML-Button ändern
+    function handleButtonApply(btnId) {
+        const buttons = extractCTAButtonsFromHTML(buttonsTabHtml);
+        const btnData = buttons.find(b => b.id === btnId);
+        if (!btnData) {
+            showInspectorToast('⚠️ Button nicht gefunden');
+            return;
+        }
+        
+        // Lese neue Werte aus den Input-Feldern
+        const bgPicker = document.querySelector('.button-color-input[data-btn-id="' + btnId + '"][data-prop="bgColor"]');
+        const textPicker = document.querySelector('.button-color-input[data-btn-id="' + btnId + '"][data-prop="textColor"]');
+        const widthInput = document.querySelector('.button-width-input[data-btn-id="' + btnId + '"]');
+        const heightInput = document.querySelector('.button-height-input[data-btn-id="' + btnId + '"]');
+        
+        const newBgColor = bgPicker ? bgPicker.value : btnData.bgColor;
+        const newTextColor = textPicker ? textPicker.value : btnData.textColor;
+        const newWidth = widthInput ? parseInt(widthInput.value) : btnData.width;
+        const newHeight = heightInput ? parseInt(heightInput.value) : btnData.height;
+        
+        // Speichere in History
+        buttonsHistory.push(buttonsTabHtml);
+        
+        let html = buttonsTabHtml;
+        
+        // 1. HTML-Button updaten (background-color, color, width)
+        const oldBtnHtml = btnData.fullMatch;
+        let newBtnHtml = oldBtnHtml;
+        
+        // Background Color ersetzen
+        newBtnHtml = newBtnHtml.replace(
+            /background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i,
+            'background-color: ' + newBgColor
+        );
+        
+        // Text Color ersetzen
+        if (/(?:^|;)\s*color\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(newBtnHtml)) {
+            newBtnHtml = newBtnHtml.replace(
+                /((?:^|;)\s*color\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                '$1' + newTextColor
+            );
+        }
+        
+        // Width ersetzen (im style)
+        if (/width\s*:\s*\d+px/i.test(newBtnHtml)) {
+            newBtnHtml = newBtnHtml.replace(/width\s*:\s*\d+px/i, 'width: ' + newWidth + 'px');
+        }
+        
+        html = html.replace(oldBtnHtml, newBtnHtml);
+        
+        // 2. VML-Block updaten (wenn vorhanden)
+        if (btnData.hasVml) {
+            // Finde den zugehörigen VML-Block
+            const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
+            let vmlMatch;
+            const btnPos = html.indexOf(newBtnHtml);
+            
+            while ((vmlMatch = vmlRegex.exec(html)) !== null) {
+                if (vmlMatch.index + vmlMatch[0].length <= btnPos && (btnPos - (vmlMatch.index + vmlMatch[0].length)) < 500) {
+                    let newVml = vmlMatch[1];
+                    
+                    // Fillcolor
+                    newVml = newVml.replace(/fillcolor\s*=\s*["'][^"']*["']/i, 'fillcolor="' + newBgColor + '"');
+                    // Strokecolor
+                    newVml = newVml.replace(/strokecolor\s*=\s*["'][^"']*["']/i, 'strokecolor="' + newBgColor + '"');
+                    // Width im VML style
+                    newVml = newVml.replace(/width\s*:\s*\d+px/i, 'width:' + newWidth + 'px');
+                    // Height im VML style
+                    newVml = newVml.replace(/height\s*:\s*\d+px/i, 'height:' + newHeight + 'px');
+                    // Text Color im center
+                    newVml = newVml.replace(/(color\s*:\s*)#?[a-fA-F0-9]{3,6}/i, '$1' + newTextColor);
+                    
+                    html = html.replace(vmlMatch[1], newVml);
+                    break;
+                }
+            }
+        }
+        
+        buttonsTabHtml = html;
+        
+        // Check Pending
+        checkButtonsPending();
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Re-render
+        showButtonsTab(buttonsContent);
+        
+        showInspectorToast('✅ Button ' + btnId + ' aktualisiert');
+        console.log('[INSPECTOR] Button updated:', btnId);
+    }
+    
+    // VML neu generieren für einen bestimmten Button
+    function handleButtonRebuildVml(btnId) {
+        const buttons = extractCTAButtonsFromHTML(buttonsTabHtml);
+        const btnData = buttons.find(b => b.id === btnId);
+        if (!btnData) {
+            showInspectorToast('⚠️ Button nicht gefunden');
+            return;
+        }
+        
+        // Speichere in History
+        buttonsHistory.push(buttonsTabHtml);
+        
+        let html = buttonsTabHtml;
+        
+        // Wenn bereits VML vorhanden, entferne den alten Block zuerst
+        if (btnData.hasVml) {
+            const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
+            let vmlMatch;
+            const btnPos = html.indexOf(btnData.fullMatch);
+            
+            while ((vmlMatch = vmlRegex.exec(html)) !== null) {
+                if (vmlMatch.index + vmlMatch[0].length <= btnPos && (btnPos - (vmlMatch.index + vmlMatch[0].length)) < 500) {
+                    // Entferne alten VML-Block (inkl. trailing whitespace)
+                    html = html.substring(0, vmlMatch.index) + html.substring(vmlMatch.index + vmlMatch[0].length).replace(/^\s*\n?/, '');
+                    break;
+                }
+            }
+        }
+        
+        // Generiere neuen VML-Block
+        const arcsize = btnData.borderRadius > 0 ? Math.round((btnData.borderRadius / Math.min(btnData.width, btnData.height)) * 100) + '%' : '0%';
+        
+        let vml = '<!--[if mso]>\n';
+        vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
+        vml += 'href="' + btnData.href + '" ';
+        vml += 'style="height:' + btnData.height + 'px;v-text-anchor:middle;width:' + btnData.width + 'px;" ';
+        vml += 'arcsize="' + arcsize + '" ';
+        vml += 'strokecolor="' + btnData.bgColor + '" ';
+        vml += 'fillcolor="' + btnData.bgColor + '">\n';
+        vml += '<w:anchorlock/>\n';
+        vml += '<center style="color:' + btnData.textColor + ';font-family:Arial,sans-serif;font-size:' + btnData.fontSize + 'px;font-weight:bold;">\n';
+        vml += btnData.text + '\n';
+        vml += '</center>\n';
+        vml += '</v:roundrect>\n';
+        vml += '<![endif]-->\n';
+        
+        // Füge VML VOR dem Button ein
+        const btnPos = html.indexOf(btnData.fullMatch);
+        if (btnPos >= 0) {
+            html = html.substring(0, btnPos) + vml + html.substring(btnPos);
+        }
+        
+        buttonsTabHtml = html;
+        
+        // Check Pending
+        checkButtonsPending();
+        
+        // Update Preview
+        updateInspectorPreview();
+        
+        // Re-render
+        showButtonsTab(buttonsContent);
+        
+        showInspectorToast('🔄 VML-Block für ' + btnId + ' neu generiert');
+        console.log('[INSPECTOR] VML rebuilt for:', btnId);
+    }
+    
+    // Highlight Button in Preview
+    function highlightButtonInPreview(btnId) {
+        if (!inspectorPreviewFrame) return;
+        
+        // Button-Index aus ID (B001 → 0)
+        const index = parseInt(btnId.substring(1)) - 1;
+        
+        const message = {
+            type: 'HIGHLIGHT_BUTTON',
+            id: btnId,
+            index: index
+        };
+        
+        if (!previewReady || !inspectorPreviewFrame.contentWindow) {
+            pendingPreviewMessages.push(message);
+            return;
+        }
+        
+        inspectorPreviewFrame.contentWindow.postMessage(message, '*');
+    }
+    
+    // Check Buttons Pending
+    function checkButtonsPending() {
+        const isPending = buttonsTabHtml !== currentWorkingHtml;
+        if (buttonsPending !== isPending) {
+            buttonsPending = isPending;
+            updateGlobalPendingIndicator();
+            console.log('[INSPECTOR] Buttons pending status updated:', isPending);
+        }
+    }
+    
+    // Commit Buttons Changes
+    function commitButtonsChanges() {
+        if (!buttonsTabHtml || buttonsTabHtml === currentWorkingHtml) {
+            console.log('[COMMIT] Buttons: Nothing to commit');
+            return false;
+        }
+        
+        // Commit: buttonsTabHtml → currentWorkingHtml
+        currentWorkingHtml = buttonsTabHtml;
+        
+        // Sync
+        buttonsTabHtml = currentWorkingHtml;
+        
+        // Reset State
+        buttonsHistory = [];
+        
+        // Pending neu berechnen
+        checkButtonsPending();
+        
+        // Log
+        const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
+        const timestamp = new Date().toISOString();
+        globalCommitLog.push(`${commitId}_BUTTONS_COMMIT - ${timestamp}`);
+        
+        console.log('[COMMIT] Buttons changes committed to currentWorkingHtml');
+        
+        runPhase11SelfTest('AFTER_BUTTONS_COMMIT');
+        
+        return true;
+    }
+    
+    // Handle Buttons Undo
+    function handleButtonsUndo() {
+        if (buttonsHistory.length === 0) return;
+        
+        buttonsTabHtml = buttonsHistory.pop();
+        
+        checkButtonsPending();
+        updateInspectorPreview();
+        showButtonsTab(buttonsContent);
+        
+        console.log('[INSPECTOR] Buttons undo performed');
+    }
+    
+    // Handle Buttons Commit
+    function handleButtonsCommit() {
+        if (!buttonsPending) return;
+        
+        const success = commitButtonsChanges();
+        
+        if (success) {
+            updateGlobalPendingIndicator();
+            
+            loadInspectorTabContent('tracking');
+            loadInspectorTabContent('images');
+            loadInspectorTabContent('tagreview');
+            loadInspectorTabContent('editor');
+            loadInspectorTabContent('buttons');
+            
+            updateInspectorPreview();
+            showInspectorToast('✅ Buttons committed');
+        }
+    }
+
     // ============================================
     // PHASE 5: TAG-REVIEW TAB IMPLEMENTATION
     // ============================================
@@ -6470,6 +7338,7 @@ function handleTrackingLinkReplace(linkId, newHref) {
             loadInspectorTabContent('images');
             loadInspectorTabContent('tagreview');
             loadInspectorTabContent('editor');
+        loadInspectorTabContent('buttons');
             
             // Update Preview
             updateInspectorPreview();
@@ -6495,7 +7364,7 @@ function handleTrackingLinkReplace(linkId, newHref) {
         
         const lenOriginal = processingResult?.originalHtml?.length || 0;
         const lenCurrent = currentWorkingHtml?.length || 0;
-        const anyPending = trackingPending || imagesPending || editorPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
         
         // Prüfe ob Downloads currentWorkingHtml verwenden
         const downloadSourceOK = (currentWorkingHtml !== null && currentWorkingHtml !== undefined);
@@ -6618,8 +7487,18 @@ function handleTrackingLinkReplace(linkId, newHref) {
             }
         }
         
+        if (buttonsStatusChip) {
+            if (buttonsPending) {
+                buttonsStatusChip.className = 'status-chip status-pending';
+                buttonsStatusChip.textContent = 'Buttons: Pending';
+            } else {
+                buttonsStatusChip.className = 'status-chip status-committed';
+                buttonsStatusChip.textContent = 'Buttons: Committed';
+            }
+        }
+        
         // Zeige Warning wenn irgendein Tab pending
-        const anyPending = trackingPending || imagesPending || editorPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
         if (pendingWarning) {
             pendingWarning.style.display = anyPending ? 'block' : 'none';
         }
@@ -6627,7 +7506,9 @@ function handleTrackingLinkReplace(linkId, newHref) {
         console.log('[INSPECTOR] Global pending indicator updated:', {
             tracking: trackingPending,
             images: imagesPending,
-            editor: editorPending
+            editor: editorPending,
+            buttons: buttonsPending,
+            buttons: buttonsPending
         });
         
         // Update Global Finalize Button (Phase 11 B2)
