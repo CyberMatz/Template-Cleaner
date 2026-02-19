@@ -549,7 +549,7 @@ body {
 
 /* ===========================
    LEGACY COMPATIBILITY STYLES
-   (fÃ¼r alte app.js Selektoren)
+   (für alte app.js Selektoren)
    =========================== */
 .tracking-item,
 .image-item,
@@ -690,7 +690,7 @@ body {
     background: #555;
 }
 
-/* Highlight fÃ¼r Click-to-Locate */
+/* Highlight für Click-to-Locate */
 .qa-highlight {
     outline: 3px solid #f2a93b !important;
     outline-offset: 2px;
@@ -828,7 +828,7 @@ body {
     cursor: not-allowed;
 }
 
-/* â”€â”€ Neue visuelle Editor-UI (kein Quellcode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Neue visuelle Editor-UI (kein Quellcode) ───────────────────── */
 
 .editor-hint-idle {
     text-align: center;
