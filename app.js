@@ -5108,7 +5108,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Apply Buttons (Links)
-        document.querySelectorAll('.btn-tracking-apply').forEach(btn => {
+        // Apply Buttons (nur Links, nicht Pixel – Pixel hat eigenen getElementById Handler)
+        document.querySelectorAll('.btn-tracking-apply[data-link-id]').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const linkId = this.getAttribute('data-link-id');
@@ -5282,6 +5283,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // String-basiert: Findet den N-ten <a href="..."> und ersetzt die URL
     function handleTrackingLinkReplace(linkId, newHref) {
         console.log('[INSPECTOR] Replacing link', linkId, 'with:', newHref);
+        
+        // Sicherheitsnetz: https:// voranstellen falls fehlt
+        if (!/^https?:\/\//i.test(newHref) && !/^mailto:/i.test(newHref) && !/^tel:/i.test(newHref) && !/^\$\{/i.test(newHref) && !/^#/.test(newHref)) {
+            newHref = 'https://' + newHref;
+            console.log('[INSPECTOR] Auto-corrected to:', newHref);
+        }
         
         // linkId = "L001" → Index 0, "L002" → Index 1, etc.
         const linkIndex = parseInt(linkId.substring(1)) - 1;
