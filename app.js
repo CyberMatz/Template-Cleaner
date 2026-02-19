@@ -5251,32 +5251,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Handle Link Replace (Phase 7A)
-    // OUTLOOK-FIX: Kein DOMParser - reiner String-Replace für handleTrackingLinkReplace
-function handleTrackingLinkReplace(linkId, newHref) {
-    const currentHtml = htmlEditor.getValue();
-    // String-basierter Regex-Replace - kein DOMParser (zerstört MSO/VML)
-    const linkRegex = new RegExp('(<a[^>]*?data-tracking-id=["\'"]?' + linkId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\'"]?[^>]*?href=)["\'"]([^"\'"]*)["\'"](', 'gi');
-    const linkRegex2 = new RegExp('(<a[^>]*?href=)["\'"]([^"\'"]*)["\'"](([^>]*?data-tracking-id=["\'"]?' + linkId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\'"]?)', 'gi');
-    
-    let newHtml = currentHtml;
-    let replaced = false;
-    
-    // Suche nach Link mit data-tracking-id
-    const idEscaped = linkId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const fullTagRegex = new RegExp('<a([^>]*?)>', 'gi');
-    newHtml = currentHtml.replace(fullTagRegex, (match, attrs) => {
-        if (attrs.includes(linkId) || attrs.includes('data-tracking-id="' + linkId + '"') || attrs.includes("data-tracking-id='" + linkId + "'")) {
-            replaced = true;
-            return match.replace(/href=["\']([^"\']*)["\']/i, 'href="' + newHref.replace(/"/g, '&quot;') + '"');
+    // String-basiert: Findet den N-ten <a href="..."> und ersetzt die URL
+    function handleTrackingLinkReplace(linkId, newHref) {
+        console.log('[INSPECTOR] Replacing link', linkId, 'with:', newHref);
+        
+        // linkId = "L001" → Index 0, "L002" → Index 1, etc.
+        const linkIndex = parseInt(linkId.substring(1)) - 1;
+        
+        // Speichere in History
+        trackingHistory.push(trackingTabHtml);
+        
+        let html = trackingTabHtml;
+        let replaced = false;
+        let currentIdx = 0;
+        
+        // Finde alle <a> Tags mit href und ersetze den N-ten
+        html = html.replace(/<a\b([^>]*href\s*=\s*)(["'])([^"']*)\2/gi, (match, before, quote, oldHref) => {
+            if (currentIdx === linkIndex) {
+                replaced = true;
+                currentIdx++;
+                console.log('[INSPECTOR] Link ' + linkId + ' replaced:', oldHref.substring(0, 50), '->', newHref.substring(0, 50));
+                return '<a' + before + quote + newHref + quote;
+            }
+            currentIdx++;
+            return match;
+        });
+        
+        if (replaced) {
+            trackingTabHtml = html;
+            checkTrackingPending();
+            updateInspectorPreview();
+            showTrackingTab(trackingContent);
+            showInspectorToast('✅ Link ' + linkId + ' aktualisiert');
+        } else {
+            console.error('[INSPECTOR] Link ' + linkId + ' not found (index ' + linkIndex + ')');
+            trackingHistory.pop(); // Undo history entry
+            showInspectorToast('⚠️ Link nicht gefunden');
         }
-        return match;
-    });
-    
-    if (replaced) {
-        htmlEditor.setValue(newHtml);
-        updatePreview();
     }
-}
     
     // Handle Pixel Replace (Phase 7A)
     function handleTrackingPixelReplace(newUrl) {
