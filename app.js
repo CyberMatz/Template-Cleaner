@@ -199,34 +199,14 @@ class TemplateProcessor {
     // Pflicht-Regel: <div style="display:none;">Text</div>
     //   → genau EINMAL
     //   → direkt nach <body>, VOR %header%
+    //
+    // WICHTIG: Suche NUR im unmittelbaren Bereich direkt nach <body>
+    // (max. 500 Zeichen), um nicht mobile-only Blöcke oder Media-Query-
+    // Elemente tiefer im Template fälschlich als Preheader zu erkennen.
     checkPreheader() {
         const id = this.checklistType === 'dpl' ? 'P03_PREHEADER' : 'P04_PREHEADER';
 
-        // Spezifische Regex für Preheader-Format: display:none als einzigen/ersten Style
-        // Trifft bewusst nur einfache display:none-Divs, keine komplexen Media-Query-Elemente
-        const preheaderRegex = /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
-        const allMatches = [...this.html.matchAll(preheaderRegex)];
-        const count = allMatches.length;
-
-        // ── Schritt 1: Auf genau einen Preheader reduzieren ──────────────
-        if (count > 1) {
-            // Ersten behalten, Rest entfernen (rückwärts um Offsets nicht zu verschieben)
-            for (let i = allMatches.length - 1; i >= 1; i--) {
-                const m = allMatches[i];
-                this.html = this.html.slice(0, m.index) + this.html.slice(m.index + m[0].length);
-            }
-            this.addCheck(id, 'FIXED', `Pre-Header Duplikate entfernt (${count} → 1) – nur erster Treffer behalten`);
-        }
-
-        // ── Schritt 2: Text ersetzen wenn Preheader-Text angegeben ───────
-        if (this.preheaderText) {
-            this.html = this.html.replace(preheaderRegex, `<div style="display:none;">${this.preheaderText}</div>`);
-        }
-
-        // ── Schritt 3: Position prüfen – muss nach <body>, vor %header% ──
-        const bodyMatch   = this.html.match(/<body[^>]*>/i);
-        const headerIndex = this.html.indexOf('%header%');
-
+        const bodyMatch = this.html.match(/<body[^>]*>/i);
         if (!bodyMatch) {
             this.addCheck(id, 'FAIL', 'Pre-Header-Check nicht möglich: <body>-Tag fehlt');
             return;
@@ -234,59 +214,64 @@ class TemplateProcessor {
 
         const bodyEndIndex = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
 
-        // Suche Preheader-Block erneut (nach möglicher Reduktion oben)
-        const preheaderMatch = this.html.match(preheaderRegex);
+        // Suchfenster: nur die ersten 500 Zeichen nach <body>
+        // → verhindert Fehlmatch auf display:none-Blöcke tiefer im Template
+        const searchWindow    = this.html.slice(bodyEndIndex, bodyEndIndex + 500);
+        const preheaderRegex  = /^(\s*)<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>([\s\S]*?)<\/div>/i;
+        const windowMatch     = searchWindow.match(preheaderRegex);
 
-        if (!preheaderMatch) {
-            // Kein Preheader vorhanden
-            if (this.preheaderText) {
-                // Text wurde angegeben aber kein Block gefunden → einfügen
-                this.html = this.html.slice(0, bodyEndIndex)
-                    + '\n<div style="display:none;">' + this.preheaderText + '</div>\n'
-                    + this.html.slice(bodyEndIndex);
-                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt: direkt nach <body>, vor %header%');
+        const headerIndex = this.html.indexOf('%header%');
+
+        // ── Fall 1: Preheader direkt nach <body> gefunden ────────────────
+        if (windowMatch) {
+            const absoluteIndex = bodyEndIndex + searchWindow.indexOf(windowMatch[0]);
+            const isBeforeHeader = headerIndex === -1 || absoluteIndex < headerIndex;
+
+            if (isBeforeHeader) {
+                // Position korrekt – ggf. Text ersetzen
+                if (this.preheaderText) {
+                    const corrected = `<div style="display:none;">${this.preheaderText}</div>`;
+                    this.html = this.html.slice(0, absoluteIndex)
+                        + corrected
+                        + this.html.slice(absoluteIndex + windowMatch[0].length);
+                    this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt – Position korrekt (nach <body>, vor %header%)');
+                } else {
+                    this.addCheck(id, 'PASS', 'Pre-Header korrekt: direkt nach <body>, vor %header%');
+                }
             } else {
-                this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional – kein Text angegeben). Pflicht-Position: direkt nach <body>, vor %header%');
+                // Steht nach %header% → verschieben
+                const block = this.preheaderText
+                    ? `<div style="display:none;">${this.preheaderText}</div>`
+                    : windowMatch[0].trim();
+
+                // Alten Block entfernen
+                this.html = this.html.slice(0, absoluteIndex)
+                    + this.html.slice(absoluteIndex + windowMatch[0].length);
+
+                // Neu direkt nach <body> einfügen
+                const newBodyMatch    = this.html.match(/<body[^>]*>/i);
+                const newBodyEndIndex = this.html.indexOf(newBodyMatch[0]) + newBodyMatch[0].length;
+                this.html = this.html.slice(0, newBodyEndIndex)
+                    + '\n' + block + '\n'
+                    + this.html.slice(newBodyEndIndex);
+
+                this.addCheck(id, 'FIXED', 'Pre-Header stand nach %header% – verschoben nach <body>');
             }
             return;
         }
 
-        // Preheader gefunden – Position prüfen
-        const currentIndex = this.html.search(preheaderRegex);
-        const foundBlock   = preheaderMatch[0];
-
-        const isAfterBody  = currentIndex >= bodyEndIndex;
-        const isBeforeHeader = headerIndex === -1 || currentIndex < headerIndex;
-
-        if (isAfterBody && isBeforeHeader) {
-            // Position korrekt
-            if (count > 1) {
-                // Bereits oben als FIXED gemeldet
-            } else if (this.preheaderText) {
-                this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt – Position korrekt (nach <body>, vor %header%)');
-            } else {
-                this.addCheck(id, 'PASS', 'Pre-Header korrekt: einmal vorhanden, direkt nach <body>, vor %header%');
-            }
+        // ── Fall 2: Kein Preheader direkt nach <body> ────────────────────
+        if (this.preheaderText) {
+            // Text angegeben → direkt nach <body> einfügen
+            const block = `<div style="display:none;">${this.preheaderText}</div>`;
+            this.html = this.html.slice(0, bodyEndIndex)
+                + '\n' + block + '\n'
+                + this.html.slice(bodyEndIndex);
+            this.addCheck(id, 'FIXED', 'Pre-Header eingefügt: direkt nach <body>, vor %header%');
         } else {
-            // Position falsch → Block entfernen und neu einfügen
-            const correctedBlock = this.preheaderText
-                ? `<div style="display:none;">${this.preheaderText}</div>`
-                : foundBlock;
-
-            // Alten Block entfernen
-            this.html = this.html.replace(preheaderRegex, '');
-
-            // Neu nach <body> einfügen (Index neu berechnen nach Entfernen)
-            const newBodyMatch    = this.html.match(/<body[^>]*>/i);
-            const newBodyEndIndex = this.html.indexOf(newBodyMatch[0]) + newBodyMatch[0].length;
-            this.html = this.html.slice(0, newBodyEndIndex)
-                + '\n' + correctedBlock + '\n'
-                + this.html.slice(newBodyEndIndex);
-
-            const reason = !isAfterBody
-                ? 'stand vor <body>'
-                : 'stand nach %header% statt davor';
-            this.addCheck(id, 'FIXED', `Pre-Header falsch positioniert (${reason}) – verschoben nach <body>, vor %header%`);
+            this.addCheck(id, 'PASS',
+                'Pre-Header nicht vorhanden (optional – kein Text angegeben). '
+                + 'Pflicht-Position wenn gesetzt: direkt nach <body>, vor %header%');
         }
     }
 
