@@ -97,20 +97,39 @@ class TemplateProcessor {
         this.checkInlineStyles();
     }
 
-    // P00: CSS-Fehler reparieren (muss VOR allen anderen Checks laufen)
+    // P00: Grundstruktur + CSS-Fehler reparieren (muss ZUERST laufen, vor allen anderen Checks)
     checkHtmlStructure() {
         const fixes = [];
 
-        // CSS: Komma statt Punkt in Dezimalzahlen – z.B. "2,1rem" → "2.1rem"
+        // ── CSS: Komma statt Punkt in Dezimalzahlen ──────────────────────
         if (/(\d),(\d)(rem|em|px|%|pt|vh|vw)/.test(this.html)) {
             this.html = this.html.replace(/(\d),(\d)(rem|em|px|%|pt|vh|vw)/g, '$1.$2$3');
             fixes.push('CSS-Dezimalkomma korrigiert (z.B. 2,1rem → 2.1rem)');
         }
 
+        // ── Fehlende </body> / </html> ────────────────────────────────────
+        // WICHTIG: Muss hier passieren, BEVOR checkFooterPlaceholder läuft,
+        // da der Footer-Check </body> als Einfügepunkt braucht.
+        const hasBody    = /<body[^>]*>/i.test(this.html);
+        const hasBodyEnd = /<\/body>/i.test(this.html);
+        const hasHtmlEnd = /<\/html>/i.test(this.html);
+
+        if (hasBody && !hasBodyEnd) {
+            if (hasHtmlEnd) {
+                this.html = this.html.replace(/<\/html>/i, '</body>\n</html>');
+            } else {
+                this.html = this.html.trimEnd() + '\n</body>\n</html>\n';
+            }
+            fixes.push('Fehlende </body> und </html> ergänzt');
+        } else if (!hasHtmlEnd) {
+            this.html = this.html.trimEnd() + '\n</html>\n';
+            fixes.push('Fehlendes </html> ergänzt');
+        }
+
         if (fixes.length > 0) {
-            this.addCheck('P00_CSS_FIX', 'FIXED', fixes.join(' | '));
+            this.addCheck('P00_HTML_STRUCTURE', 'FIXED', fixes.join(' | '));
         } else {
-            this.addCheck('P00_CSS_FIX', 'PASS', 'CSS-Grundwerte korrekt');
+            this.addCheck('P00_HTML_STRUCTURE', 'PASS', 'HTML-Grundstruktur korrekt');
         }
     }
 
