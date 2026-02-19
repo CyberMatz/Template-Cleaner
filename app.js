@@ -16,10 +16,8 @@ class TemplateProcessor {
 
     // Haupt-Verarbeitungsmethode
     process() {
-        // Auto-Erkennung des Checklist-Typs
-        if (this.checklistType === 'auto') {
-            this.checklistType = this.html.toLowerCase().includes('dpl') ? 'dpl' : 'standard';
-        }
+        // Checklist-Typ wird manuell über Radio-Button gesetzt (Standard / DPL)
+        // Keine Auto-Erkennung – zu fehleranfällig
 
         // Phase A: Safe Fix
         this.phaseA_SafeFix();
@@ -198,46 +196,97 @@ class TemplateProcessor {
     }
 
     // P03/P04: Pre-Header
+    // Pflicht-Regel: <div style="display:none;">Text</div>
+    //   → genau EINMAL
+    //   → direkt nach <body>, VOR %header%
     checkPreheader() {
         const id = this.checklistType === 'dpl' ? 'P03_PREHEADER' : 'P04_PREHEADER';
-        const preheaderRegex = /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>.*?<\/div>/gi;
-        const preheaderMatches = this.html.match(preheaderRegex);
-        const preheaderCount = preheaderMatches ? preheaderMatches.length : 0;
 
-        if (preheaderCount === 1) {
-            // Genau ein Preheader vorhanden
-            if (this.preheaderText) {
-                // Ersetze Text
-                this.html = this.html.replace(preheaderRegex, `<div style="display: none;">${this.preheaderText}</div>`);
-                this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt');
-            } else {
-                this.addCheck(id, 'PASS', 'Pre-Header korrekt');
+        // Spezifische Regex für Preheader-Format: display:none als einzigen/ersten Style
+        // Trifft bewusst nur einfache display:none-Divs, keine komplexen Media-Query-Elemente
+        const preheaderRegex = /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
+        const allMatches = [...this.html.matchAll(preheaderRegex)];
+        const count = allMatches.length;
+
+        // ── Schritt 1: Auf genau einen Preheader reduzieren ──────────────
+        if (count > 1) {
+            // Ersten behalten, Rest entfernen (rückwärts um Offsets nicht zu verschieben)
+            for (let i = allMatches.length - 1; i >= 1; i--) {
+                const m = allMatches[i];
+                this.html = this.html.slice(0, m.index) + this.html.slice(m.index + m[0].length);
             }
-        } else if (preheaderCount > 1) {
-            // Mehrere Preheader - auf 1 reduzieren
-            let first = true;
-            this.html = this.html.replace(preheaderRegex, (match) => {
-                if (first) {
-                    first = false;
-                    return this.preheaderText ? `<div style="display: none;">${this.preheaderText}</div>` : match;
-                }
-                return '';
-            });
-            this.addCheck(id, 'FIXED', `Pre-Header reduziert (${preheaderCount} → 1)`);
-        } else if (preheaderCount === 0) {
-            // Kein Preheader - nur einfügen wenn Text angegeben
+            this.addCheck(id, 'FIXED', `Pre-Header Duplikate entfernt (${count} → 1) – nur erster Treffer behalten`);
+        }
+
+        // ── Schritt 2: Text ersetzen wenn Preheader-Text angegeben ───────
+        if (this.preheaderText) {
+            this.html = this.html.replace(preheaderRegex, `<div style="display:none;">${this.preheaderText}</div>`);
+        }
+
+        // ── Schritt 3: Position prüfen – muss nach <body>, vor %header% ──
+        const bodyMatch   = this.html.match(/<body[^>]*>/i);
+        const headerIndex = this.html.indexOf('%header%');
+
+        if (!bodyMatch) {
+            this.addCheck(id, 'FAIL', 'Pre-Header-Check nicht möglich: <body>-Tag fehlt');
+            return;
+        }
+
+        const bodyEndIndex = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
+
+        // Suche Preheader-Block erneut (nach möglicher Reduktion oben)
+        const preheaderMatch = this.html.match(preheaderRegex);
+
+        if (!preheaderMatch) {
+            // Kein Preheader vorhanden
             if (this.preheaderText) {
-                const bodyMatch = this.html.match(/<body[^>]*>/i);
-                if (bodyMatch) {
-                    const insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
-                    this.html = this.html.slice(0, insertPos) + '\n' + `<div style="display: none;">${this.preheaderText}</div>` + '\n' + this.html.slice(insertPos);
-                    this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (Preheader-Text angegeben)');
-                } else {
-                    this.addCheck(id, 'FAIL', 'Body-Tag nicht gefunden');
-                }
+                // Text wurde angegeben aber kein Block gefunden → einfügen
+                this.html = this.html.slice(0, bodyEndIndex)
+                    + '\n<div style="display:none;">' + this.preheaderText + '</div>\n'
+                    + this.html.slice(bodyEndIndex);
+                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt: direkt nach <body>, vor %header%');
             } else {
-                this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional, kein Text angegeben)');
+                this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional – kein Text angegeben). Pflicht-Position: direkt nach <body>, vor %header%');
             }
+            return;
+        }
+
+        // Preheader gefunden – Position prüfen
+        const currentIndex = this.html.search(preheaderRegex);
+        const foundBlock   = preheaderMatch[0];
+
+        const isAfterBody  = currentIndex >= bodyEndIndex;
+        const isBeforeHeader = headerIndex === -1 || currentIndex < headerIndex;
+
+        if (isAfterBody && isBeforeHeader) {
+            // Position korrekt
+            if (count > 1) {
+                // Bereits oben als FIXED gemeldet
+            } else if (this.preheaderText) {
+                this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt – Position korrekt (nach <body>, vor %header%)');
+            } else {
+                this.addCheck(id, 'PASS', 'Pre-Header korrekt: einmal vorhanden, direkt nach <body>, vor %header%');
+            }
+        } else {
+            // Position falsch → Block entfernen und neu einfügen
+            const correctedBlock = this.preheaderText
+                ? `<div style="display:none;">${this.preheaderText}</div>`
+                : foundBlock;
+
+            // Alten Block entfernen
+            this.html = this.html.replace(preheaderRegex, '');
+
+            // Neu nach <body> einfügen (Index neu berechnen nach Entfernen)
+            const newBodyMatch    = this.html.match(/<body[^>]*>/i);
+            const newBodyEndIndex = this.html.indexOf(newBodyMatch[0]) + newBodyMatch[0].length;
+            this.html = this.html.slice(0, newBodyEndIndex)
+                + '\n' + correctedBlock + '\n'
+                + this.html.slice(newBodyEndIndex);
+
+            const reason = !isAfterBody
+                ? 'stand vor <body>'
+                : 'stand nach %header% statt davor';
+            this.addCheck(id, 'FIXED', `Pre-Header falsch positioniert (${reason}) – verschoben nach <body>, vor %header%`);
         }
     }
 
@@ -451,25 +500,8 @@ class TemplateProcessor {
 
         if (!this.autoFixes) this.autoFixes = [];
 
-        // ── Schritt 1: body/html am Ende ergänzen falls fehlend ──────────
-        // (muss VOR dem Zählen passieren, damit spätere Checks funktionieren)
-        const hasBody    = /<body[^>]*>/i.test(this.html);
-        const hasBodyEnd = /<\/body>/i.test(this.html);
-        const hasHtmlEnd = /<\/html>/i.test(this.html);
-
-        if (hasBody && !hasBodyEnd) {
-            if (hasHtmlEnd) {
-                this.html = this.html.replace(/<\/html>/i, '</body>\n</html>');
-            } else {
-                this.html = this.html.trimEnd() + '\n</body>\n</html>\n';
-            }
-            fixedTags.push('</body>', '</html>');
-        } else if (!hasHtmlEnd) {
-            this.html = this.html.trimEnd() + '\n</html>\n';
-            fixedTags.push('</html>');
-        }
-
-        // ── Schritt 2: Strukturelle Tags balancieren ──────────────────────
+        // Hinweis: </body> und </html> werden bereits in P00 (checkHtmlStructure) ergänzt.
+        // Hier nur noch strukturelle Tags balancieren.
         // Strategie: fehlende Closing-Tags VOR dem nächsten sinnvollen
         // schließenden Eltern-Tag einfügen, nicht ans rohe Ende.
         const structuralTags = ['table', 'tbody', 'tr', 'td', 'div', 'a'];
@@ -5995,41 +6027,48 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Wird an das ausgewählte Element angehängt.</p>';
             const placeholders = [
                 // Anrede & Persönlich
-                '%anrede%',
-                '%anredeLiebeblankoklein%',
-                '%anredeLiebeBlanko%',
-                '%briefanredeLiebe%',
-                '%briefanredeGeehrte%',
-                '%anredeGeehrteVN%',
-                '%anredeFR%',
+                { value: '%anrede%',                    example: 'Herr / Frau' },
+                { value: '%anredeLiebeblankoklein%',    example: 'liebe/r' },
+                { value: '%anredeLiebeBlanko%',         example: 'Liebe/r' },
+                { value: '%briefanredeLiebe%',          example: 'Liebe/r Herr/Frau Nachname' },
+                { value: '%briefanredeGeehrte%',        example: 'Sehr geehrte/r Herr/Frau Nachname' },
+                { value: '%anredeGeehrteVN%',           example: 'Sehr geehrter Torsten Dressel' },
+                { value: '%anredeFR%',                  example: 'Monsieur / Madame' },
                 // Name & Adresse
-                '%vorname%',
-                '%nachname%',
-                '%strasse%',
-                '%plz%',
-                '%ort%',
-                '%bundesland%',
-                '%land%',
+                { value: '%vorname%',                   example: 'Manfred' },
+                { value: '%nachname%',                  example: 'Mustermann' },
+                { value: '%strasse%',                   example: 'Musterstrasse' },
+                { value: '%plz%',                       example: '63069' },
+                { value: '%ort%',                       example: 'Fürth (kein Fallback → LEER)' },
+                { value: '%bundesland%',                example: 'Bayern' },
+                { value: '%land%',                      example: 'de' },
                 // Ort-Varianten (Client-spezifisch)
-                '%client_ort%',
-                '%client_de_ort%',
-                '%client_ort_ihre_stadt%',
-                '%client_ort_ihrer_stadt%',
+                { value: '%client_ort%',                example: 'Fürth (Fallback → "Ihrer Nähe")' },
+                { value: '%client_de_ort%',             example: 'in Fürth' },
+                { value: '%client_ort_ihre_stadt%',     example: 'Fürth | Ihre Stadt' },
+                { value: '%client_ort_ihrer_stadt%',    example: 'Fürth | Ihrer Stadt' },
                 // Kontakt & Profil
-                '%email%',
-                '%geburtstag%',
+                { value: '%email%',                     example: 'max.mustermann@muster.de' },
+                { value: '%geburtstag%',                example: '27.03.1981' },
                 // Datum & Jahr
-                '%aktuellesDatum%',
-                '%current_year%',
+                { value: '%aktuellesDatum%',            example: '18.06.2019' },
+                { value: '%current_year%',              example: '2018' },
                 // Sonstiges
-                '%readonline%'
+                { value: '%readonline%',                example: 'Readonline-Link' },
             ];
             html += '<select id="editorPlaceholderSelect" class="editor-input">';
             html += '<option value="">-- Platzhalter auswählen --</option>';
             placeholders.forEach(function(ph) {
-                html += '<option value="' + escapeHtml(ph) + '">' + escapeHtml(ph) + '</option>';
+                html += '<option value="' + escapeHtml(ph.value) + '" title="Beispiel: ' + escapeHtml(ph.example) + '">'
+                      + escapeHtml(ph.value) + '  →  ' + escapeHtml(ph.example)
+                      + '</option>';
             });
             html += '</select>';
+            // Beispieltext unter dem Dropdown – wird dynamisch beim Wechsel aktualisiert
+            html += '<div id="editorPlaceholderExample" style="'
+                  + 'margin-top:5px;padding:6px 10px;background:#f0f4ff;border-left:3px solid #667eea;'
+                  + 'border-radius:3px;font-size:12px;color:#444;display:none;">'
+                  + '</div>';
             html += '<button id="editorInsertPlaceholder" class="btn-editor-primary" style="margin-top:8px;width:100%">➕ Einfügen</button>';
             html += '</div>';
 
@@ -6113,6 +6152,22 @@ document.addEventListener('DOMContentLoaded', () => {
             removeImageBtn.addEventListener('click', handleEditorRemoveImage);
         }
         
+        // Platzhalter-Beispiel live anzeigen wenn Auswahl wechselt
+        const placeholderSelect = document.getElementById('editorPlaceholderSelect');
+        const placeholderExample = document.getElementById('editorPlaceholderExample');
+        if (placeholderSelect && placeholderExample) {
+            placeholderSelect.addEventListener('change', function() {
+                const selected = this.options[this.selectedIndex];
+                if (selected && selected.value) {
+                    const exampleText = selected.title.replace('Beispiel: ', '');
+                    placeholderExample.textContent = '📋 Beispielwert: ' + exampleText;
+                    placeholderExample.style.display = 'block';
+                } else {
+                    placeholderExample.style.display = 'none';
+                }
+            });
+        }
+
         // PHASE 2: Platzhalter Listener
         if (insertPlaceholderBtn) {
             insertPlaceholderBtn.addEventListener('click', handleEditorInsertPlaceholder);
