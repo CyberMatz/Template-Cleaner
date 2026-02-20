@@ -6215,6 +6215,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 html += '</div>'; // image-layout-controls
                 
+                // Container-Padding Controls
+                if (img.containerPadding.found) {
+                    html += '<div class="image-padding-controls' + (img.paddingAsymmetric ? ' padding-asymmetric' : '') + '">';
+                    html += '<label>Container-Padding <span class="image-padding-source">(auf &lt;' + img.containerPadding.source + '&gt;)</span></label>';
+                    if (img.paddingAsymmetric) {
+                        html += '<div class="image-padding-warn">⚠️ Asymmetrisch (links ≠ rechts)</div>';
+                    }
+                    html += '<div class="image-padding-row">';
+                    html += '<div class="image-padding-field"><span>↑</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="top" value="' + img.containerPadding.top + '" min="0" max="100"></div>';
+                    html += '<div class="image-padding-field"><span>→</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="right" value="' + img.containerPadding.right + '" min="0" max="100"></div>';
+                    html += '<div class="image-padding-field"><span>↓</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="bottom" value="' + img.containerPadding.bottom + '" min="0" max="100"></div>';
+                    html += '<div class="image-padding-field"><span>←</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="left" value="' + img.containerPadding.left + '" min="0" max="100"></div>';
+                    html += '<button class="btn-image-padding-apply btn-small" data-img-id="' + img.id + '">✓</button>';
+                    html += '<button class="btn-image-padding-zero btn-small" data-img-id="' + img.id + '" title="Alle Paddings auf 0">0</button>';
+                    html += '<button class="btn-image-padding-equal btn-small" data-img-id="' + img.id + '" title="Links = Rechts angleichen">L=R</button>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+                
                 html += '<div class="image-edit-controls">';
                 html += '<input type="text" class="image-src-input" placeholder="Neue src URL eingeben..." data-img-id="' + img.id + '">';
                 html += '<button class="btn-image-apply" data-img-id="' + img.id + '">✓ Anwenden</button>';
@@ -6344,6 +6363,72 @@ document.addEventListener('DOMContentLoaded', () => {
                 maxWidth = styleMaxWidth[1].replace('px', '');
             }
             
+            // Container-Padding ermitteln: Suche den nächsten Parent mit Padding
+            let containerPadding = { top: '', right: '', bottom: '', left: '', source: '', found: false };
+            let paddingParent = img.parentElement;
+            
+            for (let level = 0; level < 4 && paddingParent; level++) {
+                const pTag = paddingParent.tagName.toLowerCase();
+                const pStyle = paddingParent.getAttribute('style') || '';
+                
+                // Suche nach padding-Werten im Style
+                const hasPadding = /padding/i.test(pStyle);
+                if (hasPadding) {
+                    // Einzelne Seiten
+                    const pTop = pStyle.match(/padding-top\s*:\s*(\d+)px/i);
+                    const pRight = pStyle.match(/padding-right\s*:\s*(\d+)px/i);
+                    const pBottom = pStyle.match(/padding-bottom\s*:\s*(\d+)px/i);
+                    const pLeft = pStyle.match(/padding-left\s*:\s*(\d+)px/i);
+                    
+                    // Shorthand: padding: 10px; oder padding: 10px 20px; oder padding: 10px 20px 30px 40px;
+                    const pShort = pStyle.match(/(?:^|;)\s*padding\s*:\s*([^;]+)/i);
+                    
+                    let top = '', right = '', bottom = '', left = '';
+                    
+                    if (pShort) {
+                        const vals = pShort[1].trim().replace(/px/g, '').split(/\s+/);
+                        if (vals.length === 1) {
+                            top = right = bottom = left = vals[0];
+                        } else if (vals.length === 2) {
+                            top = bottom = vals[0];
+                            right = left = vals[1];
+                        } else if (vals.length === 3) {
+                            top = vals[0]; right = left = vals[1]; bottom = vals[2];
+                        } else if (vals.length === 4) {
+                            top = vals[0]; right = vals[1]; bottom = vals[2]; left = vals[3];
+                        }
+                    }
+                    
+                    // Einzelwerte überschreiben Shorthand
+                    if (pTop) top = pTop[1];
+                    if (pRight) right = pRight[1];
+                    if (pBottom) bottom = pBottom[1];
+                    if (pLeft) left = pLeft[1];
+                    
+                    // Nur übernehmen wenn mindestens ein Wert gefunden
+                    if (top || right || bottom || left) {
+                        containerPadding = {
+                            top: top || '0',
+                            right: right || '0',
+                            bottom: bottom || '0',
+                            left: left || '0',
+                            source: pTag,
+                            found: true
+                        };
+                        break;
+                    }
+                }
+                
+                // Überspringe <a> Tags (verlinkte Bilder)
+                paddingParent = paddingParent.parentElement;
+            }
+            
+            // Asymmetrie erkennen (links ≠ rechts)
+            let paddingAsymmetric = false;
+            if (containerPadding.found) {
+                paddingAsymmetric = containerPadding.left !== containerPadding.right;
+            }
+            
             images.push({
                 id: id,
                 src: src,
@@ -6354,7 +6439,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 height: height,
                 maxWidth: maxWidth,
                 align: align || '',
-                alignSource: alignSource || ''
+                alignSource: alignSource || '',
+                containerPadding: containerPadding,
+                paddingAsymmetric: paddingAsymmetric
             });
         });
         
@@ -6483,6 +6570,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 const imgId = this.getAttribute('data-img-id');
                 const newAlign = this.getAttribute('data-align');
                 handleImageAlignChange(imgId, newAlign);
+            });
+        });
+        
+        // Padding Apply Button
+        document.querySelectorAll('.btn-image-padding-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
+                const top = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="top"]').value || '0';
+                const right = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="right"]').value || '0';
+                const bottom = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="bottom"]').value || '0';
+                const left = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="left"]').value || '0';
+                handleImagePaddingChange(imgId, { top, right, bottom, left });
+            });
+        });
+        
+        // Padding Zero Button (alle auf 0)
+        document.querySelectorAll('.btn-image-padding-zero').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
+                handleImagePaddingChange(imgId, { top: '0', right: '0', bottom: '0', left: '0' });
+            });
+        });
+        
+        // Padding Equal Button (links = rechts angleichen)
+        document.querySelectorAll('.btn-image-padding-equal').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
+                const leftInput = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="left"]');
+                const rightInput = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="right"]');
+                // Nehme den kleineren Wert
+                const minVal = Math.min(parseInt(leftInput.value || '0'), parseInt(rightInput.value || '0'));
+                const top = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="top"]').value || '0';
+                const bottom = document.querySelector('.image-padding-input[data-img-id="' + imgId + '"][data-side="bottom"]').value || '0';
+                handleImagePaddingChange(imgId, { top, right: String(minVal), bottom, left: String(minVal) });
             });
         });
         
@@ -6792,6 +6916,104 @@ document.addEventListener('DOMContentLoaded', () => {
         const alignLabels = { left: 'linksbündig', center: 'zentriert', right: 'rechtsbündig' };
         showInspectorToast('↔️ ' + imgId + ' → ' + (alignLabels[newAlign] || newAlign));
         console.log('[INSPECTOR] Image alignment changed:', imgId, '->', newAlign);
+    }
+    
+    // Handle Image Container Padding Change
+    function handleImagePaddingChange(imgId, padding) {
+        console.log('[INSPECTOR] Changing image container padding:', imgId, padding);
+        
+        imagesHistory.push(imagesTabHtml);
+        
+        const imgIndex = parseInt(imgId.substring(1)) - 1;
+        
+        // Finde den N-ten <img> Tag
+        let html = imagesTabHtml;
+        const imgRegex = /<img\b[^>]*>/gi;
+        let match;
+        let count = 0;
+        let imgPos = -1;
+        
+        while ((match = imgRegex.exec(html)) !== null) {
+            if (count === imgIndex) {
+                imgPos = match.index;
+                break;
+            }
+            count++;
+        }
+        
+        if (imgPos < 0) {
+            console.error('[INSPECTOR] Image not found:', imgId);
+            imagesHistory.pop();
+            return;
+        }
+        
+        // Suche rückwärts den nächsten Parent-Tag mit Padding
+        const beforeImg = html.substring(Math.max(0, imgPos - 1500), imgPos);
+        
+        // Finde alle öffnenden Tags mit padding im Style
+        const parentTagRegex = /<(td|div|p|th)\b([^>]*)>/gi;
+        let parentMatch;
+        let targetParent = null;
+        
+        while ((parentMatch = parentTagRegex.exec(beforeImg)) !== null) {
+            const attrs = parentMatch[2];
+            const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+            if (styleMatch && /padding/i.test(styleMatch[1])) {
+                targetParent = {
+                    fullTag: parentMatch[0],
+                    tagName: parentMatch[1],
+                    style: styleMatch[1],
+                    posInSlice: parentMatch.index
+                };
+            }
+        }
+        
+        if (!targetParent) {
+            showInspectorToast('⚠️ Kein Container mit Padding gefunden');
+            imagesHistory.pop();
+            return;
+        }
+        
+        // Baue neues Padding im Style
+        let newStyle = targetParent.style;
+        
+        // Entferne alle bestehenden padding-Werte
+        newStyle = newStyle.replace(/\s*padding-top\s*:\s*[^;]+;?/gi, '');
+        newStyle = newStyle.replace(/\s*padding-right\s*:\s*[^;]+;?/gi, '');
+        newStyle = newStyle.replace(/\s*padding-bottom\s*:\s*[^;]+;?/gi, '');
+        newStyle = newStyle.replace(/\s*padding-left\s*:\s*[^;]+;?/gi, '');
+        newStyle = newStyle.replace(/(?:^|;)\s*padding\s*:\s*[^;]+;?/gi, '');
+        
+        // Bereinige doppelte Semikola
+        newStyle = newStyle.replace(/;{2,}/g, ';').replace(/^;|;$/g, '').trim();
+        
+        // Füge neue padding-Werte hinzu (als Einzelwerte – sicherer bei E-Mail-Clients)
+        const paddingParts = [];
+        paddingParts.push('padding-top:' + padding.top + 'px');
+        paddingParts.push('padding-right:' + padding.right + 'px');
+        paddingParts.push('padding-bottom:' + padding.bottom + 'px');
+        paddingParts.push('padding-left:' + padding.left + 'px');
+        
+        newStyle = newStyle ? newStyle + '; ' + paddingParts.join('; ') + ';' : paddingParts.join('; ') + ';';
+        
+        // Ersetze den Style im Parent-Tag
+        let newParentTag = targetParent.fullTag.replace(
+            /style\s*=\s*["'][^"']*["']/i,
+            'style="' + newStyle + '"'
+        );
+        
+        // Ersetze im HTML
+        const sliceStart = Math.max(0, imgPos - 1500);
+        const parentAbsPos = sliceStart + targetParent.posInSlice;
+        html = html.substring(0, parentAbsPos) + newParentTag + html.substring(parentAbsPos + targetParent.fullTag.length);
+        
+        imagesTabHtml = html;
+        checkImagesPending();
+        updateInspectorPreview();
+        showImagesTab(imagesContent);
+        
+        showInspectorToast('📏 ' + imgId + ' Padding → ' + padding.top + '/' + padding.right + '/' + padding.bottom + '/' + padding.left + 'px');
+        console.log('[INSPECTOR] Image padding changed:', imgId, padding);
     }
     
     // Handle Images Undo (Phase 7B)
