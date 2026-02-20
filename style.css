@@ -1678,6 +1678,36 @@ body {
     margin-top: 6px;
 }
 
+.button-bgimage-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #fff3e0;
+    border: 1px solid #ffe0b2;
+    border-radius: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.button-bgimage-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.button-bgimage-text {
+    font-size: 11px;
+    color: #6d4c00;
+    line-height: 1.5;
+}
+
+.button-bgimage-text code {
+    font-size: 10px;
+    color: #888;
+    word-break: break-all;
+}
+
 /* Manuelle Button-Markierung */
 .buttons-manual-section {
     background: #f8f9fa;

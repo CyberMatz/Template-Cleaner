@@ -6586,6 +6586,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '</div>';
                 html += '</div>';
                 
+                // Hinweis: Background-Image überdeckt Farbe
+                if (btn.bgImageInfo && btn.bgImageInfo.has) {
+                    html += '<div class="button-bgimage-hint">';
+                    html += '<span class="button-bgimage-icon">🖼️</span>';
+                    html += '<div class="button-bgimage-text">';
+                    html += '<strong>Hintergrundbild aktiv</strong> – die Farbänderung ist nur als Fallback sichtbar (z.B. Outlook, Bilder blockiert).';
+                    if (btn.bgImageInfo.url) {
+                        const shortUrl = btn.bgImageInfo.url.length > 50 ? btn.bgImageInfo.url.substring(0, 47) + '...' : btn.bgImageInfo.url;
+                        html += '<br><code title="' + escapeHtml(btn.bgImageInfo.url) + '">' + escapeHtml(shortUrl) + '</code>';
+                    }
+                    html += '</div>';
+                    html += '</div>';
+                }
+                
                 // Schriftfarbe
                 html += '<div class="button-edit-group">';
                 html += '<label>Schriftfarbe</label>';
@@ -7235,6 +7249,40 @@ document.addEventListener('DOMContentLoaded', () => {
             return { hasVml, vmlStatus };
         }
         
+        // Helper: Prüfe ob ein <a>-Tag ein background-image hat (inline oder per CSS-Klasse)
+        function checkBackgroundImage(aTag) {
+            // 1. Inline-Style prüfen
+            const inlineStyle = (aTag.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            if (/background-image\s*:/i.test(inlineStyle)) {
+                const urlMatch = inlineStyle.match(/background-image\s*:\s*url\s*\(\s*["']?([^"')]+)["']?\s*\)/i);
+                return { has: true, source: 'inline', url: urlMatch ? urlMatch[1] : '' };
+            }
+            
+            // 2. CSS-Klasse prüfen: Finde Klassen auf dem <a>, suche in <style>-Blöcken
+            const classMatch = aTag.match(/class\s*=\s*["']([^"']*)["']/i);
+            if (classMatch) {
+                const classes = classMatch[1].trim().split(/\s+/);
+                // Alle <style>-Blöcke im HTML
+                const styleBlocks = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
+                const allCss = styleBlocks.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');
+                
+                for (const cls of classes) {
+                    // Suche nach .className { ... background-image: ... }
+                    // Auch innerhalb von Media Queries
+                    const classRegex = new RegExp('\\.' + cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[^{]*\\{([^}]*)\\}', 'gi');
+                    let cssMatch;
+                    while ((cssMatch = classRegex.exec(allCss)) !== null) {
+                        if (/background-image\s*:/i.test(cssMatch[1])) {
+                            const urlMatch = cssMatch[1].match(/background-image\s*:\s*url\s*\(\s*["']?([^"')]+)["']?\s*\)/i);
+                            return { has: true, source: 'css', className: cls, url: urlMatch ? urlMatch[1] : '' };
+                        }
+                    }
+                }
+            }
+            
+            return { has: false };
+        }
+        
         // === TYP A: <a> mit background-color im eigenen style ===
         const typeARegex = /<a\b([^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
         let match;
@@ -7272,10 +7320,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const vml = checkVmlStatus(match.index, href, text);
             
+            const bgImageInfo = checkBackgroundImage(fullTag);
+            
             typeAPositions.push(match.index);
             buttons.push({
                 id, type: 'inline', href, text, bgColor, textColor, width, height,
                 borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                bgImageInfo: bgImageInfo,
                 matchIndex: match.index, fullMatch: fullTag
             });
         }
@@ -7361,9 +7412,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const vml = checkVmlStatus(match.index, href, linkText);
             
+            const bgImageInfo = checkBackgroundImage(linkMatch[0]);
+            
             buttons.push({
                 id, type: 'table', href, text: linkText, bgColor, textColor, width, height,
                 borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                bgImageInfo: bgImageInfo,
                 matchIndex: match.index, fullMatch: fullTdMatch
             });
         }
@@ -7663,6 +7717,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // === TYP A: Inline <a> Button ===
             
+            // Alte Background-Farbe merken (für Border-Fix + Parent-TD-Fix + CSS-Fix)
+            const oldBgMatch = oldBtnHtml.match(/background(?:-color)?\s*:\s*(#?[a-fA-F0-9]{3,6})/i);
+            const oldBgColor = oldBgMatch ? oldBgMatch[1].toLowerCase() : '';
+            
             // Background Color
             newBtnHtml = newBtnHtml.replace(
                 /background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i,
@@ -7677,6 +7735,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
             }
             
+            // Border-Farben: Wenn border-color = alte BG-Farbe → mitändern
+            if (oldBgColor) {
+                const oldBgNorm = oldBgColor.replace(/^#/, '').toLowerCase();
+                // border: Npx solid #COLOR und border-*: Npx solid #COLOR
+                newBtnHtml = newBtnHtml.replace(
+                    /(\bborder(?:-(?:top|bottom|left|right))?\s*:\s*\d+px\s+solid\s+)#?([a-fA-F0-9]{3,6})/gi,
+                    function(match, prefix, color) {
+                        if (color.toLowerCase() === oldBgNorm) {
+                            return prefix + newBgColor;
+                        }
+                        return match;
+                    }
+                );
+            }
+            
             // Width
             if (/width\s*:\s*\d+px/i.test(newBtnHtml)) {
                 newBtnHtml = newBtnHtml.replace(/width\s*:\s*\d+px/i, 'width: ' + newWidth + 'px');
@@ -7684,6 +7757,88 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         html = html.replace(oldBtnHtml, newBtnHtml);
+        
+        // === Parent <td bgcolor> mit-updaten (für Typ A + Typ B) ===
+        // Finde die <td> die den Button direkt umgibt und aktualisiere bgcolor
+        {
+            const btnPos = html.indexOf(newBtnHtml);
+            if (btnPos >= 0) {
+                const beforeBtn = html.substring(Math.max(0, btnPos - 500), btnPos);
+                // Suche die letzte <td mit bgcolor vor dem Button
+                const tdBgMatches = [...beforeBtn.matchAll(/<td\b[^>]*bgcolor\s*=\s*["']([^"']*)["'][^>]*>/gi)];
+                if (tdBgMatches.length > 0) {
+                    const lastTdMatch = tdBgMatches[tdBgMatches.length - 1];
+                    const oldTdTag = lastTdMatch[0];
+                    const newTdTag = oldTdTag.replace(
+                        /bgcolor\s*=\s*["'][^"']*["']/i,
+                        'bgcolor="' + newBgColor + '"'
+                    );
+                    // Auch background-color im style der td ändern falls vorhanden
+                    let finalTdTag = newTdTag;
+                    if (/background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(finalTdTag)) {
+                        finalTdTag = finalTdTag.replace(
+                            /(background(?:-color)?\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                            '$1' + newBgColor
+                        );
+                    }
+                    const absPos = Math.max(0, btnPos - 500) + lastTdMatch.index;
+                    html = html.substring(0, absPos) + finalTdTag + html.substring(absPos + oldTdTag.length);
+                }
+            }
+        }
+        
+        // === CSS-Klassen-Regeln mit-updaten (background-color/background-image in <style>) ===
+        // Finde die CSS-Klasse des Buttons und aktualisiere Farbregeln im <style>-Block
+        {
+            const classMatch = (oldBtnHtml || newBtnHtml).match(/class\s*=\s*["']([^"']*)["']/i);
+            if (classMatch) {
+                const className = classMatch[1].trim();
+                if (className) {
+                    // Finde alle <style>...</style> Blöcke
+                    let cssHasBackgroundImage = false;
+                    
+                    html = html.replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/gi, function(fullStyleMatch, openTag, cssContent, closeTag) {
+                        let newCss = cssContent;
+                        
+                        // Ersetze background-color in Regeln die diesen Klassennamen enthalten
+                        const classEscaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const ruleRegex = new RegExp('(\\.' + classEscaped + '[^{]*\\{[^}]*?)(background(?:-color)?\\s*:\\s*)#?[a-fA-F0-9]{3,6}', 'gi');
+                        newCss = newCss.replace(ruleRegex, '$1$2' + newBgColor);
+                        
+                        // Prüfe ob CSS-Klasse ein background-image hat (z.B. animiertes GIF)
+                        const bgImageRegex = new RegExp('\\.' + classEscaped + '[^{]*\\{[^}]*background-image\\s*:', 'gi');
+                        if (bgImageRegex.test(cssContent)) {
+                            cssHasBackgroundImage = true;
+                        }
+                        
+                        return openTag + newCss + closeTag;
+                    });
+                    
+                    // Wenn CSS-Klasse ein background-image hat: Inline-Style-Override hinzufügen
+                    // damit die neue Hintergrundfarbe sichtbar wird (sonst überdeckt das Bild alles)
+                    if (cssHasBackgroundImage) {
+                        const btnPosForOverride = html.indexOf(newBtnHtml);
+                        if (btnPosForOverride >= 0) {
+                            let overriddenBtn = newBtnHtml;
+                            // Füge "background-image: none !important;" zum style hinzu
+                            if (/style\s*=\s*"/i.test(overriddenBtn)) {
+                                overriddenBtn = overriddenBtn.replace(
+                                    /style\s*=\s*"/i,
+                                    'style="background-image: none !important; '
+                                );
+                            } else if (/style\s*=\s*'/i.test(overriddenBtn)) {
+                                overriddenBtn = overriddenBtn.replace(
+                                    /style\s*=\s*'/i,
+                                    "style='background-image: none !important; "
+                                );
+                            }
+                            html = html.replace(newBtnHtml, overriddenBtn);
+                            newBtnHtml = overriddenBtn; // Update für spätere VML-Suche
+                        }
+                    }
+                }
+            }
+        }
         
         // === VML-Block automatisch mit-updaten (wenn vorhanden) ===
         if (btnData.hasVml) {
