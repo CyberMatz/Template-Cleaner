@@ -6911,11 +6911,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Helfer: Position bereits vorhanden?
         function positionAlreadyExists(pos) {
-            return candidates.some(c => Math.abs(c.position - pos) < 100);
+            return candidates.some(c => Math.abs(c.position - pos) < 30);
         }
         
         const bodyCloseMatch = html.match(/<\/body>/i);
         const bodyClosePos = bodyCloseMatch ? html.lastIndexOf(bodyCloseMatch[0]) : html.length;
+        const footerPos = html.indexOf('%footer%');
         
         // === Kandidat 1: Vor </body> ===
         if (bodyCloseMatch) {
@@ -6928,43 +6929,96 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        // === Kandidat 2: Nach der letzten Content-Tabelle ===
-        // Finde die letzte Tabelle mit Pixel-Breite (Content-Tabelle)
+        // === Kandidat 2: Nach der letzten Content-Tabelle (mit Pixel-Breite) ===
+        // Suche die letzte Tabelle mit 400-800px Breite – das ist typischerweise die Content-Tabelle
+        // Ignoriere den Footer-Wrapper selbst (der hat width="100%")
+        const allTableOpens = [...html.matchAll(/<table[^>]*>/gi)];
+        let lastContentTableClosePos = -1;
+        
+        for (let i = allTableOpens.length - 1; i >= 0; i--) {
+            const tblTag = allTableOpens[i][0];
+            const tblPos = allTableOpens[i].index;
+            
+            // Nur Tabellen VOR dem Footer (falls Footer existiert) oder VOR </body>
+            const searchBound = footerPos > 0 ? footerPos : bodyClosePos;
+            if (tblPos >= searchBound) continue;
+            
+            const widthMatch = tblTag.match(/width\s*=\s*["'](\d+)["']/i);
+            if (widthMatch) {
+                const w = parseInt(widthMatch[1]);
+                if (w >= 400 && w <= 800) {
+                    // Finde das schließende </table> für diese Tabelle
+                    const afterTable = html.substring(tblPos);
+                    let depth = 0;
+                    let closeIdx = -1;
+                    for (let j = 0; j < afterTable.length; j++) {
+                        if (afterTable.substring(j, j + 6).toLowerCase() === '<table') {
+                            depth++;
+                        } else if (afterTable.substring(j, j + 8).toLowerCase() === '</table>') {
+                            depth--;
+                            if (depth === 0) {
+                                closeIdx = tblPos + j + 8;
+                                break;
+                            }
+                        }
+                    }
+                    if (closeIdx > 0) {
+                        lastContentTableClosePos = closeIdx;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if (lastContentTableClosePos > 0 && !positionAlreadyExists(lastContentTableClosePos)) {
+            candidates.push({
+                id: 'footer_after_last_content_table',
+                label: 'Nach der letzten Content-Tabelle',
+                description: 'Der Footer kommt direkt nach dem Haupt-Content.',
+                position: lastContentTableClosePos,
+                snippet: getSnippetAround(html, lastContentTableClosePos, 60, 40)
+            });
+        }
+        
+        // === Kandidat 3: Nach der letzten </table> vor </body> ===
+        // (kann sich von Kandidat 2 unterscheiden wenn es Wrapper-Tabellen gibt)
         const allTableCloses = [...html.matchAll(/<\/table>/gi)];
         if (allTableCloses.length > 0) {
-            let lastContentTableEnd = -1;
+            let lastTableEnd = -1;
             for (let i = allTableCloses.length - 1; i >= 0; i--) {
                 const endPos = allTableCloses[i].index + allTableCloses[i][0].length;
+                // Ignoriere den Footer-Wrapper selbst
+                if (footerPos > 0 && endPos > footerPos) continue;
                 if (endPos < bodyClosePos) {
-                    lastContentTableEnd = endPos;
+                    lastTableEnd = endPos;
                     break;
                 }
             }
             
-            if (lastContentTableEnd > 0 && !positionAlreadyExists(lastContentTableEnd)) {
+            if (lastTableEnd > 0 && !positionAlreadyExists(lastTableEnd)) {
                 candidates.push({
                     id: 'footer_after_last_table',
                     label: 'Nach der letzten Tabelle',
                     description: 'Der Footer kommt direkt nach dem letzten Tabellen-Element.',
-                    position: lastContentTableEnd,
-                    snippet: getSnippetAround(html, lastContentTableEnd, 60, 40)
+                    position: lastTableEnd,
+                    snippet: getSnippetAround(html, lastTableEnd, 60, 40)
                 });
             }
         }
         
-        // === Kandidat 3: Vor den schließenden Outlook-Comments ===
-        // Suche den letzten <!--[if mso]>...</td></tr></table><![endif]--> vor </body>
+        // === Kandidat 4: Vor den schließenden Outlook-Comments ===
         const beforeBody = html.substring(Math.max(0, bodyClosePos - 2000), bodyClosePos);
         const closingOutlookMatch = beforeBody.match(/<!--\[if\s+mso\]>[\s\S]*?<!\[endif\]-->\s*$/i);
         if (closingOutlookMatch) {
-            const commentPos = bodyClosePos - 2000 + beforeBody.lastIndexOf(closingOutlookMatch[0]);
+            const commentStartInSlice = beforeBody.lastIndexOf(closingOutlookMatch[0]);
+            const commentPos = Math.max(0, bodyClosePos - 2000) + commentStartInSlice;
             if (commentPos > 0 && !positionAlreadyExists(commentPos)) {
                 candidates.push({
                     id: 'footer_before_outlook_close',
                     label: 'Vor den schließenden Outlook-Comments',
                     description: 'Der Footer kommt vor die bedingten Outlook-Closing-Comments.',
-                    position: Math.max(0, commentPos),
-                    snippet: getSnippetAround(html, Math.max(0, commentPos), 60, 40)
+                    position: commentPos,
+                    snippet: getSnippetAround(html, commentPos, 60, 40)
                 });
             }
         }
@@ -7001,10 +7055,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Markiere aktuelle Position
-        const currentPos = html.indexOf('%footer%');
-        if (currentPos !== -1) {
+        if (footerPos !== -1) {
             candidates.forEach(c => {
-                if (Math.abs(c.position - currentPos) < 200) {
+                if (Math.abs(c.position - footerPos) < 200) {
                     c.isCurrent = true;
                 }
             });
