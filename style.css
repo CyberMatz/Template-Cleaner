@@ -1708,6 +1708,85 @@ body {
     word-break: break-all;
 }
 
+/* Image Layout Controls (Breite + Ausrichtung) */
+.image-layout-controls {
+    display: flex;
+    gap: 16px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+}
+
+.image-layout-group {
+    flex: 1;
+    min-width: 120px;
+}
+
+.image-layout-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.image-width-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.image-width-input {
+    width: 80px;
+    padding: 4px 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.image-width-unit {
+    font-size: 11px;
+    color: #999;
+}
+
+.image-align-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f8f8f8;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+}
+
+.btn-small:hover {
+    border-color: #f2a93b;
+    background: #fff8ee;
+}
+
+.btn-small.active {
+    background: #f2a93b;
+    border-color: #e09520;
+    color: white;
+}
+
+.image-align-source {
+    font-size: 10px;
+    color: #aaa;
+    margin-left: 4px;
+}
+
+.image-dimension-info {
+    font-size: 10px;
+    color: #999;
+    margin-top: 2px;
+}
+
 /* Manuelle Button-Markierung */
 .buttons-manual-section {
     background: #f8f9fa;
