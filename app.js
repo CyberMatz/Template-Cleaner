@@ -7023,49 +7023,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // === Kandidat 5: Nach dem Wrapper-Element ===
-        // Gegenstück zum Header-Kandidat "Vor dem Wrapper-Element"
-        // Suche den äußeren Wrapper (div/center mit width/max-width) nach <body> und finde sein schließendes Tag
-        const bodyMatch = html.match(/<body[^>]*>/i);
-        const bodyEndPos = bodyMatch ? html.indexOf(bodyMatch[0]) + bodyMatch[0].length : 0;
-        const afterBody = html.substring(bodyEndPos, bodyEndPos + 2000);
-        const wrapperMatch = afterBody.match(/<(div|center)[^>]*(?:width|max-width|align)[^>]*>/i);
-        if (wrapperMatch) {
-            const wrapperOpenPos = bodyEndPos + afterBody.indexOf(wrapperMatch[0]);
-            const wrapperTagName = wrapperMatch[1].toLowerCase();
-            const closeTag = '</' + wrapperTagName + '>';
-            
-            // Finde das schließende Tag (mit Nesting-Tracking)
-            const afterWrapper = html.substring(wrapperOpenPos);
-            let depth = 0;
-            let wrapperClosePos = -1;
-            const openRegex = new RegExp('<' + wrapperTagName + '\\b', 'gi');
-            const closeRegex = new RegExp('</' + wrapperTagName + '>', 'gi');
-            
-            for (let i = 0; i < afterWrapper.length; i++) {
-                const remaining = afterWrapper.substring(i);
-                if (remaining.match(new RegExp('^<' + wrapperTagName + '[\\s>]', 'i'))) {
-                    depth++;
-                } else if (remaining.match(new RegExp('^</' + wrapperTagName + '>', 'i'))) {
-                    depth--;
-                    if (depth === 0) {
-                        wrapperClosePos = wrapperOpenPos + i + closeTag.length;
-                        break;
-                    }
-                }
-            }
-            
-            if (wrapperClosePos > 0 && !positionAlreadyExists(wrapperClosePos)) {
-                candidates.push({
-                    id: 'footer_after_wrapper',
-                    label: 'Nach dem Wrapper-Element',
-                    description: 'Der Footer wird nach dem äußeren Wrapper-Element platziert.',
-                    position: wrapperClosePos,
-                    snippet: getSnippetAround(html, wrapperClosePos, 60, 40)
-                });
-            }
-        }
-        
         // === DPL-Kandidat: Vor dem schließenden roten Div ===
         const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
         if (redDivMatch) {
