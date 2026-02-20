@@ -649,12 +649,22 @@ class TemplateProcessor {
             bestBoundary = 'Ende der Datei';
             confidence = 'low';
         } else {
-            // Pruefe ob zwischen dem offenen Tag und der Boundary noch Tags gleichen Typs sind
+            // Prüfe ob die Zuordnung eindeutig ist:
+            // Zwischen dem ungematchten Tag und der Boundary:
+            // - Gibt es dort weitere UNBALANCIERTE Tags desselben Typs?
+            //   Wenn ja → medium (nicht eindeutig welches Tag die Boundary "gehört")
+            //   Wenn nein → high (klare Zuordnung)
             const between = this._stripHtmlComments(this.html.substring(origSearchFrom, bestPos));
-            const sameTagOpen = new RegExp(`<${tag}[^>]*>`, 'i');
-            if (sameTagOpen.test(between)) {
+            const openRegexB = new RegExp(`<${tag}[^>]*>`, 'gi');
+            const closeRegexB = new RegExp(`</${tag}>`, 'gi');
+            const opensInBetween = (between.match(openRegexB) || []).length;
+            const closesInBetween = (between.match(closeRegexB) || []).length;
+            
+            // Wenn es unbalancierte offene Tags dazwischen gibt → nicht eindeutig
+            if (opensInBetween > closesInBetween) {
                 confidence = 'medium';
             }
+            // Wenn alles balanced ist dazwischen → sicher
         }
         
         // Zeilennummer des offenen Tags
@@ -4894,21 +4904,57 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('    if (event.data.type === "HIGHLIGHT_TAG") {');
         scriptLines.push('      var tagType = event.data.tag;');
         scriptLines.push('      var position = event.data.position || 0;');
-        scriptLines.push('      // Finde alle Elemente dieses Tag-Typs');
-        scriptLines.push('      var elements = Array.from(document.querySelectorAll(tagType));');
-        scriptLines.push('      if (elements.length === 0) {');
-        scriptLines.push('        console.warn("[LOCATE] No " + tagType + " elements found");');
-        scriptLines.push('        return;');
+        scriptLines.push('      var contextText = event.data.contextText || "";');
+        scriptLines.push('      var htmlLength = event.data.htmlLength || 1;');
+        scriptLines.push('      ');
+        scriptLines.push('      // Strategie: Finde Text-Fragmente aus dem Kontext im gerenderten HTML');
+        scriptLines.push('      var foundElement = null;');
+        scriptLines.push('      ');
+        scriptLines.push('      // Extrahiere sichtbaren Text aus dem Kontext (HTML-Tags entfernen)');
+        scriptLines.push('      var tempDiv = document.createElement("div");');
+        scriptLines.push('      tempDiv.innerHTML = contextText;');
+        scriptLines.push('      var contextPlainText = (tempDiv.textContent || "").replace(/\\s+/g, " ").trim();');
+        scriptLines.push('      ');
+        scriptLines.push('      // Suche nach Wörtern aus dem Kontext');
+        scriptLines.push('      if (contextPlainText.length > 3) {');
+        scriptLines.push('        var words = contextPlainText.split(" ").filter(function(w) { return w.length > 3; });');
+        scriptLines.push('        var searchPhrases = [];');
+        scriptLines.push('        // Nimm 3-Wort-Phrasen');
+        scriptLines.push('        for (var wi = 0; wi < words.length - 2; wi++) {');
+        scriptLines.push('          searchPhrases.push(words.slice(wi, wi + 3).join(" "));');
+        scriptLines.push('        }');
+        scriptLines.push('        // Suche jede Phrase in den sichtbaren Text-Knoten');
+        scriptLines.push('        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);');
+        scriptLines.push('        var bestMatch = null;');
+        scriptLines.push('        var node;');
+        scriptLines.push('        while (node = walker.nextNode()) {');
+        scriptLines.push('          var nodeText = node.textContent;');
+        scriptLines.push('          for (var pi = 0; pi < searchPhrases.length; pi++) {');
+        scriptLines.push('            if (nodeText.indexOf(searchPhrases[pi]) !== -1) {');
+        scriptLines.push('              bestMatch = node.parentElement;');
+        scriptLines.push('              break;');
+        scriptLines.push('            }');
+        scriptLines.push('          }');
+        scriptLines.push('          if (bestMatch) break;');
+        scriptLines.push('        }');
+        scriptLines.push('        if (bestMatch) foundElement = bestMatch;');
         scriptLines.push('      }');
-        scriptLines.push('      // Nimm das letzte Element (da fehlende Tags meist am Ende betroffen sind)');
-        scriptLines.push('      // Oder wenn position > Haelfte des HTML: eher hinteres Element');
-        scriptLines.push('      var htmlLen = document.documentElement.outerHTML.length || 1;');
-        scriptLines.push('      var ratio = Math.min(position / htmlLen, 1);');
-        scriptLines.push('      var idx = Math.min(Math.floor(ratio * elements.length), elements.length - 1);');
-        scriptLines.push('      var element = elements[idx];');
-        scriptLines.push('      if (element) {');
-        scriptLines.push('        element.scrollIntoView({ block: "center", behavior: "smooth" });');
-        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(element); }, 180);');
+        scriptLines.push('      ');
+        scriptLines.push('      // Fallback: Position nahe am Ende? → scroll nach unten');
+        scriptLines.push('      if (!foundElement && position > htmlLength * 0.85) {');
+        scriptLines.push('        var allElements = document.querySelectorAll(tagType);');
+        scriptLines.push('        if (allElements.length > 0) foundElement = allElements[allElements.length - 1];');
+        scriptLines.push('      }');
+        scriptLines.push('      ');
+        scriptLines.push('      // Fallback 2: Nehme das letzte Element des Tag-Typs');
+        scriptLines.push('      if (!foundElement) {');
+        scriptLines.push('        var elements = document.querySelectorAll(tagType);');
+        scriptLines.push('        if (elements.length > 0) foundElement = elements[elements.length - 1];');
+        scriptLines.push('      }');
+        scriptLines.push('      ');
+        scriptLines.push('      if (foundElement) {');
+        scriptLines.push('        foundElement.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(foundElement); }, 180);');
         scriptLines.push('      }');
         scriptLines.push('    }');
         scriptLines.push('');
@@ -7522,17 +7568,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         console.log('[INSPECTOR] Locate tag in preview:', tag, 'near position:', position);
         
-        // Berechne ungefähre Zeilennummer aus Position
-        const htmlSource = currentWorkingHtml || '';
-        const beforePos = htmlSource.substring(0, Math.min(position, htmlSource.length));
-        const lineNumber = (beforePos.match(/\n/g) || []).length + 1;
-        
-        // Sende Nachricht an Iframe
+        // Sende Nachricht an Iframe mit Position und Tag-Info
         inspectorPreviewFrame.contentWindow.postMessage({
             type: 'HIGHLIGHT_TAG',
             tag: tag,
             position: position,
-            lineNumber: lineNumber
+            // Sende auch den umliegenden Text als Hilfe zur Lokalisierung
+            contextText: (currentWorkingHtml || '').substring(
+                Math.max(0, position - 200), 
+                Math.min((currentWorkingHtml || '').length, position + 200)
+            ),
+            htmlLength: (currentWorkingHtml || '').length
         }, '*');
     }
     
