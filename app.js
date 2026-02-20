@@ -6773,67 +6773,130 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function findHeaderCandidates(html) {
         const candidates = [];
-        
-        // Kandidat 1: Direkt nach <body>
         const bodyMatch = html.match(/<body[^>]*>/i);
+        const bodyPos = bodyMatch ? html.indexOf(bodyMatch[0]) : 0;
+        const bodyEndPos = bodyMatch ? bodyPos + bodyMatch[0].length : 0;
+        
+        // Helfer: Position bereits vorhanden? (vermeidet Duplikate die zu nah beieinander sind)
+        function positionAlreadyExists(pos) {
+            return candidates.some(c => Math.abs(c.position - pos) < 100);
+        }
+        
+        // === Kandidat 1: Direkt nach <body> ===
         if (bodyMatch) {
-            const pos = html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
             candidates.push({
                 id: 'header_after_body',
                 label: 'Direkt nach <body> (ganz oben)',
                 description: 'Der Header wird ganz oben im sichtbaren Bereich platziert.',
-                position: pos,
-                snippet: getSnippetAround(html, pos, 50, 50)
+                position: bodyEndPos,
+                snippet: getSnippetAround(html, bodyEndPos, 20, 80)
             });
         }
         
-        // Kandidat 2: Nach dem Preheader (wenn vorhanden)
-        const preheaderMatch = html.match(/<body[^>]*>\s*(<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>)/i);
-        if (preheaderMatch) {
-            const preheaderEnd = html.indexOf(preheaderMatch[1]) + preheaderMatch[1].length;
-            candidates.push({
-                id: 'header_after_preheader',
-                label: 'Nach dem Preheader',
-                description: 'Der Header kommt nach dem versteckten Preheader-Block.',
-                position: preheaderEnd,
-                snippet: getSnippetAround(html, preheaderEnd, 40, 60)
-            });
+        // === Kandidat 2: Nach dem Preheader ===
+        // Suche display:none-Div in den ersten 2000 Zeichen nach <body>
+        const afterBody = html.substring(bodyEndPos, bodyEndPos + 2000);
+        const preheaderPatterns = [
+            // Standard: <div style="display:none;">...</div>
+            /<div[^>]*style="[^"]*display\s*:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/i,
+            // Variante: <div style="...max-height:0...">...</div>  
+            /<div[^>]*style="[^"]*max-height\s*:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/i
+        ];
+        for (const pattern of preheaderPatterns) {
+            const phMatch = afterBody.match(pattern);
+            if (phMatch) {
+                const phEndPos = bodyEndPos + afterBody.indexOf(phMatch[0]) + phMatch[0].length;
+                if (!positionAlreadyExists(phEndPos)) {
+                    candidates.push({
+                        id: 'header_after_preheader',
+                        label: 'Nach dem Preheader',
+                        description: 'Der Header kommt nach dem versteckten Preheader-Block.',
+                        position: phEndPos,
+                        snippet: getSnippetAround(html, phEndPos, 30, 70)
+                    });
+                }
+                break;
+            }
         }
         
-        // Kandidat 3: Vor der ersten Content-Tabelle (mit width-Attribut)
-        const contentTableMatch = html.match(/<table[^>]*width=["']\d+["'][^>]*>/i);
-        if (contentTableMatch) {
-            const pos = html.indexOf(contentTableMatch[0]);
-            // Nur wenn nicht schon direkt nach body
-            if (pos > (bodyMatch ? html.indexOf(bodyMatch[0]) + 50 : 0)) {
+        // === Kandidat 3: Nach Outlook Conditional Comments ===
+        // Viele Templates haben <!--[if mso]>...<![endif]--> nach dem Preheader
+        const outlookCommentMatch = afterBody.match(/<!--\[if\s+mso\]>[\s\S]*?<!\[endif\]-->/i);
+        if (outlookCommentMatch) {
+            const commentEndPos = bodyEndPos + afterBody.indexOf(outlookCommentMatch[0]) + outlookCommentMatch[0].length;
+            if (!positionAlreadyExists(commentEndPos)) {
                 candidates.push({
-                    id: 'header_before_content',
-                    label: 'Vor der ersten Content-Tabelle',
-                    description: 'Der Header wird direkt vor dem Haupt-Content platziert.',
+                    id: 'header_after_outlook_comments',
+                    label: 'Nach den Outlook-Comments',
+                    description: 'Der Header wird nach den bedingten Outlook-Kommentaren platziert.',
+                    position: commentEndPos,
+                    snippet: getSnippetAround(html, commentEndPos, 30, 70)
+                });
+            }
+        }
+        
+        // === Kandidat 4: Vor der ersten Content-Tabelle ===
+        // Suche die erste Tabelle mit Pixel-Breite (nicht 100%) – das ist typischerweise die Content-Tabelle
+        const allTables = [...html.matchAll(/<table[^>]*>/gi)];
+        for (const tblMatch of allTables) {
+            const tblTag = tblMatch[0];
+            const tblPos = tblMatch.index;
+            
+            // Nur Tabellen nach <body>
+            if (tblPos <= bodyEndPos) continue;
+            
+            // Suche nach Pixel-Breite (500-700px = typische Content-Breite)
+            const widthMatch = tblTag.match(/width\s*=\s*["'](\d+)["']/i);
+            if (widthMatch) {
+                const w = parseInt(widthMatch[1]);
+                if (w >= 400 && w <= 800 && !positionAlreadyExists(tblPos)) {
+                    candidates.push({
+                        id: 'header_before_content',
+                        label: 'Vor der Content-Tabelle (' + w + 'px)',
+                        description: 'Der Header wird direkt vor der Haupt-Content-Tabelle platziert.',
+                        position: tblPos,
+                        snippet: getSnippetAround(html, tblPos, 20, 80)
+                    });
+                    break;
+                }
+            }
+        }
+        
+        // === Kandidat 5: Vor dem ersten sichtbaren Wrapper-Div (falls keine Content-Tabelle gefunden) ===
+        // Suche nach dem ersten <div> oder <center> nach body das einen Wrapper sein könnte
+        const wrapperMatch = afterBody.match(/<(?:div|center)[^>]*(?:width|max-width|align)[^>]*>/i);
+        if (wrapperMatch) {
+            const wrapperPos = bodyEndPos + afterBody.indexOf(wrapperMatch[0]);
+            if (!positionAlreadyExists(wrapperPos)) {
+                candidates.push({
+                    id: 'header_before_wrapper',
+                    label: 'Vor dem Wrapper-Element',
+                    description: 'Der Header wird vor dem äußeren Wrapper-Element platziert.',
+                    position: wrapperPos,
+                    snippet: getSnippetAround(html, wrapperPos, 20, 80)
+                });
+            }
+        }
+        
+        // === DPL-Kandidat: Nach dem roten Hintergrund-Div ===
+        const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
+        if (redDivMatch) {
+            const pos = html.indexOf(redDivMatch[0]) + redDivMatch[0].length;
+            if (!positionAlreadyExists(pos)) {
+                candidates.push({
+                    id: 'header_inside_red_div',
+                    label: 'Innerhalb des roten Hintergrund-Divs (DPL)',
+                    description: 'Spezielle DPL-Platzierung: Header innerhalb des roten Wrapper-Divs.',
                     position: pos,
                     snippet: getSnippetAround(html, pos, 30, 70)
                 });
             }
         }
         
-        // DPL-Kandidat: Nach dem roten Hintergrund-Div
-        const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
-        if (redDivMatch) {
-            const pos = html.indexOf(redDivMatch[0]) + redDivMatch[0].length;
-            candidates.push({
-                id: 'header_inside_red_div',
-                label: 'Innerhalb des roten Hintergrund-Divs (DPL)',
-                description: 'Spezielle DPL-Platzierung: Header innerhalb des roten Wrapper-Divs.',
-                position: pos,
-                snippet: getSnippetAround(html, pos, 30, 70)
-            });
-        }
-        
         // Markiere aktuelle Position
         const currentPos = html.indexOf('%header%');
         if (currentPos !== -1) {
             candidates.forEach(c => {
-                // "Aktuell" wenn der Platzhalter innerhalb von 200 Zeichen dieser Position ist
                 if (Math.abs(c.position - currentPos) < 200) {
                     c.isCurrent = true;
                 }
@@ -6846,47 +6909,69 @@ document.addEventListener('DOMContentLoaded', () => {
     function findFooterCandidates(html) {
         const candidates = [];
         
-        // Kandidat 1: Vor </body>
+        // Helfer: Position bereits vorhanden?
+        function positionAlreadyExists(pos) {
+            return candidates.some(c => Math.abs(c.position - pos) < 100);
+        }
+        
         const bodyCloseMatch = html.match(/<\/body>/i);
+        const bodyClosePos = bodyCloseMatch ? html.lastIndexOf(bodyCloseMatch[0]) : html.length;
+        
+        // === Kandidat 1: Vor </body> ===
         if (bodyCloseMatch) {
-            const pos = html.lastIndexOf(bodyCloseMatch[0]);
             candidates.push({
                 id: 'footer_before_body_close',
                 label: 'Vor </body> (ganz unten)',
                 description: 'Der Footer wird ganz am Ende des sichtbaren Bereichs platziert.',
-                position: pos,
-                snippet: getSnippetAround(html, pos, 70, 30)
+                position: bodyClosePos,
+                snippet: getSnippetAround(html, bodyClosePos, 70, 30)
             });
         }
         
-        // Kandidat 2: Nach der letzten Content-Tabelle (mit width-Attribut)
-        const allContentTables = [...html.matchAll(/<\/table>/gi)];
-        if (allContentTables.length > 0) {
-            // Suche die letzte Tabelle die VOR </body> schließt
-            const bodyClosePos = bodyCloseMatch ? html.lastIndexOf(bodyCloseMatch[0]) : html.length;
-            let lastTableEnd = -1;
-            allContentTables.forEach(m => {
-                const endPos = m.index + m[0].length;
+        // === Kandidat 2: Nach der letzten Content-Tabelle ===
+        // Finde die letzte Tabelle mit Pixel-Breite (Content-Tabelle)
+        const allTableCloses = [...html.matchAll(/<\/table>/gi)];
+        if (allTableCloses.length > 0) {
+            let lastContentTableEnd = -1;
+            for (let i = allTableCloses.length - 1; i >= 0; i--) {
+                const endPos = allTableCloses[i].index + allTableCloses[i][0].length;
                 if (endPos < bodyClosePos) {
-                    lastTableEnd = endPos;
+                    lastContentTableEnd = endPos;
+                    break;
                 }
-            });
+            }
             
-            if (lastTableEnd > 0) {
+            if (lastContentTableEnd > 0 && !positionAlreadyExists(lastContentTableEnd)) {
                 candidates.push({
                     id: 'footer_after_last_table',
                     label: 'Nach der letzten Tabelle',
                     description: 'Der Footer kommt direkt nach dem letzten Tabellen-Element.',
-                    position: lastTableEnd,
-                    snippet: getSnippetAround(html, lastTableEnd, 60, 40)
+                    position: lastContentTableEnd,
+                    snippet: getSnippetAround(html, lastContentTableEnd, 60, 40)
                 });
             }
         }
         
-        // DPL-Kandidat: Vor dem schließenden roten Div
+        // === Kandidat 3: Vor den schließenden Outlook-Comments ===
+        // Suche den letzten <!--[if mso]>...</td></tr></table><![endif]--> vor </body>
+        const beforeBody = html.substring(Math.max(0, bodyClosePos - 2000), bodyClosePos);
+        const closingOutlookMatch = beforeBody.match(/<!--\[if\s+mso\]>[\s\S]*?<!\[endif\]-->\s*$/i);
+        if (closingOutlookMatch) {
+            const commentPos = bodyClosePos - 2000 + beforeBody.lastIndexOf(closingOutlookMatch[0]);
+            if (commentPos > 0 && !positionAlreadyExists(commentPos)) {
+                candidates.push({
+                    id: 'footer_before_outlook_close',
+                    label: 'Vor den schließenden Outlook-Comments',
+                    description: 'Der Footer kommt vor die bedingten Outlook-Closing-Comments.',
+                    position: Math.max(0, commentPos),
+                    snippet: getSnippetAround(html, Math.max(0, commentPos), 60, 40)
+                });
+            }
+        }
+        
+        // === DPL-Kandidat: Vor dem schließenden roten Div ===
         const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
         if (redDivMatch) {
-            // Finde das schließende </div> des roten Divs
             const redDivStart = html.indexOf(redDivMatch[0]);
             const afterRedDiv = html.slice(redDivStart);
             let depth = 0;
@@ -6904,7 +6989,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
-            if (redDivEndLocal > 0) {
+            if (redDivEndLocal > 0 && !positionAlreadyExists(redDivEndLocal)) {
                 candidates.push({
                     id: 'footer_inside_red_div',
                     label: 'Innerhalb des roten Hintergrund-Divs (DPL)',
