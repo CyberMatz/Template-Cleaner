@@ -7049,6 +7049,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const width = getSelectedWidth(type);
                     const previewHtml = buildPlacementPreview(originalHtml, placeholder, candidates[index].position, width);
                     placementTabHtml = previewHtml;
+                    placementPending = true;
+                    updateGlobalPendingIndicator();
+                    updateGlobalFinalizeButton();
                     updateInspectorPreview();
                 }
             });
@@ -7066,6 +7069,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const width = getSelectedWidth(type);
                     const previewHtml = buildPlacementPreview(originalHtml, placeholder, candidates[index].position, width);
                     placementTabHtml = previewHtml;
+                    placementPending = true;
+                    updateGlobalPendingIndicator();
+                    updateGlobalFinalizeButton();
                     updateInspectorPreview();
                 }
             });
@@ -7097,6 +7103,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const width = getSelectedWidth(type);
                 const previewHtml = buildPlacementPreview(originalHtml, placeholder, candidate.position, width);
                 placementTabHtml = previewHtml;
+                
+                // Pending markieren damit globaler "Anpassungen übernehmen" Button funktioniert
+                placementPending = true;
+                updateGlobalPendingIndicator();
+                updateGlobalFinalizeButton();
+                
                 updateInspectorPreview();
             });
         });
@@ -7118,6 +7130,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     buttonsTabHtml = null;
                     
                     placementPending = false;
+                    updateGlobalPendingIndicator();
+                    updateGlobalFinalizeButton();
                     
                     const width = getSelectedWidth(type);
                     const widthHint = width !== '100%' ? ' (Breite: ' + width + 'px)' : '';
