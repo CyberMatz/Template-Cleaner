@@ -889,30 +889,76 @@ class TemplateProcessor {
     checkFooterMobileVisibility() {
         const id = 'P06_FOOTER_MOBILE';
         
-        // Suche nach Media Queries die Footer verstecken
-        const hideFooterRegex = /@media[^{]*\{[^}]*\.footer[^}]*display:\s*none[^}]*\}/gi;
-        const hideFooterMatches = this.html.match(hideFooterRegex);
-
-        if (hideFooterMatches && hideFooterMatches.length > 0) {
-            // KRITISCH: Footer wird versteckt!
-            hideFooterMatches.forEach(match => {
-                // Ersetze display:none mit sichtbaren Styles
-                const fixed = match.replace(/display:\s*none\s*!important;?/gi, 'font-size: 12px !important; padding: 10px !important;');
-                this.html = this.html.replace(match, fixed);
+        // Schritt 1: Finde CSS-Klassen/IDs der Elemente rund um %footer%
+        const footerClasses = new Set();
+        const footerPos = this.html.indexOf('%footer%');
+        
+        if (footerPos !== -1) {
+            // Suche die umgebenden Elemente (bis zu 500 Zeichen vor %footer%)
+            const beforeFooter = this.html.substring(Math.max(0, footerPos - 500), footerPos);
+            // Finde class="..." und id="..." in den umgebenden Tags
+            const classMatches = beforeFooter.match(/class="([^"]*)"/gi) || [];
+            const idMatches = beforeFooter.match(/id="([^"]*)"/gi) || [];
+            classMatches.forEach(m => {
+                const val = m.match(/class="([^"]*)"/i);
+                if (val) val[1].split(/\s+/).forEach(cls => footerClasses.add('.' + cls));
             });
+            idMatches.forEach(m => {
+                const val = m.match(/id="([^"]*)"/i);
+                if (val) footerClasses.add('#' + val[1]);
+            });
+        }
+        
+        // Schritt 2: Ergänze gängige Footer-Klassennamen als Fallback
+        const commonFooterNames = ['.footer', '.email-footer', '.footer-wrap', '.footer-table', '.mail-footer', '#footer'];
+        commonFooterNames.forEach(cls => footerClasses.add(cls));
+        
+        // Schritt 3: Prüfe ob irgendeine dieser Klassen/IDs in einer Media Query mit display:none versteckt wird
+        let hiddenFound = false;
+        const allMediaQueries = this.html.match(/@media[^{]*\{([^{}]*\{[^{}]*\})*[^{}]*\}/gi) || [];
+        
+        allMediaQueries.forEach(mq => {
+            footerClasses.forEach(cls => {
+                // Escape für Regex (z.B. .footer-wrap → \.footer\-wrap)
+                const escaped = cls.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+                const hidePattern = new RegExp(escaped + '[^}]*display:\\s*none', 'i');
+                if (hidePattern.test(mq)) {
+                    hiddenFound = true;
+                    // KRITISCH: Footer wird versteckt! Ersetze display:none
+                    const fixed = mq.replace(
+                        new RegExp('(' + escaped + '[^}]*?)display:\\s*none\\s*!important;?', 'gi'),
+                        '$1font-size: 12px !important; padding: 10px !important;'
+                    );
+                    if (fixed !== mq) {
+                        this.html = this.html.replace(mq, fixed);
+                    }
+                }
+            });
+        });
+        
+        if (hiddenFound) {
             this.addCheck(id, 'FIXED', 'Footer Mobile Visibility korrigiert (display:none entfernt - KRITISCH!)');
             return;
         }
-
-        // Prüfe ob Mobile-Optimierung vorhanden
-        const hasFooterMobileStyles = /@media[^{]*\{[^}]*\.footer[^}]*font-size/i.test(this.html);
-
+        
+        // Schritt 4: Prüfe ob Footer-bezogene Mobile-Optimierung vorhanden
+        let hasFooterMobileStyles = false;
+        footerClasses.forEach(cls => {
+            const escaped = cls.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+            if (new RegExp('@media[^{]*\\{[^}]*' + escaped + '[^}]*font-size', 'i').test(this.html)) {
+                hasFooterMobileStyles = true;
+            }
+        });
+        
         if (!hasFooterMobileStyles) {
-            // Keine Mobile-Optimierung - hinzufügen
+            // Keine Mobile-Optimierung vorhanden - generische hinzufügen
             const headCloseMatch = this.html.match(/<\/head>/i);
             if (headCloseMatch) {
                 const insertPos = this.html.indexOf(headCloseMatch[0]);
-                const mobileStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    .footer-table { width: 100% !important; }\n    .footer-table td { font-size: 11px !important; padding: 15px !important; }\n}\n</style>\n`;
+                // Verwende die tatsächlich gefundenen Footer-Klassen, oder Fallback
+                const footerSelector = footerClasses.has('.footer-table') ? '.footer-table' : 
+                    [...footerClasses].find(c => c.startsWith('.') && c.toLowerCase().includes('footer')) || '.footer-table';
+                const mobileStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    ${footerSelector} { width: 100% !important; }\n    ${footerSelector} td { font-size: 11px !important; padding: 15px !important; }\n}\n</style>\n`;
                 this.html = this.html.slice(0, insertPos) + mobileStyles + this.html.slice(insertPos);
                 this.addCheck(id, 'FIXED', 'Footer Mobile-Optimierung hinzugefügt');
             } else {
@@ -948,40 +994,52 @@ class TemplateProcessor {
         }
     }
 
-    // P11: Mobile Responsiveness Check
+    // P11: Mobile Responsiveness Check (nur Standard-Templates)
     checkMobileResponsiveness() {
         const id = 'P11_MOBILE_RESPONSIVE';
+
+        // DPL-Templates haben keinen Mobile Responsiveness Check
+        if (this.checklistType === 'dpl') {
+            return;
+        }
         
         // Prüfe auf Media Queries
-        const hasMediaQueries = /@media[^{]*\{/i.test(this.html);
+        const hasMediaQueries = /@media[^{]*max-width[^{]*\{/i.test(this.html);
         
         if (!hasMediaQueries) {
-            // Keine Media Queries - Basis-Responsive Styles hinzufügen
+            // Keine Media Queries - Responsive Styles hinzufügen
             const headCloseMatch = this.html.match(/<\/head>/i);
             if (headCloseMatch) {
                 const insertPos = this.html.indexOf(headCloseMatch[0]);
-                const responsiveStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    table[class="container"] { width: 100% !important; }\n    td[class="mobile-padding"] { padding: 10px !important; }\n    img { max-width: 100% !important; height: auto !important; }\n}\n</style>\n`;
+                const responsiveStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    /* Sichere Fallbacks: Bilder und Container */\n    img { max-width: 100% !important; height: auto !important; }\n    table[width="500"], table[width="520"], table[width="540"], table[width="560"],\n    table[width="580"], table[width="600"], table[width="620"], table[width="640"],\n    table[width="660"], table[width="680"], table[width="700"] {\n        width: 100% !important;\n    }\n    /* Checklisten-Regel: class="responsive" Selektoren */\n    table[class="responsive"] { width: 100% !important; }\n    td[class="responsive"] { width: 100% !important; display: block !important; }\n    img[class="responsive"] { width: 100% !important; height: auto !important; }\n}\n</style>\n`;
                 this.html = this.html.slice(0, insertPos) + responsiveStyles + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Basis Mobile-Responsive Styles hinzugefügt');
+                this.addCheck(id, 'FIXED', 'Mobile-Responsive Styles hinzugefügt (Fallbacks + Checklisten-Regel)');
             } else {
                 this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Responsive Styles nicht hinzugefügt');
             }
         } else {
-            // Media Queries vorhanden - prüfe auf Mobile-optimierte Font-Sizes
-            const hasMobileFontSizes = /@media[^{]*\{[^}]*font-size/i.test(this.html);
+            // Media Queries vorhanden - prüfe auf grundlegende Mobile-Optimierung
+            const hasImgResponsive = /@media[^{]*\{[^}]*img[^}]*(max-width|width)/i.test(this.html);
+            const hasTableResponsive = /@media[^{]*\{[^}]*table[^}]*width/i.test(this.html);
             
-            if (hasMobileFontSizes) {
-                this.addCheck(id, 'PASS', 'Mobile Responsiveness korrekt (Media Queries mit Font-Sizes)');
+            if (hasImgResponsive && hasTableResponsive) {
+                this.addCheck(id, 'PASS', 'Mobile Responsiveness korrekt (Media Queries mit Bild- und Tabellen-Regeln)');
+            } else if (hasImgResponsive || hasTableResponsive) {
+                this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber möglicherweise unvollständig (Bilder oder Tabellen nicht abgedeckt)');
             } else {
-                this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber keine Mobile-optimierten Font-Sizes');
+                this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber keine Responsive-Regeln für Bilder/Tabellen erkannt');
             }
         }
     }
 
-    // P11: Viewport Meta-Tag Check
+    // P11: Viewport Meta-Tag Check (nur Standard-Templates)
     checkViewportMetaTag() {
         const id = 'P11_VIEWPORT';
-        
+
+        // DPL-Templates haben keinen Viewport-Check
+        if (this.checklistType === 'dpl') {
+            return;
+        }
         // Prüfe auf Viewport Meta-Tag
         const hasViewport = /<meta[^>]*name="viewport"[^>]*>/i.test(this.html);
         
