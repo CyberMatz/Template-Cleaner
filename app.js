@@ -4355,6 +4355,9 @@ document.addEventListener('DOMContentLoaded', () => {
             globalCommitLog.push(`${commitId}_GLOBAL_FINALIZE - ${timestamp} - committed: ${committedTabs.join(', ')}`);
         }
         
+        // WICHTIG: Nicht-pending Tabs müssen den neuen Stand übernehmen
+        resetNonPendingTabHtmls();
+        
         // Update UI
         updateGlobalPendingIndicator();
         updateGlobalFinalizeButton();
@@ -5841,6 +5844,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Handle Tracking Commit (Phase 7A)
     // Phase 11 B1: Zentrale Commit-Funktionen (wiederverwendbar, kein Alert)
+    // WICHTIG: Nach einem Commit müssen alle Tabs die KEINE eigenen pending-Änderungen haben
+    // ihren HTML-Cache zurücksetzen, damit sie beim nächsten Öffnen den neuen currentWorkingHtml bekommen.
+    // Tabs MIT pending-Änderungen behalten ihren Stand (sonst gehen ungespeicherte Änderungen verloren).
+    function resetNonPendingTabHtmls() {
+        if (!trackingPending) trackingTabHtml = null;
+        if (!imagesPending) imagesTabHtml = null;
+        if (!editorPending) editorTabHtml = null;
+        if (!buttonsPending) buttonsTabHtml = null;
+        if (!placementPending) placementTabHtml = null;
+        console.log('[SYNC] Reset non-pending tab HTMLs');
+    }
+    
     function commitTrackingChanges() {
         if (!trackingTabHtml || trackingTabHtml === currentWorkingHtml) {
             console.log('[COMMIT] Tracking: Nothing to commit');
@@ -5948,6 +5963,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (success) {
             // Update Global Pending Indicator
             updateGlobalPendingIndicator();
+            
+            // WICHTIG: Nicht-pending Tabs müssen den neuen Stand übernehmen
+            resetNonPendingTabHtmls();
             
             // Alle Tabs neu rendern
             loadInspectorTabContent('tracking');
@@ -6497,6 +6515,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (success) {
             // Update Global Pending Indicator
             updateGlobalPendingIndicator();
+            
+            // WICHTIG: Nicht-pending Tabs müssen den neuen Stand übernehmen
+            resetNonPendingTabHtmls();
             
             // Alle Tabs neu rendern
             loadInspectorTabContent('tracking');
@@ -7277,12 +7298,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentWorkingHtml = placementTabHtml;
                     
                     // Alle anderen Tab-HTMLs zurücksetzen (damit sie den neuen Stand bekommen)
-                    trackingTabHtml = null;
-                    imagesTabHtml = null;
-                    editorTabHtml = null;
-                    buttonsTabHtml = null;
-                    
                     placementPending = false;
+                    resetNonPendingTabHtmls();
                     updateGlobalPendingIndicator();
                     updateGlobalFinalizeButton();
                     
@@ -8177,6 +8194,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (success) {
             updateGlobalPendingIndicator();
+            
+            // WICHTIG: Nicht-pending Tabs müssen den neuen Stand übernehmen
+            resetNonPendingTabHtmls();
             
             loadInspectorTabContent('tracking');
             loadInspectorTabContent('images');
@@ -9302,6 +9322,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (success) {
             // Update Global Pending Indicator
             updateGlobalPendingIndicator();
+            
+            // WICHTIG: Nicht-pending Tabs müssen den neuen Stand übernehmen
+            resetNonPendingTabHtmls();
             
             // Alle Tabs neu rendern
             loadInspectorTabContent('tracking');
