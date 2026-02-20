@@ -7611,6 +7611,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 '$1$2' + newTextColor
             );
             
+            // 3b. Background-Color im <a> style ändern (falls vorhanden – überschreibt sonst die td-Farbe)
+            const aTagMatch = newBtnHtml.match(/<a\b[^>]*style\s*=\s*["']([^"']*)["']/i);
+            if (aTagMatch && /background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(aTagMatch[1])) {
+                newBtnHtml = newBtnHtml.replace(
+                    /(<a\b[^>]*style\s*=\s*["'][^"']*)(background(?:-color)?\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                    '$1$2' + newBgColor
+                );
+            }
+            
             // 4. Padding (Höhe) auf der <td> anpassen
             const currentPadTop = parseInt((oldBtnHtml.match(/padding-top\s*:\s*(\d+)/i) || [])[1] || '15');
             const currentPadBot = parseInt((oldBtnHtml.match(/padding-bottom\s*:\s*(\d+)/i) || [])[1] || '15');
