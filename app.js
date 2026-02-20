@@ -445,16 +445,31 @@ class TemplateProcessor {
         }
     }
 
-    // P07/P08: Tag-Balancing
+    // P07/P08: Tag-Balancing (Smart Boundary Logic)
     checkTagBalancing() {
         const id = this.checklistType === 'dpl' ? 'P08_TAG_BALANCING' : 'P07_TAG_BALANCING';
         const tags = ['table', 'tr', 'td', 'a', 'div'];
         let fixed = false;
         
-        // Auto-Fixes Array initialisieren (falls noch nicht vorhanden)
+        // Auto-Fixes Array initialisieren
         if (!this.autoFixes) {
             this.autoFixes = [];
         }
+        
+        // Tag-Probleme Array initialisieren (fuer unloesbare Faelle)
+        if (!this.tagProblems) {
+            this.tagProblems = [];
+        }
+
+        // Grenz-Regeln: Wo soll ein Tag geschlossen werden?
+        // z.B. ein <td> soll VOR dem naechsten </tr> geschlossen werden
+        const boundaries = {
+            'a':     ['</td>', '</tr>', '</table>', '</div>', '</body>'],
+            'td':    ['</tr>', '</table>', '</body>'],
+            'tr':    ['</table>', '</body>'],
+            'table': ['</body>', '</html>'],
+            'div':   ['</td>', '</tr>', '</table>', '</body>', '</html>']
+        };
 
         tags.forEach(tag => {
             const openRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
@@ -462,21 +477,30 @@ class TemplateProcessor {
             const openCount = (this.html.match(openRegex) || []).length;
             const closeCount = (this.html.match(closeRegex) || []).length;
 
-            if (openCount !== closeCount) {
-                // Versuche zu balancieren (einfache Heuristik)
-                if (openCount > closeCount) {
-                    // Fehlende Closing-Tags
-                    const diff = openCount - closeCount;
-                    for (let i = 0; i < diff; i++) {
-                        const insertPosition = this.html.length;
+            if (openCount === closeCount) return; // Alles ok
+
+            if (openCount > closeCount) {
+                // === FEHLENDE CLOSING-TAGS ===
+                const diff = openCount - closeCount;
+                
+                for (let i = 0; i < diff; i++) {
+                    // Finde das letzte ungeschlossene Tag dieser Art
+                    const insertInfo = this._findSmartInsertPosition(tag, boundaries[tag] || ['</body>']);
+                    
+                    if (insertInfo.found) {
+                        const insertPosition = insertInfo.position;
                         const inserted = `</${tag}>`;
                         
                         // Context speichern (50 chars vor und nach)
                         const beforeCtx = this.html.substring(Math.max(0, insertPosition - 50), insertPosition);
-                        const afterCtx = '';  // Am Ende gibt es kein afterCtx
+                        const afterCtx = this.html.substring(insertPosition, Math.min(this.html.length, insertPosition + 50));
                         
-                        // Snippet für Anzeige (200 chars vor)
-                        const snippetBefore = this.html.substring(Math.max(0, insertPosition - 200), insertPosition);
+                        // Snippet fuer Anzeige: Zeilen rund um die Einfuegestelle
+                        const linesBefore = this.html.substring(0, insertPosition).split('\n');
+                        const linesAfter = this.html.substring(insertPosition).split('\n');
+                        const snippetLinesBefore = linesBefore.slice(-3).join('\n');
+                        const snippetLinesAfter = linesAfter.slice(0, 3).join('\n');
+                        const snippetBefore = snippetLinesBefore + '\n  ► ' + inserted + ' ◄  (eingefuegt)\n' + snippetLinesAfter;
                         
                         // Auto-Fix Event speichern
                         this.autoFixes.push({
@@ -488,22 +512,185 @@ class TemplateProcessor {
                             afterCtx: afterCtx,
                             insertPosition: insertPosition,
                             snippetBefore: snippetBefore,
-                            snippetAfter: inserted
+                            snippetAfter: inserted,
+                            confidence: insertInfo.confidence,
+                            boundaryTag: insertInfo.boundaryTag,
+                            method: insertInfo.method
                         });
                         
-                        // Tag einfügen
-                        this.html += inserted;
+                        // Tag an der smarten Position einfuegen (nicht am Ende!)
+                        this.html = this.html.substring(0, insertPosition) + inserted + this.html.substring(insertPosition);
+                        fixed = true;
+                    } else {
+                        // Kein sicherer Einfuegepunkt gefunden → als Problem melden
+                        this.tagProblems.push({
+                            id: `TP${(this.tagProblems.length + 1).toString().padStart(2, '0')}`,
+                            type: 'UNCLOSED_TAG',
+                            tag: tag,
+                            message: `<${tag}> ist geoeffnet aber nicht geschlossen. Kein sicherer Einfuegepunkt gefunden.`,
+                            severity: 'warning'
+                        });
                     }
-                    fixed = true;
                 }
+                
+            } else if (closeCount > openCount) {
+                // === UEBERZAEHLIGE CLOSING-TAGS ===
+                const diff = closeCount - openCount;
+                
+                // Finde die Position(en) der ueberzaehligen Closing-Tags
+                const excessPositions = this._findExcessClosingTags(tag, diff);
+                
+                excessPositions.forEach(pos => {
+                    this.tagProblems.push({
+                        id: `TP${(this.tagProblems.length + 1).toString().padStart(2, '0')}`,
+                        type: 'EXCESS_CLOSING_TAG',
+                        tag: tag,
+                        message: `</${tag}> ist ${diff}x zu oft vorhanden (${closeCount} schliessend vs. ${openCount} oeffnend).`,
+                        position: pos.position,
+                        lineNumber: pos.lineNumber,
+                        snippet: pos.snippet,
+                        severity: 'warning',
+                        closingTag: `</${tag}>`
+                    });
+                });
             }
         });
 
-        if (fixed) {
-            this.addCheck(id, 'FIXED', 'Tag-Balancing korrigiert');
+        if (fixed && this.tagProblems.length > 0) {
+            this.addCheck(id, 'FIXED', `Tag-Balancing teilweise korrigiert (${this.tagProblems.length} Problem(e) offen)`);
+        } else if (fixed) {
+            this.addCheck(id, 'FIXED', 'Tag-Balancing korrigiert (smart positioniert)');
+        } else if (this.tagProblems.length > 0) {
+            this.addCheck(id, 'WARN', `Tag-Probleme erkannt: ${this.tagProblems.length} Problem(e)`);
         } else {
             this.addCheck(id, 'PASS', 'Tag-Balancing korrekt');
         }
+    }
+
+    // Hilfsfunktion: Finde die smarte Einfuegeposition fuer ein Closing-Tag
+    _findSmartInsertPosition(tagType, tagBoundaries) {
+        // Schritt 1: Finde das letzte ungeschlossene Opening-Tag
+        let depth = 0;
+        let lastUnmatchedOpenEnd = -1; // Position NACH dem letzten ungematchten <tag>
+        
+        for (let i = 0; i < this.html.length; i++) {
+            const remaining = this.html.substring(i);
+            
+            const openMatch = remaining.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
+            if (openMatch) {
+                depth++;
+                lastUnmatchedOpenEnd = i + openMatch[0].length;
+                i += openMatch[0].length - 1;
+                continue;
+            }
+            
+            const closeMatch = remaining.match(new RegExp(`^</${tagType}>`, 'i'));
+            if (closeMatch) {
+                depth--;
+                i += closeMatch[0].length - 1;
+            }
+        }
+        
+        if (lastUnmatchedOpenEnd === -1 || depth <= 0) {
+            return { found: false };
+        }
+        
+        // Schritt 2: Ab dem letzten ungematchten Tag → suche die naechste Boundary
+        const searchHtml = this.html.substring(lastUnmatchedOpenEnd);
+        let bestBoundaryPos = -1;
+        let bestBoundaryTag = null;
+        
+        for (const boundary of tagBoundaries) {
+            const pos = searchHtml.toLowerCase().indexOf(boundary.toLowerCase());
+            if (pos !== -1 && (bestBoundaryPos === -1 || pos < bestBoundaryPos)) {
+                bestBoundaryPos = pos;
+                bestBoundaryTag = boundary;
+            }
+        }
+        
+        if (bestBoundaryPos !== -1) {
+            // Pruefe ob zwischen dem offenen Tag und der Boundary schon ein Closing-Tag existiert
+            const betweenHtml = searchHtml.substring(0, bestBoundaryPos);
+            const existingClose = betweenHtml.match(new RegExp(`</${tagType}>`, 'i'));
+            
+            if (!existingClose) {
+                // Sicher: Einfuegen direkt VOR der Boundary
+                return {
+                    found: true,
+                    position: lastUnmatchedOpenEnd + bestBoundaryPos,
+                    confidence: 'high',
+                    boundaryTag: bestBoundaryTag,
+                    method: 'boundary'
+                };
+            } else {
+                // Es gibt schon ein Closing-Tag dazwischen → nicht eindeutig
+                // Fallback: direkt vor der Boundary, aber mit niedrigerer Konfidenz
+                return {
+                    found: true,
+                    position: lastUnmatchedOpenEnd + bestBoundaryPos,
+                    confidence: 'medium',
+                    boundaryTag: bestBoundaryTag,
+                    method: 'boundary-ambiguous'
+                };
+            }
+        }
+        
+        // Fallback: Am Ende einfuegen (wie vorher, aber als low confidence markiert)
+        return {
+            found: true,
+            position: this.html.length,
+            confidence: 'low',
+            boundaryTag: null,
+            method: 'end-of-file'
+        };
+    }
+    
+    // Hilfsfunktion: Finde ueberzaehlige Closing-Tags
+    _findExcessClosingTags(tagType, excessCount) {
+        const results = [];
+        const closeRegex = new RegExp(`</${tagType}>`, 'gi');
+        const openRegex = new RegExp(`<${tagType}[^>]*>`, 'gi');
+        
+        // Zaehle von Anfang bis Ende mit Stack-Logik
+        let depth = 0;
+        
+        for (let i = 0; i < this.html.length; i++) {
+            const remaining = this.html.substring(i);
+            
+            const openMatch = remaining.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
+            if (openMatch) {
+                depth++;
+                i += openMatch[0].length - 1;
+                continue;
+            }
+            
+            const closeMatch = remaining.match(new RegExp(`^</${tagType}>`, 'i'));
+            if (closeMatch) {
+                depth--;
+                if (depth < 0) {
+                    // Dieses Closing-Tag hat kein passendes Opening → ueberzaehlig
+                    const lines = this.html.substring(0, i).split('\n');
+                    const lineNumber = lines.length;
+                    const allLines = this.html.split('\n');
+                    const snippetStart = Math.max(0, lineNumber - 3);
+                    const snippetEnd = Math.min(allLines.length, lineNumber + 3);
+                    const snippet = allLines.slice(snippetStart, snippetEnd).join('\n');
+                    
+                    results.push({
+                        position: i,
+                        lineNumber: lineNumber,
+                        snippet: snippet
+                    });
+                    
+                    depth = 0; // Reset fuer naechstes ueberzaehliges
+                    
+                    if (results.length >= excessCount) break;
+                }
+                i += closeMatch[0].length - 1;
+            }
+        }
+        
+        return results;
     }
 
     // P08/P09: Image Alt-Attribute (Erweitert)
@@ -1262,7 +1449,8 @@ class TemplateProcessor {
             report: report,
             unresolved: unresolved,
             status: status,
-            autoFixes: this.autoFixes || []  // Auto-Fixes mitgeben
+            autoFixes: this.autoFixes || [],  // Auto-Fixes mitgeben
+            tagProblems: this.tagProblems || []  // Offene Tag-Probleme mitgeben
         };
     }
 
@@ -1679,7 +1867,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 reportContent += `\n\nAUTO_FIXES_COUNT=${processingResult.autoFixes.length}\n`;
                 reportContent += `AUTO_FIXES:\n`;
                 processingResult.autoFixes.forEach(fix => {
-                    reportContent += `${fix.id}_${fix.type} - tag=<${fix.tag}> inserted=${fix.inserted} bei Position ${fix.insertPosition}\n`;
+                    reportContent += `${fix.id}_${fix.type} - tag=<${fix.tag}> inserted=${fix.inserted} bei Position ${fix.insertPosition} [${fix.confidence || 'unknown'}] method=${fix.method || 'legacy'}\n`;
+                });
+            }
+            
+            // Prüfe ob tagProblems existiert
+            if (processingResult.tagProblems && processingResult.tagProblems.length > 0) {
+                reportContent += `\n\nTAG_PROBLEMS_COUNT=${processingResult.tagProblems.length}\n`;
+                reportContent += `TAG_PROBLEMS:\n`;
+                processingResult.tagProblems.forEach(problem => {
+                    reportContent += `${problem.id}_${problem.type} - tag=<${problem.tag}> ${problem.message}\n`;
                 });
             }
             
@@ -6946,59 +7143,172 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ============================================
-    // PHASE 5: TAG-REVIEW TAB IMPLEMENTATION
+    // PHASE 5: TAG-REVIEW TAB IMPLEMENTATION (v2 - Komplettuebersicht)
     // ============================================
     
-    // Zeige Tag-Review Tab Content
+    // Zeige Tag-Review Tab Content - NEUE VERSION mit 3 Sektionen
     function showTagReviewTab(tagreviewContent) {
         if (!tagreviewContent) return;
         
-        console.log('[INSPECTOR] Rendering Tag-Review Tab...');
+        console.log('[INSPECTOR] Rendering Tag-Review Tab v2...');
         
-        // Hole autoFixes aus processingResult
+        // Daten sammeln
         const autoFixes = (processingResult && processingResult.autoFixes) ? processingResult.autoFixes : [];
-        
-        // Hole manualActionLog (falls vorhanden)
+        const tagProblems = (processingResult && processingResult.tagProblems) ? processingResult.tagProblems : [];
         const manualActions = (typeof manualActionLog !== 'undefined') ? manualActionLog : [];
         
-        // Render Tag-Review Tab
+        // Zaehler
+        const fixCount = autoFixes.length;
+        const problemCount = tagProblems.length;
+        const highConfCount = autoFixes.filter(f => f.confidence === 'high').length;
+        const medConfCount = autoFixes.filter(f => f.confidence === 'medium').length;
+        const lowConfCount = autoFixes.filter(f => f.confidence === 'low').length;
+        const excessCount = tagProblems.filter(p => p.type === 'EXCESS_CLOSING_TAG').length;
+        const unclosedCount = tagProblems.filter(p => p.type === 'UNCLOSED_TAG').length;
+        
         let html = '<div class="tagreview-tab-content">';
         
-        // Sektion A: Automatisch geschlossene Tags
-        html += '<div class="tagreview-section">';
-        html += '<h3>⚙️ Automatisch geschlossene Tags (' + autoFixes.length + ')</h3>';
+        // ========================================
+        // SEKTION 1: ZUSAMMENFASSUNG (Status-Bar)
+        // ========================================
+        const allGood = fixCount === 0 && problemCount === 0;
+        const statusClass = allGood ? 'summary-ok' : (problemCount > 0 ? 'summary-warn' : 'summary-info');
         
-        if (autoFixes.length === 0) {
-            html += '<p class="tagreview-empty">✅ Keine automatischen Tag-Schließungen durchgeführt.</p>';
+        html += '<div class="tagreview-summary ' + statusClass + '">';
+        html += '<div class="tagreview-summary-title">';
+        if (allGood) {
+            html += '✅ Tag-Balancing: Alles in Ordnung';
+        } else if (problemCount > 0 && fixCount > 0) {
+            html += '⚠️ Tag-Balancing: ' + fixCount + ' Auto-Fix(es), ' + problemCount + ' offene(s) Problem(e)';
+        } else if (fixCount > 0) {
+            html += '⚙️ Tag-Balancing: ' + fixCount + ' Tag(s) automatisch korrigiert';
+        } else {
+            html += '⚠️ Tag-Balancing: ' + problemCount + ' Problem(e) erkannt';
+        }
+        html += '</div>';
+        
+        // Detail-Chips
+        if (!allGood) {
+            html += '<div class="tagreview-summary-chips">';
+            if (highConfCount > 0) html += '<span class="chip chip-high">' + highConfCount + '× sicher gefixt</span>';
+            if (medConfCount > 0) html += '<span class="chip chip-medium">' + medConfCount + '× bitte prüfen</span>';
+            if (lowConfCount > 0) html += '<span class="chip chip-low">' + lowConfCount + '× unsicher (Dateiende)</span>';
+            if (excessCount > 0) html += '<span class="chip chip-excess">' + excessCount + '× überzähliges Tag</span>';
+            if (unclosedCount > 0) html += '<span class="chip chip-unclosed">' + unclosedCount + '× nicht schließbar</span>';
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        // ========================================
+        // SEKTION 2: AUTOMATISCHE FIXES
+        // ========================================
+        html += '<div class="tagreview-section">';
+        html += '<h3 class="tagreview-section-title">⚙️ Automatisch geschlossene Tags (' + fixCount + ')</h3>';
+        
+        if (fixCount === 0) {
+            html += '<p class="tagreview-empty">Keine automatischen Tag-Schließungen nötig.</p>';
         } else {
             html += '<div class="tagreview-fixes-list">';
             autoFixes.forEach(fix => {
-                html += '<div class="tagreview-fix-item" data-fix-id="' + fix.id + '">';
+                // Konfidenz-Farbe und Label
+                const confLabel = fix.confidence === 'high' ? '✅ Sicher' : (fix.confidence === 'medium' ? '⚠️ Prüfen' : '❓ Unsicher');
+                const confClass = 'conf-' + (fix.confidence || 'high');
+                const methodLabel = fix.method === 'boundary' ? 'Vor ' + escapeHtml(fix.boundaryTag || '') + ' eingefügt' :
+                                   (fix.method === 'boundary-ambiguous' ? 'Vor ' + escapeHtml(fix.boundaryTag || '') + ' (mehrdeutig)' :
+                                   'Am Dateiende eingefügt (Fallback)');
+                
+                html += '<div class="tagreview-fix-item ' + confClass + '" data-fix-id="' + fix.id + '">';
+                
+                // Header-Zeile: ID + Tag + Konfidenz
                 html += '<div class="tagreview-fix-header">';
                 html += '<span class="tagreview-fix-id">' + fix.id + '</span>';
-                html += '<span class="tagreview-fix-tag">' + escapeHtml(fix.inserted) + '</span>';
+                html += '<span class="tagreview-fix-tag">&lt;/' + escapeHtml(fix.tag) + '&gt;</span>';
+                html += '<span class="tagreview-conf-badge ' + confClass + '">' + confLabel + '</span>';
                 html += '</div>';
+                
+                // Details
                 html += '<div class="tagreview-fix-details">';
-                html += '<strong>Tag-Typ:</strong> &lt;' + escapeHtml(fix.tag) + '&gt;<br>';
-                html += '<strong>Position:</strong> ' + fix.insertPosition;
+                html += '<span class="tagreview-detail-label">Methode:</span> ' + methodLabel + '<br>';
+                html += '<span class="tagreview-detail-label">Position:</span> Zeichen ' + fix.insertPosition;
                 html += '</div>';
+                
+                // Code-Snippet
                 html += '<div class="tagreview-fix-snippet">';
-                html += '<pre>' + escapeHtml(fix.snippetBefore) + '<span style="background:#4caf50;color:white;">' + escapeHtml(fix.inserted) + '</span></pre>';
+                html += '<pre>' + escapeHtml(fix.snippetBefore) + '</pre>';
                 html += '</div>';
+                
+                // Buttons
                 html += '<div class="tagreview-fix-actions">';
-                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Undo</button>';
+                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Rückgängig</button>';
                 html += '<button class="btn-tagreview-keep" data-fix-id="' + fix.id + '">✓ Behalten</button>';
                 html += '</div>';
+                
                 html += '</div>';
             });
             html += '</div>';
         }
         html += '</div>';
         
-        // Sektion B: Manuelle Aktionen
+        // ========================================
+        // SEKTION 3: OFFENE PROBLEME
+        // ========================================
+        html += '<div class="tagreview-section">';
+        html += '<h3 class="tagreview-section-title">🔍 Offene Probleme (' + problemCount + ')</h3>';
+        
+        if (problemCount === 0) {
+            html += '<p class="tagreview-empty">Keine offenen Probleme – alles wurde automatisch gelöst.</p>';
+        } else {
+            html += '<div class="tagreview-problems-list">';
+            tagProblems.forEach(problem => {
+                const isExcess = problem.type === 'EXCESS_CLOSING_TAG';
+                const iconLabel = isExcess ? '🔴 Überzähliges Closing-Tag' : '🟡 Nicht geschlossenes Tag';
+                
+                html += '<div class="tagreview-problem-item" data-problem-id="' + problem.id + '">';
+                
+                // Header
+                html += '<div class="tagreview-problem-header">';
+                html += '<span class="tagreview-problem-id">' + problem.id + '</span>';
+                html += '<span class="tagreview-problem-type">' + iconLabel + '</span>';
+                html += '</div>';
+                
+                // Beschreibung
+                html += '<div class="tagreview-problem-details">';
+                html += '<span class="tagreview-detail-label">Tag:</span> &lt;' + escapeHtml(problem.tag) + '&gt;<br>';
+                html += '<span class="tagreview-detail-label">Problem:</span> ' + escapeHtml(problem.message);
+                if (problem.lineNumber) {
+                    html += '<br><span class="tagreview-detail-label">Zeile:</span> ' + problem.lineNumber;
+                }
+                html += '</div>';
+                
+                // Snippet (falls vorhanden)
+                if (problem.snippet) {
+                    html += '<div class="tagreview-fix-snippet">';
+                    html += '<pre>' + escapeHtml(problem.snippet) + '</pre>';
+                    html += '</div>';
+                }
+                
+                // Aktions-Buttons
+                html += '<div class="tagreview-fix-actions">';
+                if (isExcess) {
+                    html += '<button class="btn-tagreview-remove" data-problem-id="' + problem.id + '" data-tag="' + escapeHtml(problem.tag) + '" data-position="' + (problem.position || '') + '">🗑️ Tag entfernen</button>';
+                } else {
+                    html += '<button class="btn-tagreview-manual-close" data-problem-id="' + problem.id + '" data-tag="' + escapeHtml(problem.tag) + '">+ Tag schließen</button>';
+                }
+                html += '<button class="btn-tagreview-ignore" data-problem-id="' + problem.id + '">Ignorieren</button>';
+                html += '</div>';
+                
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+        
+        // ========================================
+        // SEKTION 4: MANUELLE AKTIONEN (Log)
+        // ========================================
         if (manualActions.length > 0) {
             html += '<div class="tagreview-section">';
-            html += '<h3>📝 Manuelle Aktionen (' + manualActions.length + ')</h3>';
+            html += '<h3 class="tagreview-section-title">📝 Aktions-Protokoll (' + manualActions.length + ')</h3>';
             html += '<div class="tagreview-actions-list">';
             manualActions.forEach((action, index) => {
                 html += '<div class="tagreview-action-item">';
@@ -7014,34 +7324,31 @@ document.addEventListener('DOMContentLoaded', () => {
         
         tagreviewContent.innerHTML = html;
         
-        // Event Listener für Fix-Klicks (Locate)
+        // Event Listener binden
         attachTagReviewFixListeners(autoFixes);
-        
-        // Event Listener für Undo/Keep Buttons
         attachTagReviewActionListeners(autoFixes);
+        attachTagReviewProblemListeners(tagProblems);
     }
     
-    // Event Listener für Fix-Klicks (Locate)
+    // Event Listener fuer Fix-Klicks (Locate in Preview)
     function attachTagReviewFixListeners(autoFixes) {
         const fixItems = document.querySelectorAll('.tagreview-fix-item');
-        
         fixItems.forEach(item => {
             item.addEventListener('click', function(e) {
-                // Nur wenn nicht auf Button geklickt wurde
                 if (e.target.tagName === 'BUTTON') return;
-                
                 const fixId = this.getAttribute('data-fix-id');
                 console.log('[INSPECTOR] Fix clicked:', fixId);
-                highlightFixInPreview(fixId);
+                // Highlight: alle Items deaktivieren, dieses aktivieren
+                document.querySelectorAll('.tagreview-fix-item, .tagreview-problem-item').forEach(el => el.classList.remove('selected'));
+                this.classList.add('selected');
             });
         });
     }
     
-    // Event Listener für Undo/Keep Buttons
+    // Event Listener fuer Undo/Keep Buttons bei Auto-Fixes
     function attachTagReviewActionListeners(autoFixes) {
         // Undo Buttons
-        const undoButtons = document.querySelectorAll('.btn-tagreview-undo');
-        undoButtons.forEach(btn => {
+        document.querySelectorAll('.btn-tagreview-undo').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const fixId = this.getAttribute('data-fix-id');
@@ -7053,12 +7360,45 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Keep Buttons
-        const keepButtons = document.querySelectorAll('.btn-tagreview-keep');
-        keepButtons.forEach(btn => {
+        document.querySelectorAll('.btn-tagreview-keep').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const fixId = this.getAttribute('data-fix-id');
                 keepTagReviewFix(this.closest('.tagreview-fix-item'), fixId);
+            });
+        });
+    }
+    
+    // Event Listener fuer Problem-Buttons (Entfernen, Manuell Schliessen, Ignorieren)
+    function attachTagReviewProblemListeners(tagProblems) {
+        // Überzähliges Tag entfernen
+        document.querySelectorAll('.btn-tagreview-remove').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const problemId = this.getAttribute('data-problem-id');
+                const tag = this.getAttribute('data-tag');
+                const position = parseInt(this.getAttribute('data-position'));
+                removeExcessClosingTag(tag, position, this.closest('.tagreview-problem-item'), problemId);
+            });
+        });
+        
+        // Manuell Tag schließen (Boundary-Logik)
+        document.querySelectorAll('.btn-tagreview-manual-close').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const problemId = this.getAttribute('data-problem-id');
+                const tag = this.getAttribute('data-tag');
+                manualCloseTag(tag, this.closest('.tagreview-problem-item'), problemId);
+            });
+        });
+        
+        // Ignorieren
+        document.querySelectorAll('.btn-tagreview-ignore').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const problemId = this.getAttribute('data-problem-id');
+                const element = this.closest('.tagreview-problem-item');
+                ignoreProblem(element, problemId);
             });
         });
     }
@@ -7072,7 +7412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const index = currentWorkingHtml.indexOf(searchPattern);
         
         if (index === -1) {
-            showInspectorToast('❌ Fehler: Fix konnte nicht rückgängig gemacht werden.');
+            showInspectorToast('❌ Fix konnte nicht rückgängig gemacht werden (Kontext nicht gefunden).');
             return;
         }
         
@@ -7081,66 +7421,173 @@ document.addEventListener('DOMContentLoaded', () => {
         const after = currentWorkingHtml.substring(index + fix.beforeCtx.length + fix.inserted.length);
         currentWorkingHtml = before + after;
         
-        // Log (falls manualActionLog existiert)
+        // Log
         if (typeof manualActionLog !== 'undefined') {
-            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_UNDONE - ${fix.id} rückgängig gemacht (Inspector)`;
-            manualActionLog.push(logEntry);
+            manualActionLog.push('R' + String(manualActionLog.length + 1).padStart(2, '0') + '_AUTO_FIX_UNDONE - ' + fix.id + ' rückgängig gemacht');
         }
         
         // Update UI
-        fixElement.style.opacity = '0.3';
-        fixElement.style.backgroundColor = '#ffebee';
+        fixElement.classList.add('undone');
         fixElement.querySelectorAll('button').forEach(btn => btn.disabled = true);
         
-        // Markierung
-        const undoneLabel = document.createElement('span');
-        undoneLabel.textContent = '↶ Rückgängig gemacht';
-        undoneLabel.style.color = '#f44336';
-        undoneLabel.style.fontWeight = 'bold';
-        undoneLabel.style.marginLeft = '10px';
-        fixElement.querySelector('.tagreview-fix-header').appendChild(undoneLabel);
+        const label = document.createElement('span');
+        label.className = 'tagreview-status-label status-undone';
+        label.textContent = '↶ Rückgängig gemacht';
+        fixElement.querySelector('.tagreview-fix-header').appendChild(label);
         
-        // Update Preview
         updateInspectorPreview();
+        showInspectorToast('↶ ' + fix.id + ' rückgängig gemacht');
     }
     
     // Keep Tag-Review Fix
     function keepTagReviewFix(fixElement, fixId) {
         console.log('[INSPECTOR] Keep fix:', fixId);
         
-        // Log (falls manualActionLog existiert)
         if (typeof manualActionLog !== 'undefined') {
-            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_AUTO_FIX_ACCEPTED - ${fixId} akzeptiert (Inspector)`;
-            manualActionLog.push(logEntry);
+            manualActionLog.push('R' + String(manualActionLog.length + 1).padStart(2, '0') + '_AUTO_FIX_ACCEPTED - ' + fixId + ' akzeptiert');
         }
         
-        // Update UI
-        fixElement.style.opacity = '0.6';
-        fixElement.style.backgroundColor = '#e8f5e9';
+        fixElement.classList.add('accepted');
         fixElement.querySelectorAll('button').forEach(btn => btn.disabled = true);
         
-        // Markierung
-        const acceptedLabel = document.createElement('span');
-        acceptedLabel.textContent = '✓ Akzeptiert';
-        acceptedLabel.style.color = '#4caf50';
-        acceptedLabel.style.fontWeight = 'bold';
-        acceptedLabel.style.marginLeft = '10px';
-        fixElement.querySelector('.tagreview-fix-header').appendChild(acceptedLabel);
+        const label = document.createElement('span');
+        label.className = 'tagreview-status-label status-accepted';
+        label.textContent = '✓ Akzeptiert';
+        fixElement.querySelector('.tagreview-fix-header').appendChild(label);
+        
+        showInspectorToast('✓ ' + fixId + ' akzeptiert');
     }
     
-    // Highlight Fix in Preview
-    function highlightFixInPreview(fixId) {
-        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
-            console.error('[INSPECTOR] Preview iframe not ready');
+    // Überzähliges Closing-Tag entfernen
+    function removeExcessClosingTag(tag, position, element, problemId) {
+        console.log('[INSPECTOR] Remove excess closing tag:', tag, 'at', position);
+        
+        const closingTag = '</' + tag + '>';
+        
+        // Suche das Closing-Tag ab der ungefaehren Position
+        // (Position kann sich durch vorherige Aenderungen leicht verschoben haben)
+        const searchStart = Math.max(0, position - 50);
+        const searchArea = currentWorkingHtml.substring(searchStart);
+        const idx = searchArea.toLowerCase().indexOf(closingTag.toLowerCase());
+        
+        if (idx === -1) {
+            showInspectorToast('❌ Tag konnte nicht gefunden werden.');
             return;
         }
         
-        console.log('[INSPECTOR] Sending highlight message for fix:', fixId);
+        const actualPos = searchStart + idx;
+        currentWorkingHtml = currentWorkingHtml.substring(0, actualPos) + currentWorkingHtml.substring(actualPos + closingTag.length);
         
-        inspectorPreviewFrame.contentWindow.postMessage({
-            type: 'HIGHLIGHT_FIX',
-            id: fixId
-        }, '*');
+        if (typeof manualActionLog !== 'undefined') {
+            manualActionLog.push('R' + String(manualActionLog.length + 1).padStart(2, '0') + '_EXCESS_TAG_REMOVED - </' + tag + '> entfernt (' + problemId + ')');
+        }
+        
+        element.classList.add('resolved');
+        element.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        
+        const label = document.createElement('span');
+        label.className = 'tagreview-status-label status-resolved';
+        label.textContent = '🗑️ Entfernt';
+        element.querySelector('.tagreview-problem-header').appendChild(label);
+        
+        updateInspectorPreview();
+        showInspectorToast('🗑️ Überzähliges </' + tag + '> entfernt');
+    }
+    
+    // Manuell Tag schließen (nutzt Boundary-Logik)
+    function manualCloseTag(tag, element, problemId) {
+        console.log('[INSPECTOR] Manual close tag:', tag);
+        
+        const boundaries = {
+            'a':     ['</td>', '</tr>', '</table>', '</div>', '</body>'],
+            'td':    ['</tr>', '</table>', '</body>'],
+            'tr':    ['</table>', '</body>'],
+            'table': ['</body>', '</html>'],
+            'div':   ['</td>', '</tr>', '</table>', '</body>', '</html>']
+        };
+        
+        const tagBoundaries = boundaries[tag] || ['</body>'];
+        
+        // Finde letztes ungeschlossenes Tag
+        let depth = 0;
+        let lastOpenEnd = -1;
+        
+        for (let i = 0; i < currentWorkingHtml.length; i++) {
+            const remaining = currentWorkingHtml.substring(i);
+            const openMatch = remaining.match(new RegExp('^<' + tag + '[^>]*>', 'i'));
+            if (openMatch) {
+                depth++;
+                lastOpenEnd = i + openMatch[0].length;
+                i += openMatch[0].length - 1;
+                continue;
+            }
+            const closeMatch = remaining.match(new RegExp('^</' + tag + '>', 'i'));
+            if (closeMatch) {
+                depth--;
+                i += closeMatch[0].length - 1;
+            }
+        }
+        
+        if (lastOpenEnd === -1 || depth <= 0) {
+            showInspectorToast('⚠️ Kein offenes <' + tag + '> Tag gefunden.');
+            return;
+        }
+        
+        // Suche naechste Boundary
+        const searchHtml = currentWorkingHtml.substring(lastOpenEnd);
+        let bestPos = -1;
+        let bestBoundary = null;
+        
+        for (const boundary of tagBoundaries) {
+            const pos = searchHtml.toLowerCase().indexOf(boundary.toLowerCase());
+            if (pos !== -1 && (bestPos === -1 || pos < bestPos)) {
+                bestPos = pos;
+                bestBoundary = boundary;
+            }
+        }
+        
+        let insertPos;
+        if (bestPos !== -1) {
+            insertPos = lastOpenEnd + bestPos;
+        } else {
+            insertPos = currentWorkingHtml.length;
+        }
+        
+        currentWorkingHtml = currentWorkingHtml.substring(0, insertPos) + '</' + tag + '>' + currentWorkingHtml.substring(insertPos);
+        
+        if (typeof manualActionLog !== 'undefined') {
+            manualActionLog.push('R' + String(manualActionLog.length + 1).padStart(2, '0') + '_MANUAL_TAG_CLOSE - <' + tag + '> manuell geschlossen (' + problemId + ')');
+        }
+        
+        element.classList.add('resolved');
+        element.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        
+        const label = document.createElement('span');
+        label.className = 'tagreview-status-label status-resolved';
+        label.textContent = '✓ Geschlossen';
+        element.querySelector('.tagreview-problem-header').appendChild(label);
+        
+        updateInspectorPreview();
+        showInspectorToast('✓ <' + tag + '> manuell geschlossen' + (bestBoundary ? ' (vor ' + bestBoundary + ')' : ''));
+    }
+    
+    // Problem ignorieren
+    function ignoreProblem(element, problemId) {
+        console.log('[INSPECTOR] Ignore problem:', problemId);
+        
+        if (typeof manualActionLog !== 'undefined') {
+            manualActionLog.push('R' + String(manualActionLog.length + 1).padStart(2, '0') + '_PROBLEM_IGNORED - ' + problemId + ' ignoriert');
+        }
+        
+        element.classList.add('ignored');
+        element.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        
+        const label = document.createElement('span');
+        label.className = 'tagreview-status-label status-ignored';
+        label.textContent = '– Ignoriert';
+        element.querySelector('.tagreview-problem-header').appendChild(label);
+        
+        showInspectorToast('– ' + problemId + ' ignoriert');
     }
     
     // ============================================
