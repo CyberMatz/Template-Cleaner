@@ -518,7 +518,8 @@ class TemplateProcessor {
                             boundaryTag: result.boundary,
                             method: result.confidence === 'high' ? 'boundary' : (result.confidence === 'medium' ? 'boundary-ambiguous' : 'end-of-file'),
                             openTagLine: result.openTagLine,
-                            openTagSnippet: result.openTagSnippet
+                            openTagSnippet: result.openTagSnippet,
+                            openTagContext: result.openTagContext
                         });
                         
                         // Tag an der smarten Position einfuegen
@@ -671,11 +672,17 @@ class TemplateProcessor {
         const origOpenPos = this._cleanPosToOriginalPos(unclosed.pos);
         const openTagLine = this.html.substring(0, origOpenPos).split('\n').length;
         
-        // Snippet des offenen Tags
+        // Snippet des offenen Tags (fuer Anzeige: kurz)
         const origOpenEnd = this._cleanPosToOriginalPos(unclosed.end);
         const openTagSnippet = this.html.substring(
             Math.max(0, origOpenPos - 40), 
             Math.min(this.html.length, origOpenEnd + 40)
+        );
+        
+        // Kontext des offenen Tags (fuer Locate: groesser, enthaelt sichtbaren Text)
+        const openTagContext = this.html.substring(
+            origOpenEnd, 
+            Math.min(this.html.length, origOpenEnd + 500)
         );
         
         return {
@@ -683,7 +690,8 @@ class TemplateProcessor {
             confidence: confidence,
             boundary: bestBoundary,
             openTagLine: openTagLine,
-            openTagSnippet: openTagSnippet
+            openTagSnippet: openTagSnippet,
+            openTagContext: openTagContext
         };
     }
     
@@ -7356,7 +7364,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Buttons
                 html += '<div class="tagreview-fix-actions">';
-                html += '<button class="btn-tagreview-locate" data-fix-id="' + fix.id + '" data-tag="' + escapeHtml(fix.tag) + '" data-position="' + fix.insertPosition + '">👁️ Locate</button>';
+                if (fix.tag === 'td' || fix.tag === 'a') {
+                    html += '<button class="btn-tagreview-locate" data-fix-id="' + fix.id + '" data-tag="' + escapeHtml(fix.tag) + '" data-position="' + fix.insertPosition + '">👁️ Locate</button>';
+                }
                 html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Rückgängig</button>';
                 html += '</div>';
                 
@@ -7406,7 +7416,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Aktions-Buttons
                 html += '<div class="tagreview-fix-actions">';
-                html += '<button class="btn-tagreview-locate" data-tag="' + escapeHtml(problem.tag) + '" data-position="' + (problem.position || '') + '">👁️ Locate</button>';
+                if (problem.tag === 'td' || problem.tag === 'a') {
+                    html += '<button class="btn-tagreview-locate" data-tag="' + escapeHtml(problem.tag) + '" data-position="' + (problem.position || '') + '">👁️ Locate</button>';
+                }
                 if (isExcess) {
                     html += '<button class="btn-tagreview-remove" data-problem-id="' + problem.id + '" data-tag="' + escapeHtml(problem.tag) + '" data-position="' + (problem.position || '') + '">🗑️ Tag entfernen</button>';
                 } else {
@@ -7483,7 +7495,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 const tag = this.getAttribute('data-tag');
                 const position = parseInt(this.getAttribute('data-position')) || 0;
-                locateTagInPreview(tag, position);
+                const fixId = this.getAttribute('data-fix-id');
+                
+                // Wenn es ein Fix ist, nutze den Kontext vom OFFENEN Tag (nicht von der Einfügestelle)
+                let contextHint = '';
+                if (fixId) {
+                    const fix = autoFixes.find(f => f.id === fixId);
+                    if (fix && fix.openTagContext) {
+                        contextHint = fix.openTagContext;
+                    } else if (fix && fix.openTagSnippet) {
+                        contextHint = fix.openTagSnippet;
+                    } else if (fix && fix.beforeCtx) {
+                        contextHint = fix.beforeCtx;
+                    }
+                }
+                
+                locateTagInPreview(tag, position, contextHint);
             });
         });
     }
@@ -7560,7 +7587,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Keep Tag-Review Fix
     // Tag in der Vorschau lokalisieren und hervorheben
-    function locateTagInPreview(tag, position) {
+    function locateTagInPreview(tag, position, contextHint) {
         if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
             showInspectorToast('⚠️ Vorschau nicht verfügbar');
             return;
@@ -7568,16 +7595,22 @@ document.addEventListener('DOMContentLoaded', () => {
         
         console.log('[INSPECTOR] Locate tag in preview:', tag, 'near position:', position);
         
-        // Sende Nachricht an Iframe mit Position und Tag-Info
+        // Kontext bestimmen: Bevorzuge contextHint (vom offenen Tag), sonst Umgebung der Position
+        let contextText = contextHint || '';
+        if (!contextText && currentWorkingHtml) {
+            // Nimm Kontext VOR der Position (dort ist der relevante Inhalt)
+            contextText = currentWorkingHtml.substring(
+                Math.max(0, position - 400), 
+                position
+            );
+        }
+        
+        // Sende Nachricht an Iframe
         inspectorPreviewFrame.contentWindow.postMessage({
             type: 'HIGHLIGHT_TAG',
             tag: tag,
             position: position,
-            // Sende auch den umliegenden Text als Hilfe zur Lokalisierung
-            contextText: (currentWorkingHtml || '').substring(
-                Math.max(0, position - 200), 
-                Math.min((currentWorkingHtml || '').length, position + 200)
-            ),
+            contextText: contextText,
             htmlLength: (currentWorkingHtml || '').length
         }, '*');
     }
