@@ -6165,6 +6165,28 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render Bilder Tab
         let html = '<div class="images-tab-content">';
         
+        // Sektion 0: Bild-Upload
+        html += '<div class="images-section images-upload-section">';
+        html += '<h3>⬆️ Bild hochladen</h3>';
+        html += '<div class="upload-status" id="imageUploadStatus">';
+        html += '<span class="upload-status-dot disconnected"></span>';
+        html += '<span>Upload-Server wird geprüft...</span>';
+        html += '</div>';
+        html += '<div class="upload-dropzone" id="imageDropZone">';
+        html += '<div class="upload-dropzone-content">';
+        html += '<span class="upload-dropzone-icon">📁</span>';
+        html += '<span>Bilder hierher ziehen oder <label for="imageFileInput" class="upload-browse-link">durchsuchen</label></span>';
+        html += '<input type="file" id="imageFileInput" multiple accept="image/*" style="display:none">';
+        html += '</div>';
+        html += '</div>';
+        html += '<div class="upload-options">';
+        html += '<label>Ordner: </label>';
+        html += '<input type="text" id="imageUploadFolder" class="upload-folder-input" placeholder="auto (' + getTodayFolderName() + ')">';
+        html += '<button class="btn-small" id="btnNewFolder" title="Neuen Ordner erzwingen (mit _1, _2...)">+ Neu</button>';
+        html += '</div>';
+        html += '<div class="upload-results" id="imageUploadResults"></div>';
+        html += '</div>';
+        
         // Sektion 1: IMG src
         html += '<div class="images-section">';
         html += '<h3>🖼️ IMG src (' + images.length + ')</h3>';
@@ -6261,6 +6283,26 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '<p class="images-note">ℹ️ Background Images sind read-only.</p>';
             html += '</div>';
         }
+        
+        // Sektion 3: Bild-Upload
+        html += '<div class="images-section images-upload-section">';
+        html += '<h3>📤 Bild hochladen</h3>';
+        html += '<div id="imageUploadStatus" class="image-upload-status"></div>';
+        html += '<div class="image-upload-folder-row">';
+        html += '<label>Ordner:</label>';
+        html += '<input type="text" id="imageUploadFolder" class="image-upload-folder-input" value="' + getTodayFolderName() + '" placeholder="z.B. 260220">';
+        html += '<button id="btnNewFolder" class="btn-small" title="Neuen _N Ordner erzwingen">Neu</button>';
+        html += '</div>';
+        html += '<div id="imageDropZone" class="image-drop-zone">';
+        html += '<div class="image-drop-zone-inner">';
+        html += '<span class="image-drop-icon">📁</span>';
+        html += '<p>Bilder hierher ziehen<br><small>oder klicken zum Auswählen</small></p>';
+        html += '<input type="file" id="imageFileInput" multiple accept="image/*" style="display:none;">';
+        html += '</div>';
+        html += '</div>';
+        html += '<div id="imageUploadResults" class="image-upload-results"></div>';
+        
+        html += '</div>';
         
         // Undo Button
         if (imagesHistory.length > 0) {
@@ -6621,6 +6663,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (commitBtn) {
             commitBtn.addEventListener('click', handleImagesCommit);
         }
+        
+        // Upload-Bereich
+        attachUploadListeners();
     }
     
     // Phase 10: Check if images tab has pending changes
@@ -7014,6 +7059,246 @@ document.addEventListener('DOMContentLoaded', () => {
         
         showInspectorToast('📏 ' + imgId + ' Padding → ' + padding.top + '/' + padding.right + '/' + padding.bottom + '/' + padding.left + 'px');
         console.log('[INSPECTOR] Image padding changed:', imgId, padding);
+    }
+    
+    // ============================================
+    // IMAGE UPLOAD SERVER INTEGRATION
+    // ============================================
+    
+    const IMAGE_UPLOAD_SERVER = 'http://localhost:3456';
+    
+    function getTodayFolderName() {
+        const now = new Date();
+        const yy = String(now.getFullYear()).slice(2);
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        return yy + mm + dd;
+    }
+    
+    // Prüfe ob der Upload-Server läuft
+    async function checkUploadServerStatus() {
+        const statusEl = document.getElementById('imageUploadStatus');
+        if (!statusEl) return;
+        
+        try {
+            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/status', { signal: AbortSignal.timeout(2000) });
+            if (resp.ok) {
+                const data = await resp.json();
+                statusEl.innerHTML = '<span class="upload-status-ok">✅ Upload-Server verbunden</span>';
+                statusEl.classList.remove('upload-status-error');
+                statusEl.classList.add('upload-status-connected');
+                
+                // Drop-Zone aktivieren
+                const dropZone = document.getElementById('imageDropZone');
+                if (dropZone) dropZone.classList.remove('disabled');
+                
+                return true;
+            }
+        } catch (err) {
+            // Server nicht erreichbar
+        }
+        
+        statusEl.innerHTML = '<span class="upload-status-err">⚠️ Upload-Server nicht erreichbar</span>'
+            + '<div class="upload-status-help">Starte den Upload-Server: <code>start.bat</code> im Ordner <code>upload-server/</code></div>';
+        statusEl.classList.add('upload-status-error');
+        statusEl.classList.remove('upload-status-connected');
+        
+        // Drop-Zone deaktivieren
+        const dropZone = document.getElementById('imageDropZone');
+        if (dropZone) dropZone.classList.add('disabled');
+        
+        return false;
+    }
+    
+    // Bild(er) hochladen
+    async function uploadImages(files, forceNewFolder) {
+        const statusEl = document.getElementById('imageUploadStatus');
+        const resultsEl = document.getElementById('imageUploadResults');
+        const folderInput = document.getElementById('imageUploadFolder');
+        const folder = folderInput ? folderInput.value.trim() : getTodayFolderName();
+        
+        if (!files || files.length === 0) return;
+        
+        // Status: Uploading
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="upload-status-uploading">⏳ Lade ' + files.length + ' Bild(er) hoch...</span>';
+        }
+        
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+        formData.append('folder', folder);
+        if (forceNewFolder) formData.append('newFolder', 'true');
+        
+        try {
+            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.error || 'Upload fehlgeschlagen');
+            }
+            
+            const data = await resp.json();
+            
+            // Erfolg anzeigen
+            if (statusEl) {
+                statusEl.innerHTML = '<span class="upload-status-ok">✅ ' + data.files.length + ' Bild(er) hochgeladen in <strong>' + data.folder + '</strong></span>';
+            }
+            
+            // Ordner-Input aktualisieren (falls Server neuen _N Ordner erstellt hat)
+            if (folderInput) folderInput.value = data.folder;
+            
+            // Ergebnisse anzeigen mit URLs und "Einsetzen"-Buttons
+            if (resultsEl) {
+                let resultsHtml = '';
+                data.files.forEach(file => {
+                    resultsHtml += '<div class="upload-result-item">';
+                    resultsHtml += '<div class="upload-result-preview"><img src="' + file.publicUrl + '" alt="' + escapeHtml(file.uploadedName) + '"></div>';
+                    resultsHtml += '<div class="upload-result-info">';
+                    resultsHtml += '<div class="upload-result-name">' + escapeHtml(file.uploadedName) + '</div>';
+                    resultsHtml += '<div class="upload-result-url"><code>' + escapeHtml(file.publicUrl) + '</code></div>';
+                    resultsHtml += '<div class="upload-result-actions">';
+                    resultsHtml += '<button class="btn-small btn-copy-url" data-url="' + escapeHtml(file.publicUrl) + '">📋 URL kopieren</button>';
+                    
+                    // "Einsetzen in Bild"-Dropdown (für jedes existierende Bild im Template)
+                    const images = extractImagesFromHTML(imagesTabHtml || currentWorkingHtml);
+                    if (images.length > 0) {
+                        resultsHtml += '<select class="upload-insert-select" data-url="' + escapeHtml(file.publicUrl) + '">';
+                        resultsHtml += '<option value="">→ In Bild einsetzen...</option>';
+                        images.forEach(img => {
+                            const label = img.id + ' ' + img.alt;
+                            resultsHtml += '<option value="' + img.id + '">' + escapeHtml(label) + '</option>';
+                        });
+                        resultsHtml += '</select>';
+                    }
+                    
+                    resultsHtml += '</div>';
+                    resultsHtml += '</div>';
+                    resultsHtml += '</div>';
+                });
+                resultsEl.innerHTML = resultsHtml;
+                
+                // Event-Listener für Ergebnis-Buttons
+                attachUploadResultListeners();
+            }
+            
+            console.log('[UPLOAD] Success:', data);
+            
+        } catch (err) {
+            console.error('[UPLOAD] Error:', err);
+            if (statusEl) {
+                statusEl.innerHTML = '<span class="upload-status-err">❌ ' + escapeHtml(err.message) + '</span>';
+            }
+        }
+    }
+    
+    // Event-Listener für Upload-Ergebnisse
+    function attachUploadResultListeners() {
+        // URL kopieren
+        document.querySelectorAll('.btn-copy-url').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const url = this.getAttribute('data-url');
+                navigator.clipboard.writeText(url).then(() => {
+                    showInspectorToast('📋 URL kopiert');
+                }).catch(() => {
+                    // Fallback
+                    prompt('URL kopieren:', url);
+                });
+            });
+        });
+        
+        // In Bild einsetzen
+        document.querySelectorAll('.upload-insert-select').forEach(sel => {
+            sel.addEventListener('change', function() {
+                const imgId = this.value;
+                const url = this.getAttribute('data-url');
+                if (!imgId || !url) return;
+                
+                handleImageSrcReplace(imgId, url);
+                this.value = '';
+                showInspectorToast('🖼️ ' + imgId + ' → neue URL eingesetzt');
+            });
+        });
+    }
+    
+    // Upload Event-Listener an Drop-Zone und File-Input anhängen
+    function attachUploadListeners() {
+        const dropZone = document.getElementById('imageDropZone');
+        const fileInput = document.getElementById('imageFileInput');
+        const newFolderBtn = document.getElementById('btnNewFolder');
+        
+        if (dropZone && fileInput) {
+            // Klick → File-Input öffnen
+            dropZone.addEventListener('click', function(e) {
+                if (dropZone.classList.contains('disabled')) {
+                    showInspectorToast('⚠️ Upload-Server nicht erreichbar');
+                    return;
+                }
+                fileInput.click();
+            });
+            
+            // File-Input Change
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    uploadImages(this.files, false);
+                }
+            });
+            
+            // Drag & Drop
+            dropZone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!dropZone.classList.contains('disabled')) {
+                    this.classList.add('dragover');
+                }
+            });
+            
+            dropZone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('dragover');
+            });
+            
+            dropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('dragover');
+                
+                if (dropZone.classList.contains('disabled')) {
+                    showInspectorToast('⚠️ Upload-Server nicht erreichbar');
+                    return;
+                }
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    uploadImages(files, false);
+                }
+            });
+        }
+        
+        // Neuer Ordner Button
+        if (newFolderBtn) {
+            newFolderBtn.addEventListener('click', function() {
+                const fileInput = document.getElementById('imageFileInput');
+                if (fileInput) {
+                    // Markiere für nächsten Upload: neuer Ordner
+                    newFolderBtn.classList.toggle('active');
+                    if (newFolderBtn.classList.contains('active')) {
+                        newFolderBtn.textContent = 'Neu ✓';
+                        showInspectorToast('📁 Nächster Upload erstellt neuen Ordner');
+                    } else {
+                        newFolderBtn.textContent = 'Neu';
+                    }
+                }
+            });
+        }
+        
+        // Server-Status prüfen
+        checkUploadServerStatus();
     }
     
     // Handle Images Undo (Phase 7B)
