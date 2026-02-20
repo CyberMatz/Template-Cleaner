@@ -4350,7 +4350,7 @@ document.addEventListener('DOMContentLoaded', () => {
             navigator.clipboard.writeText(htmlToCopy).then(() => {
                 showInspectorToast('✅ Template kopiert! In EOA: Email & Spam Testing → HTML einfügen (Strg+V)');
                 setTimeout(() => {
-                    window.open('https://app.emailonacid.com/', '_blank');
+                    window.open('https://app.emailonacid.com/app/acidtest/#', '_blank');
                 }, 500);
             }).catch(() => {
                 // Fallback für ältere Browser
@@ -4363,7 +4363,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.body.removeChild(textarea);
                 showInspectorToast('✅ Template kopiert! In EOA: Email & Spam Testing → HTML einfügen (Strg+V)');
                 setTimeout(() => {
-                    window.open('https://app.emailonacid.com/', '_blank');
+                    window.open('https://app.emailonacid.com/app/acidtest/#', '_blank');
                 }, 500);
             });
         });
