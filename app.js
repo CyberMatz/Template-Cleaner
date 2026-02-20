@@ -4337,6 +4337,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Email on Acid Button: Template in Zwischenablage kopieren + EOA öffnen
+    const openEmailOnAcidBtn = document.getElementById('openEmailOnAcid');
+    if (openEmailOnAcidBtn) {
+        openEmailOnAcidBtn.addEventListener('click', () => {
+            const htmlToCopy = currentWorkingHtml || '';
+            if (!htmlToCopy) {
+                showInspectorToast('⚠️ Kein Template geladen.');
+                return;
+            }
+            
+            navigator.clipboard.writeText(htmlToCopy).then(() => {
+                showInspectorToast('✅ Template in Zwischenablage kopiert – Email on Acid wird geöffnet...');
+                setTimeout(() => {
+                    window.open('https://app.emailonacid.com/app/email-testing#new-test', '_blank');
+                }, 500);
+            }).catch(() => {
+                // Fallback für ältere Browser
+                const textarea = document.createElement('textarea');
+                textarea.value = htmlToCopy;
+                textarea.style.cssText = 'position:fixed;left:-9999px;';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                showInspectorToast('✅ Template in Zwischenablage kopiert – Email on Acid wird geöffnet...');
+                setTimeout(() => {
+                    window.open('https://app.emailonacid.com/app/email-testing#new-test', '_blank');
+                }, 500);
+            });
+        });
+    }
+    
     // PATCH: Update downloadManualOptimized state based on pending changes
     function updateDownloadManualOptimizedButton() {
         if (!downloadManualOptimized) return;
