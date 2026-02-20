@@ -796,10 +796,28 @@ body {
 .btn-tagreview-keep:disabled,
 .btn-tagreview-remove:disabled,
 .btn-tagreview-ignore:disabled,
-.btn-tagreview-manual-close:disabled {
+.btn-tagreview-manual-close:disabled,
+.btn-tagreview-locate:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     pointer-events: none;
+}
+
+.btn-tagreview-locate {
+    padding: 6px 14px;
+    background: #fff;
+    color: #2196F3;
+    border: 1px solid #2196F3;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-tagreview-locate:hover {
+    background: #2196F3;
+    color: white;
 }
 
 /* --- Probleme (Offene Issues) --- */

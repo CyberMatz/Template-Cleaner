@@ -606,14 +606,38 @@ class TemplateProcessor {
         const origSearchFrom = this._cleanPosToOriginalPos(unclosed.end);
         
         // Finde die erste Boundary nach dem offenen Tag (im Original-HTML)
+        // WICHTIG: Boundaries die INNERHALB von Kommentaren stehen, überspringen!
         let bestPos = -1;
         let bestBoundary = null;
         
+        // Kommentar-Bereiche im Original-HTML ermitteln
+        const commentRanges = [];
+        const commentRegex = /<!--[\s\S]*?-->/g;
+        let cMatch;
+        while ((cMatch = commentRegex.exec(this.html)) !== null) {
+            commentRanges.push({ start: cMatch.index, end: cMatch.index + cMatch[0].length });
+        }
+        
         for (const boundary of tagBoundaries) {
-            const pos = this.html.toLowerCase().indexOf(boundary.toLowerCase(), origSearchFrom);
-            if (pos !== -1 && (bestPos === -1 || pos < bestPos)) {
-                bestPos = pos;
-                bestBoundary = boundary;
+            // Suche iterativ bis wir eine Position AUSSERHALB von Kommentaren finden
+            let searchFrom = origSearchFrom;
+            while (true) {
+                const pos = this.html.toLowerCase().indexOf(boundary.toLowerCase(), searchFrom);
+                if (pos === -1) break;
+                
+                // Prüfe ob diese Position in einem Kommentar liegt
+                const insideComment = commentRanges.some(r => pos >= r.start && pos < r.end);
+                
+                if (!insideComment) {
+                    if (bestPos === -1 || pos < bestPos) {
+                        bestPos = pos;
+                        bestBoundary = boundary;
+                    }
+                    break;
+                }
+                
+                // Position war in einem Kommentar → weitersuchen nach dem Kommentar
+                searchFrom = pos + boundary.length;
             }
         }
         
@@ -4866,6 +4890,28 @@ document.addEventListener('DOMContentLoaded', () => {
         scriptLines.push('      }');
         scriptLines.push('    }');
         scriptLines.push('');
+        scriptLines.push('    // HIGHLIGHT_TAG (Tag-Review Locate)');
+        scriptLines.push('    if (event.data.type === "HIGHLIGHT_TAG") {');
+        scriptLines.push('      var tagType = event.data.tag;');
+        scriptLines.push('      var position = event.data.position || 0;');
+        scriptLines.push('      // Finde alle Elemente dieses Tag-Typs');
+        scriptLines.push('      var elements = Array.from(document.querySelectorAll(tagType));');
+        scriptLines.push('      if (elements.length === 0) {');
+        scriptLines.push('        console.warn("[LOCATE] No " + tagType + " elements found");');
+        scriptLines.push('        return;');
+        scriptLines.push('      }');
+        scriptLines.push('      // Nimm das letzte Element (da fehlende Tags meist am Ende betroffen sind)');
+        scriptLines.push('      // Oder wenn position > Haelfte des HTML: eher hinteres Element');
+        scriptLines.push('      var htmlLen = document.documentElement.outerHTML.length || 1;');
+        scriptLines.push('      var ratio = Math.min(position / htmlLen, 1);');
+        scriptLines.push('      var idx = Math.min(Math.floor(ratio * elements.length), elements.length - 1);');
+        scriptLines.push('      var element = elements[idx];');
+        scriptLines.push('      if (element) {');
+        scriptLines.push('        element.scrollIntoView({ block: "center", behavior: "smooth" });');
+        scriptLines.push('        setTimeout(function() { showLocateOverlayForElement(element); }, 180);');
+        scriptLines.push('      }');
+        scriptLines.push('    }');
+        scriptLines.push('');
         scriptLines.push('    // PHASE 2: UPDATE_ELEMENT (selective update)');
         scriptLines.push('    if (event.data.type === "UPDATE_ELEMENT") {');
         scriptLines.push('      var qaNodeId = event.data.qaNodeId;');
@@ -7264,8 +7310,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Buttons
                 html += '<div class="tagreview-fix-actions">';
+                html += '<button class="btn-tagreview-locate" data-fix-id="' + fix.id + '" data-tag="' + escapeHtml(fix.tag) + '" data-position="' + fix.insertPosition + '">👁️ Locate</button>';
                 html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Rückgängig</button>';
-                html += '<button class="btn-tagreview-keep" data-fix-id="' + fix.id + '">✓ Behalten</button>';
                 html += '</div>';
                 
                 html += '</div>';
@@ -7314,6 +7360,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Aktions-Buttons
                 html += '<div class="tagreview-fix-actions">';
+                html += '<button class="btn-tagreview-locate" data-tag="' + escapeHtml(problem.tag) + '" data-position="' + (problem.position || '') + '">👁️ Locate</button>';
                 if (isExcess) {
                     html += '<button class="btn-tagreview-remove" data-problem-id="' + problem.id + '" data-tag="' + escapeHtml(problem.tag) + '" data-position="' + (problem.position || '') + '">🗑️ Tag entfernen</button>';
                 } else {
@@ -7370,7 +7417,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Event Listener fuer Undo/Keep Buttons bei Auto-Fixes
+    // Event Listener fuer Undo/Locate Buttons bei Auto-Fixes
     function attachTagReviewActionListeners(autoFixes) {
         // Undo Buttons
         document.querySelectorAll('.btn-tagreview-undo').forEach(btn => {
@@ -7384,12 +7431,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // Keep Buttons
-        document.querySelectorAll('.btn-tagreview-keep').forEach(btn => {
+        // Locate Buttons (in Fixes UND Problemen)
+        document.querySelectorAll('.btn-tagreview-locate').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const fixId = this.getAttribute('data-fix-id');
-                keepTagReviewFix(this.closest('.tagreview-fix-item'), fixId);
+                const tag = this.getAttribute('data-tag');
+                const position = parseInt(this.getAttribute('data-position')) || 0;
+                locateTagInPreview(tag, position);
             });
         });
     }
@@ -7465,22 +7513,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Keep Tag-Review Fix
-    function keepTagReviewFix(fixElement, fixId) {
-        console.log('[INSPECTOR] Keep fix:', fixId);
-        
-        if (typeof manualActionLog !== 'undefined') {
-            manualActionLog.push('R' + String(manualActionLog.length + 1).padStart(2, '0') + '_AUTO_FIX_ACCEPTED - ' + fixId + ' akzeptiert');
+    // Tag in der Vorschau lokalisieren und hervorheben
+    function locateTagInPreview(tag, position) {
+        if (!inspectorPreviewFrame || !inspectorPreviewFrame.contentWindow) {
+            showInspectorToast('⚠️ Vorschau nicht verfügbar');
+            return;
         }
         
-        fixElement.classList.add('accepted');
-        fixElement.querySelectorAll('button').forEach(btn => btn.disabled = true);
+        console.log('[INSPECTOR] Locate tag in preview:', tag, 'near position:', position);
         
-        const label = document.createElement('span');
-        label.className = 'tagreview-status-label status-accepted';
-        label.textContent = '✓ Akzeptiert';
-        fixElement.querySelector('.tagreview-fix-header').appendChild(label);
+        // Berechne ungefähre Zeilennummer aus Position
+        const htmlSource = currentWorkingHtml || '';
+        const beforePos = htmlSource.substring(0, Math.min(position, htmlSource.length));
+        const lineNumber = (beforePos.match(/\n/g) || []).length + 1;
         
-        showInspectorToast('✓ ' + fixId + ' akzeptiert');
+        // Sende Nachricht an Iframe
+        inspectorPreviewFrame.contentWindow.postMessage({
+            type: 'HIGHLIGHT_TAG',
+            tag: tag,
+            position: position,
+            lineNumber: lineNumber
+        }, '*');
     }
     
     // Überzähliges Closing-Tag entfernen
