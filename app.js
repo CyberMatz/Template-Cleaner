@@ -445,7 +445,7 @@ class TemplateProcessor {
         }
     }
 
-    // P07/P08: Tag-Balancing (Smart Boundary Logic)
+    // P07/P08: Tag-Balancing (Smart Boundary Logic v2 - Comment-Aware)
     checkTagBalancing() {
         const id = this.checklistType === 'dpl' ? 'P08_TAG_BALANCING' : 'P07_TAG_BALANCING';
         const tags = ['table', 'tr', 'td', 'a', 'div'];
@@ -456,13 +456,18 @@ class TemplateProcessor {
             this.autoFixes = [];
         }
         
-        // Tag-Probleme Array initialisieren (fuer unloesbare Faelle)
+        // Tag-Probleme Array initialisieren
         if (!this.tagProblems) {
             this.tagProblems = [];
         }
-
-        // Grenz-Regeln: Wo soll ein Tag geschlossen werden?
-        // z.B. ein <td> soll VOR dem naechsten </tr> geschlossen werden
+        
+        // WICHTIG: E-Mail-Templates haben bedingte Kommentare wie:
+        //   <!--[if mso]><table><tr><td><![endif]-->
+        // Diese enthalten Tags die NICHT mitgezaehlt werden duerfen!
+        // Loesung: Kommentare vor dem Zaehlen entfernen.
+        const cleanHtml = this._stripHtmlComments(this.html);
+        
+        // Boundary-Regeln
         const boundaries = {
             'a':     ['</td>', '</tr>', '</table>', '</div>', '</body>'],
             'td':    ['</tr>', '</table>', '</body>'],
@@ -474,35 +479,31 @@ class TemplateProcessor {
         tags.forEach(tag => {
             const openRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
             const closeRegex = new RegExp(`</${tag}>`, 'gi');
-            const openCount = (this.html.match(openRegex) || []).length;
-            const closeCount = (this.html.match(closeRegex) || []).length;
+            
+            // Zaehle auf dem BEREINIGTEN HTML (ohne Kommentare)
+            const openCount = (cleanHtml.match(openRegex) || []).length;
+            const closeCount = (cleanHtml.match(closeRegex) || []).length;
 
-            if (openCount === closeCount) return; // Alles ok
+            if (openCount === closeCount) return;
 
             if (openCount > closeCount) {
-                // === FEHLENDE CLOSING-TAGS ===
+                // === FEHLENDE CLOSING-TAGS (smart fixen) ===
                 const diff = openCount - closeCount;
-                
                 for (let i = 0; i < diff; i++) {
-                    // Finde das letzte ungeschlossene Tag dieser Art
-                    const insertInfo = this._findSmartInsertPosition(tag, boundaries[tag] || ['</body>']);
+                    const result = this._findSmartInsertPosition(tag, boundaries[tag] || ['</body>']);
                     
-                    if (insertInfo.found) {
-                        const insertPosition = insertInfo.position;
+                    if (result.position !== -1) {
                         const inserted = `</${tag}>`;
+                        const beforeCtx = this.html.substring(Math.max(0, result.position - 50), result.position);
+                        const afterCtx = this.html.substring(result.position, Math.min(this.html.length, result.position + 50));
                         
-                        // Context speichern (50 chars vor und nach)
-                        const beforeCtx = this.html.substring(Math.max(0, insertPosition - 50), insertPosition);
-                        const afterCtx = this.html.substring(insertPosition, Math.min(this.html.length, insertPosition + 50));
+                        // Snippet: 3 Zeilen vor und nach der Einfuegestelle
+                        const linesBefore = this.html.substring(0, result.position).split('\n');
+                        const linesAfter = this.html.substring(result.position).split('\n');
+                        const snippetBefore = linesBefore.slice(-3).join('\n') + 
+                            '\n  \u25BA ' + inserted + ' \u25C4  (eingefuegt)\n' + 
+                            linesAfter.slice(0, 3).join('\n');
                         
-                        // Snippet fuer Anzeige: Zeilen rund um die Einfuegestelle
-                        const linesBefore = this.html.substring(0, insertPosition).split('\n');
-                        const linesAfter = this.html.substring(insertPosition).split('\n');
-                        const snippetLinesBefore = linesBefore.slice(-3).join('\n');
-                        const snippetLinesAfter = linesAfter.slice(0, 3).join('\n');
-                        const snippetBefore = snippetLinesBefore + '\n  ► ' + inserted + ' ◄  (eingefuegt)\n' + snippetLinesAfter;
-                        
-                        // Auto-Fix Event speichern
                         this.autoFixes.push({
                             id: `AF${(this.autoFixes.length + 1).toString().padStart(2, '0')}`,
                             type: 'AUTO_TAG_CLOSE',
@@ -510,45 +511,36 @@ class TemplateProcessor {
                             inserted: inserted,
                             beforeCtx: beforeCtx,
                             afterCtx: afterCtx,
-                            insertPosition: insertPosition,
+                            insertPosition: result.position,
                             snippetBefore: snippetBefore,
                             snippetAfter: inserted,
-                            confidence: insertInfo.confidence,
-                            boundaryTag: insertInfo.boundaryTag,
-                            method: insertInfo.method
+                            confidence: result.confidence,
+                            boundaryTag: result.boundary,
+                            method: result.confidence === 'high' ? 'boundary' : (result.confidence === 'medium' ? 'boundary-ambiguous' : 'end-of-file'),
+                            openTagLine: result.openTagLine,
+                            openTagSnippet: result.openTagSnippet
                         });
                         
-                        // Tag an der smarten Position einfuegen (nicht am Ende!)
-                        this.html = this.html.substring(0, insertPosition) + inserted + this.html.substring(insertPosition);
+                        // Tag an der smarten Position einfuegen
+                        this.html = this.html.substring(0, result.position) + inserted + this.html.substring(result.position);
                         fixed = true;
-                    } else {
-                        // Kein sicherer Einfuegepunkt gefunden → als Problem melden
-                        this.tagProblems.push({
-                            id: `TP${(this.tagProblems.length + 1).toString().padStart(2, '0')}`,
-                            type: 'UNCLOSED_TAG',
-                            tag: tag,
-                            message: `<${tag}> ist geoeffnet aber nicht geschlossen. Kein sicherer Einfuegepunkt gefunden.`,
-                            severity: 'warning'
-                        });
                     }
                 }
-                
             } else if (closeCount > openCount) {
-                // === UEBERZAEHLIGE CLOSING-TAGS ===
-                const diff = closeCount - openCount;
-                
-                // Finde die Position(en) der ueberzaehligen Closing-Tags
-                const excessPositions = this._findExcessClosingTags(tag, diff);
+                // === ZU VIELE CLOSING-TAGS (nur melden) ===
+                const excess = closeCount - openCount;
+                const excessPositions = this._findExcessClosingTags(tag, excess);
                 
                 excessPositions.forEach(pos => {
                     this.tagProblems.push({
                         id: `TP${(this.tagProblems.length + 1).toString().padStart(2, '0')}`,
                         type: 'EXCESS_CLOSING_TAG',
                         tag: tag,
-                        message: `</${tag}> ist ${diff}x zu oft vorhanden (${closeCount} schliessend vs. ${openCount} oeffnend).`,
+                        excessCount: excess,
                         position: pos.position,
-                        lineNumber: pos.lineNumber,
+                        lineNumber: pos.line,
                         snippet: pos.snippet,
+                        message: `</${tag}> an Zeile ${pos.line} hat kein passendes oeffnendes <${tag}> (${excess}x zu viel im Dokument)`,
                         severity: 'warning',
                         closingTag: `</${tag}>`
                     });
@@ -557,142 +549,172 @@ class TemplateProcessor {
         });
 
         if (fixed && this.tagProblems.length > 0) {
-            this.addCheck(id, 'FIXED', `Tag-Balancing teilweise korrigiert (${this.tagProblems.length} Problem(e) offen)`);
+            this.addCheck(id, 'FIXED', 'Tag-Balancing teilweise korrigiert \u2013 offene Probleme vorhanden');
         } else if (fixed) {
-            this.addCheck(id, 'FIXED', 'Tag-Balancing korrigiert (smart positioniert)');
+            this.addCheck(id, 'FIXED', 'Tag-Balancing korrigiert');
         } else if (this.tagProblems.length > 0) {
-            this.addCheck(id, 'WARN', `Tag-Probleme erkannt: ${this.tagProblems.length} Problem(e)`);
+            this.addCheck(id, 'WARN', 'Tag-Balancing: \u00DCberschuessige Closing-Tags gefunden');
         } else {
             this.addCheck(id, 'PASS', 'Tag-Balancing korrekt');
         }
     }
-
-    // Hilfsfunktion: Finde die smarte Einfuegeposition fuer ein Closing-Tag
-    _findSmartInsertPosition(tagType, tagBoundaries) {
-        // Schritt 1: Finde das letzte ungeschlossene Opening-Tag
-        let depth = 0;
-        let lastUnmatchedOpenEnd = -1; // Position NACH dem letzten ungematchten <tag>
+    
+    // HTML-Kommentare entfernen (fuer saubere Tag-Zaehlung)
+    // Entfernt: <!-- ... -->, <!--[if ...]>...<![endif]-->, etc.
+    _stripHtmlComments(html) {
+        return html.replace(/<!--[\s\S]*?-->/g, '');
+    }
+    
+    // Hilfsfunktion: Finde die beste Einfuegeposition per Boundary-Logik
+    // Arbeitet auf bereinigtem HTML (ohne Kommentare) fuer korrekte Analyse
+    _findSmartInsertPosition(tag, tagBoundaries) {
+        const cleanHtml = this._stripHtmlComments(this.html);
         
-        for (let i = 0; i < this.html.length; i++) {
-            const remaining = this.html.substring(i);
-            
-            const openMatch = remaining.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
-            if (openMatch) {
-                depth++;
-                lastUnmatchedOpenEnd = i + openMatch[0].length;
-                i += openMatch[0].length - 1;
-                continue;
-            }
-            
-            const closeMatch = remaining.match(new RegExp(`^</${tagType}>`, 'i'));
-            if (closeMatch) {
-                depth--;
-                i += closeMatch[0].length - 1;
-            }
+        // Sammle alle Open- und Close-Events (im bereinigten HTML)
+        const openRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
+        const closeRegex = new RegExp(`</${tag}>`, 'gi');
+        const events = [];
+        let match;
+        
+        while ((match = openRegex.exec(cleanHtml)) !== null) {
+            events.push({ type: 'open', pos: match.index, end: match.index + match[0].length, text: match[0] });
+        }
+        while ((match = closeRegex.exec(cleanHtml)) !== null) {
+            events.push({ type: 'close', pos: match.index, end: match.index + match[0].length });
         }
         
-        if (lastUnmatchedOpenEnd === -1 || depth <= 0) {
-            return { found: false };
+        events.sort((a, b) => a.pos - b.pos);
+        
+        // Stack-basiert: Finde das letzte nicht geschlossene Tag
+        const stack = [];
+        events.forEach(e => {
+            if (e.type === 'open') {
+                stack.push(e);
+            } else if (stack.length > 0) {
+                stack.pop();
+            }
+        });
+        
+        if (stack.length === 0) {
+            return { position: -1, confidence: 'none' };
         }
         
-        // Schritt 2: Ab dem letzten ungematchten Tag → suche die naechste Boundary
-        const searchHtml = this.html.substring(lastUnmatchedOpenEnd);
-        let bestBoundaryPos = -1;
-        let bestBoundaryTag = null;
+        // Letztes nicht geschlossenes Tag
+        const unclosed = stack[stack.length - 1];
+        
+        // Position im bereinigten HTML -> Position im Original-HTML umrechnen
+        const origSearchFrom = this._cleanPosToOriginalPos(unclosed.end);
+        
+        // Finde die erste Boundary nach dem offenen Tag (im Original-HTML)
+        let bestPos = -1;
+        let bestBoundary = null;
         
         for (const boundary of tagBoundaries) {
-            const pos = searchHtml.toLowerCase().indexOf(boundary.toLowerCase());
-            if (pos !== -1 && (bestBoundaryPos === -1 || pos < bestBoundaryPos)) {
-                bestBoundaryPos = pos;
-                bestBoundaryTag = boundary;
+            const pos = this.html.toLowerCase().indexOf(boundary.toLowerCase(), origSearchFrom);
+            if (pos !== -1 && (bestPos === -1 || pos < bestPos)) {
+                bestPos = pos;
+                bestBoundary = boundary;
             }
         }
         
-        if (bestBoundaryPos !== -1) {
-            // Pruefe ob zwischen dem offenen Tag und der Boundary schon ein Closing-Tag existiert
-            const betweenHtml = searchHtml.substring(0, bestBoundaryPos);
-            const existingClose = betweenHtml.match(new RegExp(`</${tagType}>`, 'i'));
-            
-            if (!existingClose) {
-                // Sicher: Einfuegen direkt VOR der Boundary
-                return {
-                    found: true,
-                    position: lastUnmatchedOpenEnd + bestBoundaryPos,
-                    confidence: 'high',
-                    boundaryTag: bestBoundaryTag,
-                    method: 'boundary'
-                };
-            } else {
-                // Es gibt schon ein Closing-Tag dazwischen → nicht eindeutig
-                // Fallback: direkt vor der Boundary, aber mit niedrigerer Konfidenz
-                return {
-                    found: true,
-                    position: lastUnmatchedOpenEnd + bestBoundaryPos,
-                    confidence: 'medium',
-                    boundaryTag: bestBoundaryTag,
-                    method: 'boundary-ambiguous'
-                };
+        // Konfidenz-Bewertung
+        let confidence = 'high';
+        
+        if (bestPos === -1) {
+            bestPos = this.html.length;
+            bestBoundary = 'Ende der Datei';
+            confidence = 'low';
+        } else {
+            // Pruefe ob zwischen dem offenen Tag und der Boundary noch Tags gleichen Typs sind
+            const between = this._stripHtmlComments(this.html.substring(origSearchFrom, bestPos));
+            const sameTagOpen = new RegExp(`<${tag}[^>]*>`, 'i');
+            if (sameTagOpen.test(between)) {
+                confidence = 'medium';
             }
         }
         
-        // Fallback: Am Ende einfuegen (wie vorher, aber als low confidence markiert)
+        // Zeilennummer des offenen Tags
+        const origOpenPos = this._cleanPosToOriginalPos(unclosed.pos);
+        const openTagLine = this.html.substring(0, origOpenPos).split('\n').length;
+        
+        // Snippet des offenen Tags
+        const origOpenEnd = this._cleanPosToOriginalPos(unclosed.end);
+        const openTagSnippet = this.html.substring(
+            Math.max(0, origOpenPos - 40), 
+            Math.min(this.html.length, origOpenEnd + 40)
+        );
+        
         return {
-            found: true,
-            position: this.html.length,
-            confidence: 'low',
-            boundaryTag: null,
-            method: 'end-of-file'
+            position: bestPos,
+            confidence: confidence,
+            boundary: bestBoundary,
+            openTagLine: openTagLine,
+            openTagSnippet: openTagSnippet
         };
     }
     
-    // Hilfsfunktion: Finde ueberzaehlige Closing-Tags
-    _findExcessClosingTags(tagType, excessCount) {
-        const results = [];
-        const closeRegex = new RegExp(`</${tagType}>`, 'gi');
-        const openRegex = new RegExp(`<${tagType}[^>]*>`, 'gi');
+    // Position im bereinigten HTML -> Position im Original-HTML
+    _cleanPosToOriginalPos(cleanPos) {
+        const tempRegex = /<!--[\s\S]*?-->/g;
+        let offset = 0;
+        let match;
         
-        // Zaehle von Anfang bis Ende mit Stack-Logik
-        let depth = 0;
-        
-        for (let i = 0; i < this.html.length; i++) {
-            const remaining = this.html.substring(i);
+        while ((match = tempRegex.exec(this.html)) !== null) {
+            const commentStart = match.index;
+            const commentLength = match[0].length;
+            const cleanCommentStart = commentStart - offset;
             
-            const openMatch = remaining.match(new RegExp(`^<${tagType}[^>]*>`, 'i'));
-            if (openMatch) {
-                depth++;
-                i += openMatch[0].length - 1;
-                continue;
-            }
-            
-            const closeMatch = remaining.match(new RegExp(`^</${tagType}>`, 'i'));
-            if (closeMatch) {
-                depth--;
-                if (depth < 0) {
-                    // Dieses Closing-Tag hat kein passendes Opening → ueberzaehlig
-                    const lines = this.html.substring(0, i).split('\n');
-                    const lineNumber = lines.length;
-                    const allLines = this.html.split('\n');
-                    const snippetStart = Math.max(0, lineNumber - 3);
-                    const snippetEnd = Math.min(allLines.length, lineNumber + 3);
-                    const snippet = allLines.slice(snippetStart, snippetEnd).join('\n');
-                    
-                    results.push({
-                        position: i,
-                        lineNumber: lineNumber,
-                        snippet: snippet
-                    });
-                    
-                    depth = 0; // Reset fuer naechstes ueberzaehliges
-                    
-                    if (results.length >= excessCount) break;
-                }
-                i += closeMatch[0].length - 1;
+            if (cleanCommentStart <= cleanPos) {
+                offset += commentLength;
+            } else {
+                break;
             }
         }
         
-        return results;
+        return cleanPos + offset;
     }
-
+    
+    // Hilfsfunktion: Finde ueberzaehlige Closing-Tags
+    _findExcessClosingTags(tag, excessCount) {
+        const cleanHtml = this._stripHtmlComments(this.html);
+        
+        const events = [];
+        const openRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
+        const closeRegex = new RegExp(`</${tag}>`, 'gi');
+        let match;
+        
+        while ((match = openRegex.exec(cleanHtml)) !== null) {
+            events.push({ type: 'open', pos: match.index, end: match.index + match[0].length });
+        }
+        while ((match = closeRegex.exec(cleanHtml)) !== null) {
+            events.push({ type: 'close', pos: match.index, end: match.index + match[0].length, text: match[0] });
+        }
+        
+        events.sort((a, b) => a.pos - b.pos);
+        
+        const stack = [];
+        const orphans = [];
+        
+        events.forEach(e => {
+            if (e.type === 'open') {
+                stack.push(e);
+            } else {
+                if (stack.length > 0) {
+                    stack.pop();
+                } else {
+                    const origPos = this._cleanPosToOriginalPos(e.pos);
+                    const line = this.html.substring(0, origPos).split('\n').length;
+                    const snippet = this.html.substring(
+                        Math.max(0, origPos - 80),
+                        Math.min(this.html.length, origPos + 80)
+                    );
+                    orphans.push({ line: line, position: origPos, snippet: snippet });
+                }
+            }
+        });
+        
+        return orphans;
+    }
     // P08/P09: Image Alt-Attribute (Erweitert)
     checkImageAltAttributes() {
         const id = this.checklistType === 'dpl' ? 'P09_IMAGE_ALT' : 'P08_IMAGE_ALT';
@@ -2236,12 +2258,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const problems = [];
         const tagTypes = ['a', 'table', 'tr', 'td', 'div'];
         
+        // Kommentare entfernen (gleiche Logik wie in checkTagBalancing)
+        const cleanHtml = html.replace(/<!--[\s\S]*?-->/g, '');
+        
         tagTypes.forEach(tagType => {
             const openRegex = new RegExp(`<${tagType}[^>]*>`, 'gi');
             const closeRegex = new RegExp(`</${tagType}>`, 'gi');
             
-            const openMatches = html.match(openRegex) || [];
-            const closeMatches = html.match(closeRegex) || [];
+            const openMatches = cleanHtml.match(openRegex) || [];
+            const closeMatches = cleanHtml.match(closeRegex) || [];
             
             const openCount = openMatches.length;
             const closeCount = closeMatches.length;
