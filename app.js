@@ -6624,49 +6624,77 @@ document.addEventListener('DOMContentLoaded', () => {
         imagesHistory.push(imagesTabHtml);
         
         const imgIndex = parseInt(imgId.substring(1)) - 1;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
-        const images = doc.querySelectorAll('img');
         
-        if (imgIndex >= 0 && imgIndex < images.length) {
-            const img = images[imgIndex];
-            
-            if (newWidth === '100%') {
-                // 100% Breite: width-Attribut auf 100% setzen, style width auch
-                img.setAttribute('width', '100%');
+        // Finde den N-ten <img> Tag via Regex (zuverlässiger als DOMParser für E-Mail HTML)
+        let html = imagesTabHtml;
+        const imgRegex = /<img\b[^>]*>/gi;
+        let match;
+        let count = 0;
+        
+        while ((match = imgRegex.exec(html)) !== null) {
+            if (count === imgIndex) {
+                let imgTag = match[0];
+                let newImgTag = imgTag;
                 
-                // Style anpassen
-                let style = img.getAttribute('style') || '';
-                if (/width\s*:/i.test(style)) {
-                    style = style.replace(/width\s*:\s*[^;]+/i, 'width: 100%');
+                if (newWidth === '100%') {
+                    // 100% Breite: width-Attribut auf 100%, max-width entfernen
+                    if (/width\s*=\s*["']\d+[^"']*["']/i.test(newImgTag)) {
+                        newImgTag = newImgTag.replace(/width\s*=\s*["'][^"']*["']/i, 'width="100%"');
+                    } else {
+                        newImgTag = newImgTag.replace(/<img\b/i, '<img width="100%"');
+                    }
+                    // Style: width auf 100% setzen
+                    if (/style\s*=\s*["']/i.test(newImgTag)) {
+                        let styleMatch = newImgTag.match(/style\s*=\s*["']([^"']*)["']/i);
+                        if (styleMatch) {
+                            let style = styleMatch[1];
+                            style = style.replace(/\s*width\s*:\s*[^;]+;?/gi, '');
+                            style = style.replace(/\s*max-width\s*:\s*[^;]+;?/gi, '');
+                            style = style.replace(/;?\s*$/, '');
+                            style = style ? style + '; width: 100%;' : 'width: 100%;';
+                            newImgTag = newImgTag.replace(/style\s*=\s*["'][^"']*["']/i, 'style="' + style + '"');
+                        }
+                    }
                 } else {
-                    style = style ? style.replace(/;?\s*$/, '; width: 100%;') : 'width: 100%;';
+                    // Pixel-Wert: width-Attribut setzen + style mit max-width: 100% (mobile-safe)
+                    const pxVal = parseInt(newWidth);
+                    
+                    if (/width\s*=\s*["'][^"']*["']/i.test(newImgTag)) {
+                        newImgTag = newImgTag.replace(/width\s*=\s*["'][^"']*["']/i, 'width="' + pxVal + '"');
+                    } else {
+                        newImgTag = newImgTag.replace(/<img\b/i, '<img width="' + pxVal + '"');
+                    }
+                    // Style: width + max-width: 100% für Mobile-Sicherheit
+                    if (/style\s*=\s*["']/i.test(newImgTag)) {
+                        let styleMatch = newImgTag.match(/style\s*=\s*["']([^"']*)["']/i);
+                        if (styleMatch) {
+                            let style = styleMatch[1];
+                            style = style.replace(/\s*width\s*:\s*[^;]+;?/gi, '');
+                            style = style.replace(/\s*max-width\s*:\s*[^;]+;?/gi, '');
+                            style = style.replace(/;?\s*$/, '');
+                            style = style ? style + '; width: ' + pxVal + 'px; max-width: 100%;' : 'width: ' + pxVal + 'px; max-width: 100%;';
+                            newImgTag = newImgTag.replace(/style\s*=\s*["'][^"']*["']/i, 'style="' + style + '"');
+                        }
+                    } else {
+                        // Kein style-Attribut vorhanden – hinzufügen
+                        newImgTag = newImgTag.replace(/<img\b/i, '<img style="width: ' + pxVal + 'px; max-width: 100%;"');
+                    }
                 }
-                // max-width entfernen wenn 100%
-                style = style.replace(/\s*max-width\s*:\s*[^;]+;?/i, '');
-                img.setAttribute('style', style);
                 
-            } else {
-                // Pixel-Wert
-                const pxVal = parseInt(newWidth);
-                img.setAttribute('width', String(pxVal));
-                
-                // Style anpassen
-                let style = img.getAttribute('style') || '';
-                if (/width\s*:/i.test(style)) {
-                    style = style.replace(/width\s*:\s*[^;]+/i, 'width: ' + pxVal + 'px');
-                }
-                img.setAttribute('style', style);
+                html = html.substring(0, match.index) + newImgTag + html.substring(match.index + imgTag.length);
+                break;
             }
-            
-            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            checkImagesPending();
-            updateInspectorPreview();
-            showImagesTab(imagesContent);
-            
-            showInspectorToast('📐 ' + imgId + ' Breite → ' + newWidth);
-            console.log('[INSPECTOR] Image width changed:', imgId, '->', newWidth);
+            count++;
         }
+        
+        imagesTabHtml = html;
+        checkImagesPending();
+        updateInspectorPreview();
+        showImagesTab(imagesContent);
+        
+        const mobileHint = newWidth !== '100%' ? ' (+ max-width: 100% für Mobile)' : '';
+        showInspectorToast('📐 ' + imgId + ' Breite → ' + newWidth + mobileHint);
+        console.log('[INSPECTOR] Image width changed:', imgId, '->', newWidth);
     }
     
     // Handle Image Alignment Change
@@ -6676,71 +6704,94 @@ document.addEventListener('DOMContentLoaded', () => {
         imagesHistory.push(imagesTabHtml);
         
         const imgIndex = parseInt(imgId.substring(1)) - 1;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
-        const images = doc.querySelectorAll('img');
         
-        if (imgIndex >= 0 && imgIndex < images.length) {
-            const img = images[imgIndex];
-            
-            // Strategie: Setze align auf dem nächsten geeigneten Parent-Element
-            // In E-Mails ist das typischerweise <td>, <div>, oder <p>
-            let targetEl = null;
-            let parent = img.parentElement;
-            
-            for (let level = 0; level < 3 && parent; level++) {
-                const tag = parent.tagName.toLowerCase();
-                if (tag === 'td' || tag === 'div' || tag === 'p' || tag === 'center') {
-                    targetEl = parent;
-                    break;
-                }
-                // Wenn direkter Parent ein <a> ist (verlinktes Bild), eine Ebene weiter
-                if (tag === 'a') {
-                    parent = parent.parentElement;
-                    continue;
-                }
-                targetEl = parent;
+        // Finde den N-ten <img> Tag via Regex
+        let html = imagesTabHtml;
+        const imgRegex = /<img\b[^>]*>/gi;
+        let match;
+        let count = 0;
+        let imgPos = -1;
+        
+        while ((match = imgRegex.exec(html)) !== null) {
+            if (count === imgIndex) {
+                imgPos = match.index;
                 break;
             }
-            
-            if (targetEl) {
-                const tag = targetEl.tagName.toLowerCase();
-                
-                // Bei <center>-Tag: Wenn nicht center gewählt, ersetze durch <div>
-                if (tag === 'center' && newAlign !== 'center') {
-                    // align-Attribut setzen statt center-Tag ersetzen (einfacher + sicherer)
-                    const wrapper = doc.createElement('div');
-                    wrapper.innerHTML = targetEl.innerHTML;
-                    wrapper.setAttribute('align', newAlign);
-                    // Style übertragen
-                    if (targetEl.getAttribute('style')) {
-                        wrapper.setAttribute('style', targetEl.getAttribute('style'));
-                    }
-                    targetEl.parentElement.replaceChild(wrapper, targetEl);
-                } else {
-                    // align-Attribut setzen (HTML-Standard für E-Mails)
-                    targetEl.setAttribute('align', newAlign);
-                    
-                    // text-align im style setzen/updaten (für modernere Clients)
-                    let style = targetEl.getAttribute('style') || '';
-                    if (/text-align\s*:/i.test(style)) {
-                        style = style.replace(/text-align\s*:\s*[^;]+/i, 'text-align: ' + newAlign);
-                    } else {
-                        style = style ? style.replace(/;?\s*$/, '; text-align: ' + newAlign + ';') : 'text-align: ' + newAlign + ';';
-                    }
-                    targetEl.setAttribute('style', style);
-                }
-            }
-            
-            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-            checkImagesPending();
-            updateInspectorPreview();
-            showImagesTab(imagesContent);
-            
-            const alignLabels = { left: 'linksbündig', center: 'zentriert', right: 'rechtsbündig' };
-            showInspectorToast('↔️ ' + imgId + ' → ' + (alignLabels[newAlign] || newAlign));
-            console.log('[INSPECTOR] Image alignment changed:', imgId, '->', newAlign);
+            count++;
         }
+        
+        if (imgPos < 0) {
+            console.error('[INSPECTOR] Image not found:', imgId);
+            return;
+        }
+        
+        // Suche das nächste Parent-Element rückwärts: <td, <div, <p
+        // Gehe rückwärts vom img-Tag und finde den nächsten öffnenden Tag
+        const beforeImg = html.substring(Math.max(0, imgPos - 500), imgPos);
+        
+        // Finde den letzten öffnenden <td>, <div> oder <p> Tag vor dem Bild
+        const parentTagRegex = /<(td|div|p)\b([^>]*)>/gi;
+        let parentMatch;
+        let lastParent = null;
+        
+        while ((parentMatch = parentTagRegex.exec(beforeImg)) !== null) {
+            lastParent = {
+                tagName: parentMatch[1].toLowerCase(),
+                fullTag: parentMatch[0],
+                attrs: parentMatch[2],
+                posInSlice: parentMatch.index
+            };
+        }
+        
+        if (!lastParent) {
+            showInspectorToast('⚠️ Kein geeignetes Parent-Element gefunden');
+            imagesHistory.pop(); // Undo rückgängig
+            return;
+        }
+        
+        // Berechne absolute Position des Parent-Tags
+        const sliceStart = Math.max(0, imgPos - 500);
+        const parentAbsPos = sliceStart + lastParent.posInSlice;
+        
+        // Neuen Parent-Tag bauen: align-Attribut + text-align im style
+        let newParentTag = lastParent.fullTag;
+        
+        // 1. align-Attribut setzen/ersetzen
+        if (/align\s*=\s*["'][^"']*["']/i.test(newParentTag)) {
+            newParentTag = newParentTag.replace(/align\s*=\s*["'][^"']*["']/i, 'align="' + newAlign + '"');
+        } else {
+            newParentTag = newParentTag.replace(new RegExp('<' + lastParent.tagName + '\\b', 'i'), '<' + lastParent.tagName + ' align="' + newAlign + '"');
+        }
+        
+        // 2. text-align im style setzen/ersetzen
+        if (/style\s*=\s*["']/i.test(newParentTag)) {
+            let styleMatch = newParentTag.match(/style\s*=\s*["']([^"']*)["']/i);
+            if (styleMatch) {
+                let style = styleMatch[1];
+                if (/text-align\s*:/i.test(style)) {
+                    style = style.replace(/text-align\s*:\s*[^;]+/i, 'text-align: ' + newAlign);
+                } else {
+                    style = style.replace(/;?\s*$/, '');
+                    style = style ? style + '; text-align: ' + newAlign + ';' : 'text-align: ' + newAlign + ';';
+                }
+                newParentTag = newParentTag.replace(/style\s*=\s*["'][^"']*["']/i, 'style="' + style + '"');
+            }
+        } else {
+            // Kein style vorhanden – hinzufügen
+            newParentTag = newParentTag.replace(new RegExp('<' + lastParent.tagName + '\\b', 'i'), '<' + lastParent.tagName + ' style="text-align: ' + newAlign + ';"');
+        }
+        
+        // Ersetze den alten Parent-Tag durch den neuen
+        html = html.substring(0, parentAbsPos) + newParentTag + html.substring(parentAbsPos + lastParent.fullTag.length);
+        
+        imagesTabHtml = html;
+        checkImagesPending();
+        updateInspectorPreview();
+        showImagesTab(imagesContent);
+        
+        const alignLabels = { left: 'linksbündig', center: 'zentriert', right: 'rechtsbündig' };
+        showInspectorToast('↔️ ' + imgId + ' → ' + (alignLabels[newAlign] || newAlign));
+        console.log('[INSPECTOR] Image alignment changed:', imgId, '->', newAlign);
     }
     
     // Handle Images Undo (Phase 7B)
