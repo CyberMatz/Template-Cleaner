@@ -6878,6 +6878,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        // === Kandidat 6: Innerhalb des Hintergrund-Wrappers ===
+        // Suche das äußerste Element mit nicht-weißer Hintergrundfarbe
+        const bgWrapperResult = findBackgroundWrapper(html);
+        if (bgWrapperResult) {
+            // Header NACH dem öffnenden Tag dieses Wrappers platzieren
+            const openEndPos = bgWrapperResult.openPos + bgWrapperResult.openTag.length;
+            if (!positionAlreadyExists(openEndPos)) {
+                candidates.push({
+                    id: 'header_inside_bg_wrapper',
+                    label: 'Innerhalb des Hintergrund-Wrappers (' + bgWrapperResult.color + ')',
+                    description: 'Der Header wird innerhalb des Elements mit Hintergrundfarbe platziert – behält den farbigen Hintergrund.',
+                    position: openEndPos,
+                    snippet: getSnippetAround(html, openEndPos, 20, 80)
+                });
+            }
+        }
+        
         // === DPL-Kandidat: Nach dem roten Hintergrund-Div ===
         const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
         if (redDivMatch) {
@@ -7066,6 +7083,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        // === Kandidat 6: Innerhalb des Hintergrund-Wrappers ===
+        // Suche das äußerste Element nach <body> das eine nicht-weiße/transparente Hintergrundfarbe hat
+        // Das ist typischerweise der Wrapper der dem Template seine Hintergrundfarbe gibt
+        const bgWrapperResult = findBackgroundWrapper(html);
+        if (bgWrapperResult) {
+            // Footer VOR dem schließenden Tag dieses Wrappers platzieren
+            if (bgWrapperResult.closePos > 0 && !positionAlreadyExists(bgWrapperResult.closePos)) {
+                candidates.push({
+                    id: 'footer_inside_bg_wrapper',
+                    label: 'Innerhalb des Hintergrund-Wrappers (' + bgWrapperResult.color + ')',
+                    description: 'Der Footer wird innerhalb des Elements mit Hintergrundfarbe platziert – behält den farbigen Hintergrund.',
+                    position: bgWrapperResult.closePos,
+                    snippet: getSnippetAround(html, bgWrapperResult.closePos, 60, 40)
+                });
+            }
+        }
+        
         // === DPL-Kandidat: Vor dem schließenden roten Div ===
         const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
         if (redDivMatch) {
@@ -7152,6 +7186,85 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         return bestWidth;
+    }
+    
+    function findBackgroundWrapper(html) {
+        // Suche das äußerste Element nach <body> das eine sichtbare Hintergrundfarbe hat
+        // (nicht weiß, nicht transparent, nicht fast-weiß)
+        const bodyMatch = html.match(/<body[^>]*>/i);
+        if (!bodyMatch) return null;
+        const bodyEndPos = html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
+        
+        // Farben die wir als "kein Hintergrund" werten
+        const whiteColors = ['#fff', '#ffffff', '#fafafa', '#fbfbfb', '#fcfcfc', '#fefefe', 'transparent', 'none', '#f9f9f9'];
+        
+        function isColoredBackground(color) {
+            if (!color) return false;
+            const c = color.toLowerCase().replace(/\s/g, '');
+            return !whiteColors.includes(c);
+        }
+        
+        // Suche in den ersten 3000 Zeichen nach <body>
+        const searchArea = html.substring(bodyEndPos, bodyEndPos + 3000);
+        
+        // Finde alle öffnenden <div> und <td> und <table> mit Hintergrundfarbe
+        const bgElements = [];
+        const bgRegex = /<(div|table|td)[^>]*(?:background-color\s*:\s*([^;"'\s]+)|bgcolor\s*=\s*["']([^"']+)["'])[^>]*>/gi;
+        let m;
+        
+        while ((m = bgRegex.exec(searchArea)) !== null) {
+            const tagName = m[1].toLowerCase();
+            const color = m[2] || m[3] || '';
+            
+            // Normalisiere Farbe
+            let normalizedColor = color.replace(/\s/g, '');
+            if (normalizedColor && !normalizedColor.startsWith('#')) {
+                normalizedColor = '#' + normalizedColor;
+            }
+            
+            if (isColoredBackground(normalizedColor)) {
+                bgElements.push({
+                    tagName: tagName,
+                    openTag: m[0],
+                    openPos: bodyEndPos + m.index,
+                    color: normalizedColor
+                });
+            }
+        }
+        
+        if (bgElements.length === 0) return null;
+        
+        // Nimm das erste (äußerste) Element
+        const wrapper = bgElements[0];
+        
+        // Finde das schließende Tag mit Nesting-Tracking
+        const closeTag = '</' + wrapper.tagName + '>';
+        const afterOpen = html.substring(wrapper.openPos);
+        let depth = 0;
+        let closePos = -1;
+        
+        for (let i = 0; i < afterOpen.length; i++) {
+            const sub = afterOpen.substring(i).toLowerCase();
+            if (sub.startsWith('<' + wrapper.tagName) && (sub[wrapper.tagName.length + 1] === ' ' || sub[wrapper.tagName.length + 1] === '>')) {
+                depth++;
+            } else if (sub.startsWith(closeTag)) {
+                depth--;
+                if (depth === 0) {
+                    closePos = wrapper.openPos + i;
+                    break;
+                }
+            }
+        }
+        
+        if (closePos <= 0) return null;
+        
+        return {
+            tagName: wrapper.tagName,
+            openTag: wrapper.openTag,
+            openPos: wrapper.openPos,
+            closePos: closePos,
+            color: wrapper.color
+        };
     }
     
     function buildPlacementSection(type, placeholder, info, candidates, detectedWidth) {
