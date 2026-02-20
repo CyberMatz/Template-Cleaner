@@ -1689,6 +1689,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const buttonsTab = document.getElementById('buttonsTab');
     const buttonsPanel = document.getElementById('buttonsPanel');
     const buttonsContent = document.getElementById('buttonsContent');
+    const placementTab = document.getElementById('placementTab');
+    const placementPanel = document.getElementById('placementPanel');
+    const placementContent = document.getElementById('placementContent');
     
     const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
     const commitChangesBtn = document.getElementById('commitChangesBtn');
@@ -1748,6 +1751,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Buttons Tab State
     let buttonsTabHtml = null;  // Separate HTML für Buttons Tab
+    let placementTabHtml = null;  // Separate HTML für Placement Tab
+    let placementPending = false;  // Pending Changes Flag
     let buttonsHistory = [];  // Undo History Stack
     let buttonsPending = false;  // Pending Changes Flag
     let manuallyMarkedButtons = [];  // Manuell als CTA markierte Link-Indizes
@@ -1782,7 +1787,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('FILE_SELECTED', file.name, file.size, file.type);
             
             // Phase 10: Check for pending changes before loading new file
-            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
             if (anyPending) {
                 const discard = confirm(
                     '⚠️ Es gibt nicht übernommene Änderungen in einem oder mehreren Tabs.\n\n' +
@@ -1896,6 +1901,9 @@ document.addEventListener('DOMContentLoaded', () => {
             editorHistory = [];
             editorPending = false;
             editorSelectedElement = null;
+            
+            placementTabHtml = null;
+            placementPending = false;
             
             // Phase 11 B7: Reset Global Commit Log
             globalCommitLog = [];
@@ -2055,7 +2063,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Prüfe ob pending Changes existieren
-            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
             
             if (anyPending) {
                 const confirmed = confirm(
@@ -2105,7 +2113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showDiffBtn.addEventListener('click', () => {
         if (processingResult && selectedFilename) {
             // Phase 11 B4: Prüfe ob pending Changes existieren
-            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
             // diffPendingHint bereits oben deklariert
             
             if (diffPendingHint) {
@@ -4269,7 +4277,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateGlobalFinalizeButton() {
         if (!globalFinalizeBtn) return;
         
-        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
         
         if (anyPending) {
             globalFinalizeBtn.disabled = false;
@@ -4283,7 +4291,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function finalizeAllPendingTabs() {
-        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
         
         if (!anyPending) {
             console.log('[FINALIZE] No pending changes');
@@ -4296,6 +4304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (imagesPending) pendingTabs.push('Bilder');
         if (editorPending) pendingTabs.push('Editor');
         if (buttonsPending) pendingTabs.push('Buttons');
+        if (placementPending) pendingTabs.push('Platzierung');
         
         const confirmed = confirm(
             'Es gibt nicht übernommene Änderungen in: ' + pendingTabs.join(', ') + '.\n\n' +
@@ -4330,6 +4339,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (success) committedTabs.push('Buttons');
         }
         
+        if (placementPending) {
+            // Placement changes are already in placementTabHtml
+            if (placementTabHtml) {
+                currentWorkingHtml = placementTabHtml;
+                placementPending = false;
+                committedTabs.push('Platzierung');
+            }
+        }
+        
         // Log Global Finalize (Phase 11 B6)
         if (committedTabs.length > 0) {
             const commitId = 'C' + String(globalCommitLog.length + 1).padStart(3, '0');
@@ -4348,6 +4366,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadInspectorTabContent('tagreview');
         loadInspectorTabContent('editor');
         loadInspectorTabContent('buttons');
+        loadInspectorTabContent('placement');
         
         // Update Preview
         updateInspectorPreview();
@@ -4375,7 +4394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // BUG #3 FIX: Direkt finalizeAllPendingTabs aufrufen statt
             // globalFinalizeBtn.click() – der Button ist disabled wenn nichts
             // pending ist und ein Click darauf passiert lautlos gar nichts.
-            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+            const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
             if (!anyPending) {
                 // Klares Feedback statt lautlosem Nichts
                 showInspectorToast('ℹ️ Keine offenen Änderungen zum Übernehmen');
@@ -4431,7 +4450,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateDownloadManualOptimizedButton() {
         if (!downloadManualOptimized) return;
         
-        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
         
         if (anyPending) {
             downloadManualOptimized.disabled = true;
@@ -4509,6 +4528,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (fromTab === 'buttons' && buttonsPending) {
             hasPending = true;
             tabName = 'Buttons';
+        } else if (fromTab === 'placement' && placementPending) {
+            hasPending = true;
+            tabName = 'Platzierung';
         }
         
         if (hasPending) {
@@ -4543,6 +4565,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 buttonsTabHtml = currentWorkingHtml;
                 buttonsHistory = [];
                 buttonsPending = false;
+            } else if (fromTab === 'placement') {
+                placementTabHtml = currentWorkingHtml;
+                placementPending = false;
             }
             
             updateGlobalPendingIndicator();
@@ -4565,12 +4590,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Update Tab Buttons
-        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab].forEach(tab => {
+        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab, placementTab].forEach(tab => {
             if (tab) tab.classList.remove('active');
         });
         
         // Update Panels
-        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel].forEach(panel => {
+        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel, placementPanel].forEach(panel => {
             if (panel) panel.style.display = 'none';
         });
         
@@ -4592,6 +4617,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (tabName === 'buttons' && buttonsTab && buttonsPanel) {
             buttonsTab.classList.add('active');
             buttonsPanel.style.display = 'block';
+        } else if (tabName === 'placement' && placementTab && placementPanel) {
+            placementTab.classList.add('active');
+            placementPanel.style.display = 'block';
         }
         
         // Lade Tab Content
@@ -4607,6 +4635,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tagReviewTab) tagReviewTab.addEventListener('click', () => switchInspectorTab('tagreview'));
     if (editorTab) editorTab.addEventListener('click', () => switchInspectorTab('editor'));
     if (buttonsTab) buttonsTab.addEventListener('click', () => switchInspectorTab('buttons'));
+    if (placementTab) placementTab.addEventListener('click', () => switchInspectorTab('placement'));
     
     // Load Tab Content (Placeholder für Phase 3-7)
     function loadInspectorTabContent(tabName) {
@@ -4627,6 +4656,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showEditorTab(editorContent);
         } else if (tabName === 'buttons' && buttonsContent) {
             showButtonsTab(buttonsContent);
+        } else if (tabName === 'placement' && placementContent) {
+            showPlacementTab(placementContent);
         }
     }
     
@@ -4669,6 +4700,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             sourceHtml = buttonsTabHtml;
             sourceLabel = 'buttons';
+        } else if (currentInspectorTab === 'placement') {
+            if (!placementTabHtml) {
+                placementTabHtml = currentWorkingHtml; // Initialisiere sofort
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Placement initialized from currentWorkingHtml');
+            }
+            sourceHtml = placementTabHtml;
+            sourceLabel = 'placement';
         }
         
         // Phase 13 P1: Debug Log (nur in DEV_MODE)
@@ -6658,6 +6696,483 @@ document.addEventListener('DOMContentLoaded', () => {
         attachButtonsEditListeners();
     }
     
+    // ===== PLATZIERUNGS-ASSISTENT (Placement Tab) =====
+    
+    function showPlacementTab(container) {
+        if (!container) return;
+        
+        const html = placementTabHtml || currentWorkingHtml || '';
+        if (!html) {
+            container.innerHTML = '<p style="padding: 16px; color: #999;">Kein Template geladen.</p>';
+            return;
+        }
+        
+        // Analysiere aktuelle Positionen
+        const headerInfo = analyzePlaceholderPosition(html, '%header%');
+        const footerInfo = analyzePlaceholderPosition(html, '%footer%');
+        
+        // Finde Kandidaten-Positionen
+        const headerCandidates = findHeaderCandidates(html);
+        const footerCandidates = findFooterCandidates(html);
+        
+        // Erkenne Content-Breite
+        const detectedWidth = detectContentWidth(html);
+        
+        let markup = '<div class="placement-tab-content">';
+        
+        // Einleitungstext
+        markup += '<div class="placement-intro">';
+        markup += '📍 <strong>Platzierungs-Assistent</strong> – Hier kannst du die Position von %header% und %footer% prüfen und anpassen. ';
+        markup += 'Wähle eine Position, schau dir die Vorschau rechts an, und klicke "Platzierung übernehmen".';
+        markup += '</div>';
+        
+        // === HEADER SECTION ===
+        markup += buildPlacementSection('header', '%header%', headerInfo, headerCandidates, detectedWidth);
+        
+        // === FOOTER SECTION ===
+        markup += buildPlacementSection('footer', '%footer%', footerInfo, footerCandidates, detectedWidth);
+        
+        markup += '</div>';
+        
+        container.innerHTML = markup;
+        
+        // Event Listener für Kandidaten-Karten
+        attachPlacementListeners(html, headerCandidates, footerCandidates);
+    }
+    
+    function analyzePlaceholderPosition(html, placeholder) {
+        const pos = html.indexOf(placeholder);
+        if (pos === -1) {
+            return { found: false, position: -1, context: '' };
+        }
+        
+        // Kontext: 80 Zeichen vor und nach dem Platzhalter
+        const start = Math.max(0, pos - 80);
+        const end = Math.min(html.length, pos + placeholder.length + 80);
+        const context = html.substring(start, end);
+        
+        // Bestimme ungefähre Position (prozentual im Dokument)
+        const percentPos = Math.round((pos / html.length) * 100);
+        
+        return { found: true, position: pos, context: context, percentPos: percentPos };
+    }
+    
+    function findHeaderCandidates(html) {
+        const candidates = [];
+        
+        // Kandidat 1: Direkt nach <body>
+        const bodyMatch = html.match(/<body[^>]*>/i);
+        if (bodyMatch) {
+            const pos = html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
+            candidates.push({
+                id: 'header_after_body',
+                label: 'Direkt nach <body> (ganz oben)',
+                description: 'Der Header wird ganz oben im sichtbaren Bereich platziert.',
+                position: pos,
+                snippet: getSnippetAround(html, pos, 50, 50)
+            });
+        }
+        
+        // Kandidat 2: Nach dem Preheader (wenn vorhanden)
+        const preheaderMatch = html.match(/<body[^>]*>\s*(<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>)/i);
+        if (preheaderMatch) {
+            const preheaderEnd = html.indexOf(preheaderMatch[1]) + preheaderMatch[1].length;
+            candidates.push({
+                id: 'header_after_preheader',
+                label: 'Nach dem Preheader',
+                description: 'Der Header kommt nach dem versteckten Preheader-Block.',
+                position: preheaderEnd,
+                snippet: getSnippetAround(html, preheaderEnd, 40, 60)
+            });
+        }
+        
+        // Kandidat 3: Vor der ersten Content-Tabelle (mit width-Attribut)
+        const contentTableMatch = html.match(/<table[^>]*width=["']\d+["'][^>]*>/i);
+        if (contentTableMatch) {
+            const pos = html.indexOf(contentTableMatch[0]);
+            // Nur wenn nicht schon direkt nach body
+            if (pos > (bodyMatch ? html.indexOf(bodyMatch[0]) + 50 : 0)) {
+                candidates.push({
+                    id: 'header_before_content',
+                    label: 'Vor der ersten Content-Tabelle',
+                    description: 'Der Header wird direkt vor dem Haupt-Content platziert.',
+                    position: pos,
+                    snippet: getSnippetAround(html, pos, 30, 70)
+                });
+            }
+        }
+        
+        // DPL-Kandidat: Nach dem roten Hintergrund-Div
+        const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
+        if (redDivMatch) {
+            const pos = html.indexOf(redDivMatch[0]) + redDivMatch[0].length;
+            candidates.push({
+                id: 'header_inside_red_div',
+                label: 'Innerhalb des roten Hintergrund-Divs (DPL)',
+                description: 'Spezielle DPL-Platzierung: Header innerhalb des roten Wrapper-Divs.',
+                position: pos,
+                snippet: getSnippetAround(html, pos, 30, 70)
+            });
+        }
+        
+        // Markiere aktuelle Position
+        const currentPos = html.indexOf('%header%');
+        if (currentPos !== -1) {
+            candidates.forEach(c => {
+                // "Aktuell" wenn der Platzhalter innerhalb von 200 Zeichen dieser Position ist
+                if (Math.abs(c.position - currentPos) < 200) {
+                    c.isCurrent = true;
+                }
+            });
+        }
+        
+        return candidates;
+    }
+    
+    function findFooterCandidates(html) {
+        const candidates = [];
+        
+        // Kandidat 1: Vor </body>
+        const bodyCloseMatch = html.match(/<\/body>/i);
+        if (bodyCloseMatch) {
+            const pos = html.lastIndexOf(bodyCloseMatch[0]);
+            candidates.push({
+                id: 'footer_before_body_close',
+                label: 'Vor </body> (ganz unten)',
+                description: 'Der Footer wird ganz am Ende des sichtbaren Bereichs platziert.',
+                position: pos,
+                snippet: getSnippetAround(html, pos, 70, 30)
+            });
+        }
+        
+        // Kandidat 2: Nach der letzten Content-Tabelle (mit width-Attribut)
+        const allContentTables = [...html.matchAll(/<\/table>/gi)];
+        if (allContentTables.length > 0) {
+            // Suche die letzte Tabelle die VOR </body> schließt
+            const bodyClosePos = bodyCloseMatch ? html.lastIndexOf(bodyCloseMatch[0]) : html.length;
+            let lastTableEnd = -1;
+            allContentTables.forEach(m => {
+                const endPos = m.index + m[0].length;
+                if (endPos < bodyClosePos) {
+                    lastTableEnd = endPos;
+                }
+            });
+            
+            if (lastTableEnd > 0) {
+                candidates.push({
+                    id: 'footer_after_last_table',
+                    label: 'Nach der letzten Tabelle',
+                    description: 'Der Footer kommt direkt nach dem letzten Tabellen-Element.',
+                    position: lastTableEnd,
+                    snippet: getSnippetAround(html, lastTableEnd, 60, 40)
+                });
+            }
+        }
+        
+        // DPL-Kandidat: Vor dem schließenden roten Div
+        const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
+        if (redDivMatch) {
+            // Finde das schließende </div> des roten Divs
+            const redDivStart = html.indexOf(redDivMatch[0]);
+            const afterRedDiv = html.slice(redDivStart);
+            let depth = 0;
+            let redDivEndLocal = -1;
+            
+            for (let i = 0; i < afterRedDiv.length; i++) {
+                if (afterRedDiv.substr(i, 4) === '<div' && (afterRedDiv[i+4] === ' ' || afterRedDiv[i+4] === '>')) {
+                    depth++;
+                } else if (afterRedDiv.substr(i, 6) === '</div>') {
+                    depth--;
+                    if (depth === 0) {
+                        redDivEndLocal = redDivStart + i;
+                        break;
+                    }
+                }
+            }
+            
+            if (redDivEndLocal > 0) {
+                candidates.push({
+                    id: 'footer_inside_red_div',
+                    label: 'Innerhalb des roten Hintergrund-Divs (DPL)',
+                    description: 'Spezielle DPL-Platzierung: Footer vor dem schließenden roten Wrapper-Div.',
+                    position: redDivEndLocal,
+                    snippet: getSnippetAround(html, redDivEndLocal, 60, 40)
+                });
+            }
+        }
+        
+        // Markiere aktuelle Position
+        const currentPos = html.indexOf('%footer%');
+        if (currentPos !== -1) {
+            candidates.forEach(c => {
+                if (Math.abs(c.position - currentPos) < 200) {
+                    c.isCurrent = true;
+                }
+            });
+        }
+        
+        return candidates;
+    }
+    
+    function getSnippetAround(html, pos, before, after) {
+        const start = Math.max(0, pos - before);
+        const end = Math.min(html.length, pos + after);
+        let snippet = html.substring(start, end);
+        
+        // Trim und Ellipsis
+        if (start > 0) snippet = '...' + snippet;
+        if (end < html.length) snippet = snippet + '...';
+        
+        return snippet;
+    }
+    
+    function escapeHtmlForDisplay(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    
+    function detectContentWidth(html) {
+        // Suche nach der häufigsten Pixel-Breite in Tabellen (typischerweise die Content-Breite)
+        const widthMatches = html.match(/<table[^>]*width=["'](\d+)["'][^>]*>/gi) || [];
+        const widthCounts = {};
+        
+        widthMatches.forEach(match => {
+            const w = match.match(/width=["'](\d+)["']/i);
+            if (w) {
+                const val = parseInt(w[1]);
+                // Nur relevante Breiten im typischen E-Mail-Bereich (400-800px)
+                if (val >= 400 && val <= 800) {
+                    widthCounts[val] = (widthCounts[val] || 0) + 1;
+                }
+            }
+        });
+        
+        // Finde die häufigste Breite
+        let bestWidth = null;
+        let bestCount = 0;
+        Object.entries(widthCounts).forEach(([width, count]) => {
+            if (count > bestCount) {
+                bestCount = count;
+                bestWidth = parseInt(width);
+            }
+        });
+        
+        return bestWidth;
+    }
+    
+    function buildPlacementSection(type, placeholder, info, candidates, detectedWidth) {
+        let markup = '<div class="placement-section">';
+        
+        // Header
+        markup += '<div class="placement-section-header">';
+        markup += '<span>' + escapeHtmlForDisplay(placeholder) + '</span>';
+        if (info.found) {
+            markup += '<span class="placement-status found">✓ Vorhanden (Position: ~' + info.percentPos + '%)</span>';
+        } else {
+            markup += '<span class="placement-status missing">✗ Fehlt im Template</span>';
+        }
+        markup += '</div>';
+        
+        // Kandidaten
+        markup += '<div class="placement-candidates">';
+        
+        if (candidates.length === 0) {
+            markup += '<p style="padding: 8px; color: #999; font-size: 13px;">Keine Positionen erkannt. Das Template hat möglicherweise eine ungewöhnliche Struktur.</p>';
+        } else {
+            candidates.forEach((c, idx) => {
+                const isCurrentClass = c.isCurrent ? ' current' : '';
+                const currentLabel = c.isCurrent ? ' (aktuell)' : '';
+                
+                markup += '<div class="placement-candidate' + isCurrentClass + '" data-type="' + type + '" data-index="' + idx + '">';
+                markup += '<input type="radio" name="placement_' + type + '" class="placement-candidate-radio" ' + (c.isCurrent ? 'checked' : '') + '>';
+                markup += '<div class="placement-candidate-info">';
+                markup += '<div class="placement-candidate-label">' + escapeHtmlForDisplay(c.label) + currentLabel + '</div>';
+                markup += '<div class="placement-candidate-description">' + escapeHtmlForDisplay(c.description) + '</div>';
+                markup += '<div class="placement-candidate-snippet">' + escapeHtmlForDisplay(c.snippet) + '</div>';
+                markup += '</div>';
+                markup += '</div>';
+            });
+        }
+        
+        markup += '</div>';
+        
+        // Breiten-Option
+        markup += '<div class="placement-width-option">';
+        markup += '<label class="placement-width-label">Breite der Wrapper-Tabelle:</label>';
+        markup += '<select class="placement-width-select" data-type="' + type + '">';
+        markup += '<option value="100%">100% (Standard)</option>';
+        if (detectedWidth) {
+            markup += '<option value="' + detectedWidth + '">' + detectedWidth + 'px (wie Content-Tabelle)</option>';
+        }
+        markup += '<option value="custom">Eigener Wert...</option>';
+        markup += '</select>';
+        markup += '<input type="number" class="placement-width-custom" data-type="' + type + '" placeholder="z.B. 600" style="display:none;" min="200" max="900">';
+        markup += '</div>';
+        
+        // Apply Bar
+        markup += '<div class="placement-apply-bar">';
+        markup += '<button class="btn-placement-apply" data-type="' + type + '" disabled>✅ ' + escapeHtmlForDisplay(placeholder) + ' hier platzieren</button>';
+        markup += '<span class="placement-hint">Wähle eine Position und prüfe die Vorschau rechts</span>';
+        markup += '</div>';
+        
+        markup += '</div>';
+        return markup;
+    }
+    
+    function attachPlacementListeners(originalHtml, headerCandidates, footerCandidates) {
+        
+        // Helfer: Gewählte Breite für einen Typ auslesen
+        function getSelectedWidth(type) {
+            const select = document.querySelector('.placement-width-select[data-type="' + type + '"]');
+            const customInput = document.querySelector('.placement-width-custom[data-type="' + type + '"]');
+            if (!select) return '100%';
+            if (select.value === 'custom') {
+                return customInput && customInput.value ? customInput.value : '100%';
+            }
+            return select.value;
+        }
+        
+        // Breiten-Select Listener
+        document.querySelectorAll('.placement-width-select').forEach(select => {
+            select.addEventListener('change', () => {
+                const type = select.dataset.type;
+                const customInput = document.querySelector('.placement-width-custom[data-type="' + type + '"]');
+                if (customInput) {
+                    customInput.style.display = select.value === 'custom' ? 'inline-block' : 'none';
+                }
+                
+                // Vorschau aktualisieren wenn bereits eine Position gewählt ist
+                const selectedCard = document.querySelector('.placement-candidate.selected[data-type="' + type + '"]');
+                if (selectedCard) {
+                    const candidates = type === 'header' ? headerCandidates : footerCandidates;
+                    const placeholder = type === 'header' ? '%header%' : '%footer%';
+                    const index = parseInt(selectedCard.dataset.index);
+                    const width = getSelectedWidth(type);
+                    const previewHtml = buildPlacementPreview(originalHtml, placeholder, candidates[index].position, width);
+                    placementTabHtml = previewHtml;
+                    updateInspectorPreview();
+                }
+            });
+        });
+        
+        // Custom-Width Input Listener (Vorschau bei Eingabe aktualisieren)
+        document.querySelectorAll('.placement-width-custom').forEach(input => {
+            input.addEventListener('input', () => {
+                const type = input.dataset.type;
+                const selectedCard = document.querySelector('.placement-candidate.selected[data-type="' + type + '"]');
+                if (selectedCard) {
+                    const candidates = type === 'header' ? headerCandidates : footerCandidates;
+                    const placeholder = type === 'header' ? '%header%' : '%footer%';
+                    const index = parseInt(selectedCard.dataset.index);
+                    const width = getSelectedWidth(type);
+                    const previewHtml = buildPlacementPreview(originalHtml, placeholder, candidates[index].position, width);
+                    placementTabHtml = previewHtml;
+                    updateInspectorPreview();
+                }
+            });
+        });
+        
+        // Klick auf Kandidaten-Karten
+        document.querySelectorAll('.placement-candidate').forEach(card => {
+            card.addEventListener('click', () => {
+                const type = card.dataset.type;
+                const index = parseInt(card.dataset.index);
+                const candidates = type === 'header' ? headerCandidates : footerCandidates;
+                const placeholder = type === 'header' ? '%header%' : '%footer%';
+                
+                // Radio-Button aktivieren
+                card.querySelector('.placement-candidate-radio').checked = true;
+                
+                // Visual Selection
+                document.querySelectorAll('.placement-candidate[data-type="' + type + '"]').forEach(c => {
+                    c.classList.remove('selected');
+                });
+                card.classList.add('selected');
+                
+                // Apply-Button aktivieren
+                const applyBtn = document.querySelector('.btn-placement-apply[data-type="' + type + '"]');
+                if (applyBtn) applyBtn.disabled = false;
+                
+                // Vorschau aktualisieren mit gewählter Position + Breite
+                const candidate = candidates[index];
+                const width = getSelectedWidth(type);
+                const previewHtml = buildPlacementPreview(originalHtml, placeholder, candidate.position, width);
+                placementTabHtml = previewHtml;
+                updateInspectorPreview();
+            });
+        });
+        
+        // Apply-Buttons
+        document.querySelectorAll('.btn-placement-apply').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const type = btn.dataset.type;
+                const placeholder = type === 'header' ? '%header%' : '%footer%';
+                
+                if (placementTabHtml) {
+                    // Direkt in currentWorkingHtml übernehmen
+                    currentWorkingHtml = placementTabHtml;
+                    
+                    // Alle anderen Tab-HTMLs zurücksetzen (damit sie den neuen Stand bekommen)
+                    trackingTabHtml = null;
+                    imagesTabHtml = null;
+                    editorTabHtml = null;
+                    buttonsTabHtml = null;
+                    
+                    placementPending = false;
+                    
+                    const width = getSelectedWidth(type);
+                    const widthHint = width !== '100%' ? ' (Breite: ' + width + 'px)' : '';
+                    showInspectorToast('✅ ' + placeholder + ' wurde neu platziert' + widthHint);
+                    
+                    // Tab neu rendern (zeigt jetzt "aktuell" an der neuen Position)
+                    showPlacementTab(placementContent);
+                    updateInspectorPreview();
+                    updateDownloadManualOptimizedButton();
+                }
+            });
+        });
+    }
+    
+    function buildPlacementPreview(html, placeholder, targetPosition, width) {
+        const widthAttr = width && width !== '100%' ? width : '100%';
+        const wrapper = '\n<table width="' + widthAttr + '" border="0" cellpadding="0" cellspacing="0" align="center"><tr><td><center>' + placeholder + '</center></td></tr></table>\n';
+        
+        // Entferne bestehenden Platzhalter (inklusive umgebender Wrapper-Tabelle wenn vorhanden)
+        let cleanedHtml = html;
+        
+        // Versuche den Platzhalter MIT umgebender Tabelle zu entfernen
+        const wrapperPattern = new RegExp(
+            '<table[^>]*>\\s*<tr>\\s*<td[^>]*>\\s*(?:<center>\\s*)?' + placeholder.replace(/%/g, '\\%') + '(?:\\s*<\\/center>)?\\s*<\\/td>\\s*<\\/tr>\\s*<\\/table>',
+            'gi'
+        );
+        
+        if (wrapperPattern.test(cleanedHtml)) {
+            cleanedHtml = cleanedHtml.replace(wrapperPattern, '');
+        } else {
+            // Fallback: Nur den Platzhalter selbst entfernen
+            cleanedHtml = cleanedHtml.replace(new RegExp(placeholder.replace(/%/g, '\\%'), 'g'), '');
+        }
+        
+        // Berechne neue Position (nach dem Entfernen hat sich der Offset verschoben)
+        // Finde die Position im bereinigten HTML die der Zielposition am nächsten kommt
+        let adjustedPos = targetPosition;
+        
+        // Einfache Offset-Korrektur: Wenn der alte Platzhalter VOR der Zielposition war, 
+        // hat sich die Position um die Länge des entfernten Blocks verschoben
+        const oldPos = html.indexOf(placeholder);
+        if (oldPos !== -1 && oldPos < targetPosition) {
+            const removedLength = html.length - cleanedHtml.length;
+            adjustedPos = Math.max(0, targetPosition - removedLength);
+        }
+        
+        // Sicherheitscheck: Position nicht über die Länge hinaus
+        adjustedPos = Math.min(adjustedPos, cleanedHtml.length);
+        
+        // Platzhalter an neuer Position einfügen
+        const result = cleanedHtml.slice(0, adjustedPos) + wrapper + cleanedHtml.slice(adjustedPos);
+        
+        return result;
+    }
+    
     // Extrahiere CTA-Buttons aus HTML (String-basiert, da VML in Comments)
     // Erkennt: Typ A = <a> mit background-color, Typ B = <td bgcolor> mit <a> drin
     function extractCTAButtonsFromHTML(html) {
@@ -8502,7 +9017,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const lenOriginal = processingResult?.originalHtml?.length || 0;
         const lenCurrent = currentWorkingHtml?.length || 0;
-        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
         
         // Prüfe ob Downloads currentWorkingHtml verwenden
         const downloadSourceOK = (currentWorkingHtml !== null && currentWorkingHtml !== undefined);
@@ -8636,7 +9151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Zeige Warning wenn irgendein Tab pending
-        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending;
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
         if (pendingWarning) {
             pendingWarning.style.display = anyPending ? 'block' : 'none';
         }
