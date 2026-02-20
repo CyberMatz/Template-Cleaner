@@ -7197,7 +7197,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 resultsHtml += '<select class="upload-insert-select" data-url="' + escapeHtml(file.publicUrl) + '">';
                 resultsHtml += '<option value="">→ In Bild einsetzen...</option>';
                 images.forEach(img => {
-                    const label = img.id + ' ' + img.alt;
+                    // Besseres Label: ID + Dateiname aus der src URL
+                    let fileName = '';
+                    try {
+                        const srcParts = img.src.split('/');
+                        fileName = srcParts[srcParts.length - 1] || '';
+                        if (fileName.length > 30) fileName = fileName.substring(0, 27) + '...';
+                    } catch(e) {}
+                    const altInfo = img.alt && img.alt !== '[kein alt]' ? img.alt : '';
+                    const widthInfo = img.width ? ' (' + img.width + 'px)' : '';
+                    const label = img.id + ' – ' + (fileName || altInfo || '[unbekannt]') + widthInfo;
                     resultsHtml += '<option value="' + img.id + '">' + escapeHtml(label) + '</option>';
                 });
                 resultsHtml += '</select>';
