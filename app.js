@@ -1748,6 +1748,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let imagesTabHtml = null;  // Separate HTML für Images Tab
     let imagesHistory = [];  // Undo History Stack
     let imagesPending = false;  // Pending Changes Flag
+    let lastUploadResults = null;  // Upload-Ergebnisse über Re-Renders hinweg speichern
+    let lastUploadFolder = '';  // Letzter verwendeter Ordnername
     
     // Buttons Tab State
     let buttonsTabHtml = null;  // Separate HTML für Buttons Tab
@@ -7152,39 +7154,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Ordner-Input aktualisieren (falls Server neuen _N Ordner erstellt hat)
             if (folderInput) folderInput.value = data.folder;
             
-            // Ergebnisse anzeigen mit URLs und "Einsetzen"-Buttons
-            if (resultsEl) {
-                let resultsHtml = '';
-                data.files.forEach(file => {
-                    resultsHtml += '<div class="upload-result-item">';
-                    resultsHtml += '<div class="upload-result-preview"><img src="' + file.publicUrl + '" alt="' + escapeHtml(file.uploadedName) + '"></div>';
-                    resultsHtml += '<div class="upload-result-info">';
-                    resultsHtml += '<div class="upload-result-name">' + escapeHtml(file.uploadedName) + '</div>';
-                    resultsHtml += '<div class="upload-result-url"><code>' + escapeHtml(file.publicUrl) + '</code></div>';
-                    resultsHtml += '<div class="upload-result-actions">';
-                    resultsHtml += '<button class="btn-small btn-copy-url" data-url="' + escapeHtml(file.publicUrl) + '">📋 URL kopieren</button>';
-                    
-                    // "Einsetzen in Bild"-Dropdown (für jedes existierende Bild im Template)
-                    const images = extractImagesFromHTML(imagesTabHtml || currentWorkingHtml);
-                    if (images.length > 0) {
-                        resultsHtml += '<select class="upload-insert-select" data-url="' + escapeHtml(file.publicUrl) + '">';
-                        resultsHtml += '<option value="">→ In Bild einsetzen...</option>';
-                        images.forEach(img => {
-                            const label = img.id + ' ' + img.alt;
-                            resultsHtml += '<option value="' + img.id + '">' + escapeHtml(label) + '</option>';
-                        });
-                        resultsHtml += '</select>';
-                    }
-                    
-                    resultsHtml += '</div>';
-                    resultsHtml += '</div>';
-                    resultsHtml += '</div>';
-                });
-                resultsEl.innerHTML = resultsHtml;
-                
-                // Event-Listener für Ergebnis-Buttons
-                attachUploadResultListeners();
-            }
+            // Ergebnisse speichern (überleben Re-Renders)
+            if (!lastUploadResults) lastUploadResults = [];
+            lastUploadResults = lastUploadResults.concat(data.files);
+            lastUploadFolder = data.folder;
+            
+            // Ergebnisse anzeigen
+            renderUploadResults();
             
             console.log('[UPLOAD] Success:', data);
             
@@ -7193,6 +7169,58 @@ document.addEventListener('DOMContentLoaded', () => {
             if (statusEl) {
                 statusEl.innerHTML = '<span class="upload-status-err">❌ ' + escapeHtml(err.message) + '</span>';
             }
+        }
+    }
+    
+    // Render Upload-Ergebnisse (wird nach Upload UND nach Tab-Re-Render aufgerufen)
+    function renderUploadResults() {
+        const resultsEl = document.getElementById('imageUploadResults');
+        if (!resultsEl || !lastUploadResults || lastUploadResults.length === 0) return;
+        
+        let resultsHtml = '<div class="upload-results-header">';
+        resultsHtml += '<strong>' + lastUploadResults.length + ' hochgeladene Bild(er)</strong>';
+        resultsHtml += '<button class="btn-small btn-upload-clear" id="btnClearUploadResults" title="Liste leeren">✕</button>';
+        resultsHtml += '</div>';
+        
+        lastUploadResults.forEach(file => {
+            resultsHtml += '<div class="upload-result-item">';
+            resultsHtml += '<div class="upload-result-preview"><img src="' + file.publicUrl + '" alt="' + escapeHtml(file.uploadedName) + '"></div>';
+            resultsHtml += '<div class="upload-result-info">';
+            resultsHtml += '<div class="upload-result-name">' + escapeHtml(file.uploadedName) + '</div>';
+            resultsHtml += '<div class="upload-result-url"><code>' + escapeHtml(file.publicUrl) + '</code></div>';
+            resultsHtml += '<div class="upload-result-actions">';
+            resultsHtml += '<button class="btn-small btn-copy-url" data-url="' + escapeHtml(file.publicUrl) + '">📋 URL kopieren</button>';
+            
+            // "Einsetzen in Bild"-Dropdown (mit aktuellen Template-Bildern)
+            const images = extractImagesFromHTML(imagesTabHtml || currentWorkingHtml);
+            if (images.length > 0) {
+                resultsHtml += '<select class="upload-insert-select" data-url="' + escapeHtml(file.publicUrl) + '">';
+                resultsHtml += '<option value="">→ In Bild einsetzen...</option>';
+                images.forEach(img => {
+                    const label = img.id + ' ' + img.alt;
+                    resultsHtml += '<option value="' + img.id + '">' + escapeHtml(label) + '</option>';
+                });
+                resultsHtml += '</select>';
+            }
+            
+            resultsHtml += '</div>';
+            resultsHtml += '</div>';
+            resultsHtml += '</div>';
+        });
+        
+        resultsEl.innerHTML = resultsHtml;
+        
+        // Event-Listener
+        attachUploadResultListeners();
+        
+        // Clear-Button
+        const clearBtn = document.getElementById('btnClearUploadResults');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                lastUploadResults = null;
+                lastUploadFolder = '';
+                resultsEl.innerHTML = '';
+            });
         }
     }
     
@@ -7299,6 +7327,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Server-Status prüfen
         checkUploadServerStatus();
+        
+        // Gespeicherte Upload-Ergebnisse wiederherstellen
+        renderUploadResults();
+        
+        // Ordner-Input wiederherstellen
+        if (lastUploadFolder) {
+            const folderInput = document.getElementById('imageUploadFolder');
+            if (folderInput) folderInput.value = lastUploadFolder;
+        }
     }
     
     // Handle Images Undo (Phase 7B)

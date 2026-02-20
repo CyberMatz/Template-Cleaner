@@ -2024,6 +2024,20 @@ body {
     max-width: 180px;
 }
 
+.upload-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.btn-upload-clear {
+    color: #999;
+    border-color: #ddd;
+}
+
 /* Manuelle Button-Markierung */
 .buttons-manual-section {
     background: #f8f9fa;
