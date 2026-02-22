@@ -5106,7 +5106,14 @@ td[width] { width: auto !important; }
             } catch(e) { /* cross-origin or not loaded yet */ }
             
             // Setze srcdoc mit annotiertem HTML
-            inspectorPreviewFrame.srcdoc = annotatedHtml;
+            // Cache-Buster für Bilder im Preview (verhindert dass alte Bilder angezeigt werden)
+            let previewHtml = annotatedHtml;
+            const cacheBuster = '_cb=' + Date.now();
+            previewHtml = previewHtml.replace(/(<img\b[^>]*\bsrc\s*=\s*["'])(https?:\/\/[^"']+)(["'])/gi, function(match, before, url, after) {
+                const separator = url.includes('?') ? '&' : '?';
+                return before + url + separator + cacheBuster + after;
+            });
+            inspectorPreviewFrame.srcdoc = previewHtml;
             
             // Warte auf iframe load und sende pending messages
             inspectorPreviewFrame.onload = () => {
@@ -7703,6 +7710,7 @@ td[width] { width: auto !important; }
         if (!browserEl) return;
         
         currentBrowsingFolder = folderName;
+        browserEl.style.display = 'block';
         
         browserEl.innerHTML = '<div class="folder-browser-loading">⏳ Bilder in <strong>' + escapeHtml(folderName) + '</strong> werden geladen...</div>';
         
