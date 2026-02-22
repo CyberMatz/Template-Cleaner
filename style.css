@@ -2038,6 +2038,77 @@ body {
     border-color: #ddd;
 }
 
+/* Folder Browser */
+.upload-folder-browser {
+    margin-top: 6px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: white;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.folder-browser-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+    position: sticky;
+    top: 0;
+    background: white;
+}
+
+.folder-browser-loading,
+.folder-browser-empty,
+.folder-browser-error {
+    padding: 12px;
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+}
+
+.folder-browser-error {
+    color: #c0392b;
+}
+
+.folder-browser-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid #f5f5f5;
+    transition: background 0.15s;
+}
+
+.folder-browser-item:hover {
+    background: #fff8ee;
+}
+
+.folder-browser-item:last-child {
+    border-bottom: none;
+}
+
+.folder-browser-item.folder-today {
+    background: #f0faf0;
+}
+
+.folder-browser-item.folder-today:hover {
+    background: #e0f5e0;
+}
+
+.folder-browser-name {
+    font-weight: 500;
+}
+
+.folder-browser-date {
+    font-size: 11px;
+    color: #999;
+}
+
 /* Manuelle Button-Markierung */
 .buttons-manual-section {
     background: #f8f9fa;

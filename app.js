@@ -6185,7 +6185,9 @@ document.addEventListener('DOMContentLoaded', () => {
         html += '<label>Ordner: </label>';
         html += '<input type="text" id="imageUploadFolder" class="upload-folder-input" placeholder="auto (' + getTodayFolderName() + ')">';
         html += '<button class="btn-small" id="btnNewFolder" title="Neuen Ordner erzwingen (mit _1, _2...)">+ Neu</button>';
+        html += '<button class="btn-small" id="btnBrowseFolders" title="Vorhandene Ordner anzeigen">📂 Ordner</button>';
         html += '</div>';
+        html += '<div class="upload-folder-browser" id="folderBrowser" style="display:none;"></div>';
         html += '<div class="upload-results" id="imageUploadResults"></div>';
         html += '</div>';
         
@@ -7262,6 +7264,76 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Ordner vom Server laden und anzeigen
+    async function browseServerFolders() {
+        const browserEl = document.getElementById('folderBrowser');
+        if (!browserEl) return;
+        
+        // Toggle: Wenn schon offen → schließen
+        if (browserEl.style.display !== 'none') {
+            browserEl.style.display = 'none';
+            return;
+        }
+        
+        browserEl.style.display = 'block';
+        browserEl.innerHTML = '<div class="folder-browser-loading">⏳ Ordner werden geladen...</div>';
+        
+        try {
+            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/folders', { signal: AbortSignal.timeout(5000) });
+            if (!resp.ok) throw new Error('Server-Fehler');
+            
+            const data = await resp.json();
+            
+            if (!data.folders || data.folders.length === 0) {
+                browserEl.innerHTML = '<div class="folder-browser-empty">Keine Ordner gefunden.</div>';
+                return;
+            }
+            
+            let html = '<div class="folder-browser-header">';
+            html += '<strong>Vorhandene Ordner</strong>';
+            html += '<button class="btn-small btn-folder-close" id="btnCloseFolderBrowser">✕</button>';
+            html += '</div>';
+            html += '<div class="folder-browser-list">';
+            
+            data.folders.forEach(folder => {
+                const date = new Date(folder.modified);
+                const dateStr = date.toLocaleDateString('de-DE') + ' ' + date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                const isToday = folder.name.startsWith(getTodayFolderName());
+                html += '<div class="folder-browser-item' + (isToday ? ' folder-today' : '') + '" data-folder="' + escapeHtml(folder.name) + '">';
+                html += '<span class="folder-browser-name">📁 ' + escapeHtml(folder.name) + '</span>';
+                html += '<span class="folder-browser-date">' + dateStr + '</span>';
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            browserEl.innerHTML = html;
+            
+            // Klick-Listener auf Ordner
+            browserEl.querySelectorAll('.folder-browser-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const folderName = this.getAttribute('data-folder');
+                    const folderInput = document.getElementById('imageUploadFolder');
+                    if (folderInput) folderInput.value = folderName;
+                    lastUploadFolder = folderName;
+                    browserEl.style.display = 'none';
+                    showInspectorToast('📂 Ordner gewählt: ' + folderName);
+                });
+            });
+            
+            // Schließen-Button
+            const closeBtn = document.getElementById('btnCloseFolderBrowser');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    browserEl.style.display = 'none';
+                });
+            }
+            
+        } catch (err) {
+            browserEl.innerHTML = '<div class="folder-browser-error">⚠️ Ordner konnten nicht geladen werden.<br><small>' + escapeHtml(err.message) + '</small></div>';
+        }
+    }
+    
     // Upload Event-Listener an Drop-Zone und File-Input anhängen
     function attachUploadListeners() {
         const dropZone = document.getElementById('imageDropZone');
@@ -7331,6 +7403,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         newFolderBtn.textContent = 'Neu';
                     }
                 }
+            });
+        }
+        
+        // Ordner durchsuchen Button
+        const browseFoldersBtn = document.getElementById('btnBrowseFolders');
+        if (browseFoldersBtn) {
+            browseFoldersBtn.addEventListener('click', function() {
+                browseServerFolders();
             });
         }
         
