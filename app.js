@@ -4904,6 +4904,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyClientSimulation(html, clientId) {
         const profile = CLIENT_PROFILES[clientId];
         if (!profile || profile.transforms.length === 0) {
+            // Auch bei Apple Mail Mobile: responsive Styles injizieren
+            if (profile && profile.mobile) {
+                html = injectMobileStyles(html);
+            }
             return html;
         }
         
@@ -4912,11 +4916,37 @@ document.addEventListener('DOMContentLoaded', () => {
             simHtml = applyClientTransform(simHtml, transform);
         });
         
+        // Bei Mobile-Clients: responsive Styles injizieren (NACH den Transforms)
+        if (profile.mobile) {
+            simHtml = injectMobileStyles(simHtml);
+        }
+        
         if (window.DEV_MODE) {
-            console.log(`[CLIENT-SIM] Applied ${profile.transforms.length} transforms for ${profile.label}`);
+            console.log(`[CLIENT-SIM] Applied ${profile.transforms.length} transforms for ${profile.label} (mobile: ${profile.mobile})`);
         }
         
         return simHtml;
+    }
+    
+    // Mobile responsive Styles injizieren
+    // Erzwingt responsive Darstellung: Tabellen auf 100%, Bilder skalieren
+    // Nutzt nur Element-Selektoren (keine Klassen – die werden bei Gmail/GMX/Web.de entfernt)
+    function injectMobileStyles(html) {
+        const mobileCSS = `<style type="text/css" data-qa-mobile-sim="true">
+/* CLIENT-SIM: Mobile responsive Styles */
+table { max-width: 100% !important; }
+table[width] { width: 100% !important; }
+img { max-width: 100% !important; height: auto !important; }
+td { max-width: 100% !important; }
+td[width] { width: auto !important; }
+</style>`;
+        
+        // Vor </head> einfügen, falls vorhanden
+        if (/<\/head>/i.test(html)) {
+            return html.replace(/<\/head>/i, mobileCSS + '\n</head>');
+        }
+        // Fallback: Am Anfang des Dokuments
+        return mobileCSS + '\n' + html;
     }
     
     // Mobile-Modus umschalten (iframe-Breite einschränken)
