@@ -7265,12 +7265,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Ordner vom Server laden und anzeigen
-    async function browseServerFolders() {
+    async function browseServerFolders(forceOpen) {
         const browserEl = document.getElementById('folderBrowser');
         if (!browserEl) return;
         
-        // Toggle: Wenn schon offen → schließen
-        if (browserEl.style.display !== 'none') {
+        // Toggle: Wenn schon offen → schließen (außer forceOpen)
+        if (browserEl.style.display !== 'none' && !forceOpen) {
             browserEl.style.display = 'none';
             return;
         }
@@ -7312,11 +7312,12 @@ document.addEventListener('DOMContentLoaded', () => {
             browserEl.querySelectorAll('.folder-browser-item').forEach(item => {
                 item.addEventListener('click', function() {
                     const folderName = this.getAttribute('data-folder');
+                    // Ordner ins Eingabefeld übernehmen
                     const folderInput = document.getElementById('imageUploadFolder');
                     if (folderInput) folderInput.value = folderName;
                     lastUploadFolder = folderName;
-                    browserEl.style.display = 'none';
-                    showInspectorToast('📂 Ordner gewählt: ' + folderName);
+                    // Inhalt des Ordners laden
+                    loadFolderContents(folderName);
                 });
             });
             
@@ -7331,6 +7332,122 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } catch (err) {
             browserEl.innerHTML = '<div class="folder-browser-error">⚠️ Ordner konnten nicht geladen werden.<br><small>' + escapeHtml(err.message) + '</small></div>';
+        }
+    }
+    
+    // Ordner-Inhalt (Bilder) vom Server laden und anzeigen
+    async function loadFolderContents(folderName) {
+        const browserEl = document.getElementById('folderBrowser');
+        if (!browserEl) return;
+        
+        browserEl.innerHTML = '<div class="folder-browser-loading">⏳ Bilder in <strong>' + escapeHtml(folderName) + '</strong> werden geladen...</div>';
+        
+        try {
+            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/folders/' + encodeURIComponent(folderName), { signal: AbortSignal.timeout(5000) });
+            if (!resp.ok) throw new Error('Ordner nicht gefunden');
+            
+            const data = await resp.json();
+            
+            let html = '<div class="folder-browser-header">';
+            html += '<strong>📂 ' + escapeHtml(folderName) + ' (' + data.files.length + ' Bilder)</strong>';
+            html += '<div>';
+            html += '<button class="btn-small btn-folder-back" id="btnFolderBack" title="Zurück zur Ordnerliste">← Zurück</button> ';
+            html += '<button class="btn-small btn-folder-close" id="btnCloseFolderBrowser">✕</button>';
+            html += '</div>';
+            html += '</div>';
+            
+            if (data.files.length === 0) {
+                html += '<div class="folder-browser-empty">Keine Bilder in diesem Ordner.</div>';
+            } else {
+                html += '<div class="folder-contents-list">';
+                
+                // Template-Bilder für Dropdown holen
+                const templateImages = extractImagesFromHTML(imagesTabHtml || currentWorkingHtml);
+                
+                data.files.forEach(file => {
+                    const sizeKB = Math.round(file.size / 1024);
+                    html += '<div class="folder-content-item">';
+                    html += '<div class="folder-content-preview"><img src="' + escapeHtml(file.publicUrl) + '" alt="' + escapeHtml(file.name) + '"></div>';
+                    html += '<div class="folder-content-info">';
+                    html += '<div class="folder-content-name">' + escapeHtml(file.name) + ' <span class="folder-content-size">(' + sizeKB + ' KB)</span></div>';
+                    html += '<div class="folder-content-url"><code>' + escapeHtml(file.publicUrl) + '</code></div>';
+                    html += '<div class="folder-content-actions">';
+                    html += '<button class="btn-small btn-copy-url" data-url="' + escapeHtml(file.publicUrl) + '">📋 URL kopieren</button>';
+                    
+                    // Dropdown zum Einsetzen in Template-Bilder
+                    if (templateImages.length > 0) {
+                        html += '<select class="upload-insert-select" data-url="' + escapeHtml(file.publicUrl) + '">';
+                        html += '<option value="">→ In Bild einsetzen...</option>';
+                        templateImages.forEach(img => {
+                            let fileName = '';
+                            try {
+                                const srcParts = img.src.split('/');
+                                fileName = srcParts[srcParts.length - 1] || '';
+                                if (fileName.length > 30) fileName = fileName.substring(0, 27) + '...';
+                            } catch(e) {}
+                            const altInfo = img.alt && img.alt !== '[kein alt]' ? img.alt : '';
+                            const widthInfo = img.width ? ' (' + img.width + 'px)' : '';
+                            const label = img.id + ' – ' + (fileName || altInfo || '[unbekannt]') + widthInfo;
+                            html += '<option value="' + img.id + '">' + escapeHtml(label) + '</option>';
+                        });
+                        html += '</select>';
+                    }
+                    
+                    html += '</div>';
+                    html += '</div>';
+                    html += '</div>';
+                });
+                
+                html += '</div>';
+            }
+            
+            browserEl.innerHTML = html;
+            
+            // Event-Listener
+            // URL kopieren
+            browserEl.querySelectorAll('.btn-copy-url').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    navigator.clipboard.writeText(url).then(() => {
+                        showInspectorToast('📋 URL kopiert');
+                    }).catch(() => {
+                        prompt('URL kopieren:', url);
+                    });
+                });
+            });
+            
+            // In Bild einsetzen
+            browserEl.querySelectorAll('.upload-insert-select').forEach(sel => {
+                sel.addEventListener('change', function() {
+                    const imgId = this.value;
+                    const url = this.getAttribute('data-url');
+                    if (!imgId || !url) return;
+                    handleImageSrcReplace(imgId, url);
+                    this.value = '';
+                    showInspectorToast('🖼️ ' + imgId + ' → neue URL eingesetzt');
+                });
+            });
+            
+            // Zurück-Button
+            const backBtn = document.getElementById('btnFolderBack');
+            if (backBtn) {
+                backBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    browseServerFolders(true);
+                });
+            }
+            
+            // Schließen-Button
+            const closeBtn = document.getElementById('btnCloseFolderBrowser');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    browserEl.style.display = 'none';
+                });
+            }
+            
+        } catch (err) {
+            browserEl.innerHTML = '<div class="folder-browser-error">⚠️ ' + escapeHtml(err.message) + '</div>';
         }
     }
     
