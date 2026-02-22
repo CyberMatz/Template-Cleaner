@@ -1755,6 +1755,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let imagesPending = false;  // Pending Changes Flag
     let lastUploadResults = null;  // Upload-Ergebnisse über Re-Renders hinweg speichern
     let lastUploadFolder = '';  // Letzter verwendeter Ordnername
+    let currentBrowsingFolder = '';  // Aktuell geöffneter Ordner im Browser
     
     // Buttons Tab State
     let buttonsTabHtml = null;  // Separate HTML für Buttons Tab
@@ -7631,6 +7632,7 @@ td[width] { width: auto !important; }
         // Toggle: Wenn schon offen → schließen (außer forceOpen)
         if (browserEl.style.display !== 'none' && !forceOpen) {
             browserEl.style.display = 'none';
+            currentBrowsingFolder = '';
             return;
         }
         
@@ -7686,6 +7688,7 @@ td[width] { width: auto !important; }
                 closeBtn.addEventListener('click', function(e) {
                     e.stopPropagation();
                     browserEl.style.display = 'none';
+                    currentBrowsingFolder = '';
                 });
             }
             
@@ -7698,6 +7701,8 @@ td[width] { width: auto !important; }
     async function loadFolderContents(folderName) {
         const browserEl = document.getElementById('folderBrowser');
         if (!browserEl) return;
+        
+        currentBrowsingFolder = folderName;
         
         browserEl.innerHTML = '<div class="folder-browser-loading">⏳ Bilder in <strong>' + escapeHtml(folderName) + '</strong> werden geladen...</div>';
         
@@ -7792,6 +7797,7 @@ td[width] { width: auto !important; }
             if (backBtn) {
                 backBtn.addEventListener('click', function(e) {
                     e.stopPropagation();
+                    currentBrowsingFolder = '';
                     browseServerFolders(true);
                 });
             }
@@ -7802,6 +7808,7 @@ td[width] { width: auto !important; }
                 closeBtn.addEventListener('click', function(e) {
                     e.stopPropagation();
                     browserEl.style.display = 'none';
+                    currentBrowsingFolder = '';
                 });
             }
             
@@ -7900,6 +7907,11 @@ td[width] { width: auto !important; }
         if (lastUploadFolder) {
             const folderInput = document.getElementById('imageUploadFolder');
             if (folderInput) folderInput.value = lastUploadFolder;
+        }
+        
+        // Geöffneten Ordner-Browser wiederherstellen
+        if (currentBrowsingFolder) {
+            loadFolderContents(currentBrowsingFolder);
         }
     }
     
