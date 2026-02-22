@@ -1674,6 +1674,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const inspectorSection = document.getElementById('inspectorSection');
     const inspectorPreviewFrame = document.getElementById('inspectorPreviewFrame');
+    const clientSimulatorSelect = document.getElementById('clientSimulatorSelect');
+    const clientSimHint = document.getElementById('clientSimHint');
+    const clientSimHintText = document.getElementById('clientSimHintText');
+    const simColorSelect = document.getElementById('simColorSelect');
     const trackingTab = document.getElementById('trackingTab');
     const imagesTab = document.getElementById('imagesTab');
     const tagReviewTab = document.getElementById('tagReviewTab');
@@ -1728,6 +1732,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Preview Ready State (für Message Queue)
     let previewReady = false;  // Ist Preview iframe geladen?
     let pendingPreviewMessages = [];  // BUG #2 FIX: Array statt einzelne Variable - mehrere Messages möglich
+    let selectedClientSim = 'original';  // Client-Simulator: aktuell gewählter Client
     
     // Editor Tab State (Phase 6)
     let editorTabHtml = null;  // Separate HTML für Editor Tab
@@ -4666,6 +4671,304 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // ============================================
+    // CLIENT SIMULATOR
+    // ============================================
+    
+    // Client-Definitionen: Welche Einschränkungen hat welcher Client?
+    const CLIENT_PROFILES = {
+        'original': {
+            label: 'Original (kein Client)',
+            hint: null,
+            mobile: false,
+            transforms: []
+        },
+        'gmail-desktop': {
+            label: 'Gmail Desktop',
+            hint: '⚠️ Gmail entfernt <style>-Blöcke – nur Inline-Styles gelten. Annäherung, keine 100%-Darstellung.',
+            mobile: false,
+            transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        },
+        'gmail-mobile': {
+            label: 'Gmail Mobile',
+            hint: '⚠️ Gmail Mobile: <style>-Blöcke entfernt + Mobilansicht (375px). Annäherung.',
+            mobile: true,
+            transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        },
+        'outlook-desktop': {
+            label: 'Outlook Desktop (Word-Engine)',
+            hint: '⚠️ Outlook nutzt Word zum Rendern – kein border-radius, kein background-image auf Divs, Buttons ohne Table-Wrapper fallen zusammen. Stark vereinfachte Annäherung.',
+            mobile: false,
+            transforms: ['strip-border-radius', 'strip-background-image', 'strip-box-shadow', 'strip-max-width', 'strip-css-float', 'strip-a-button-styles']
+        },
+        'apple-desktop': {
+            label: 'Apple Mail Desktop',
+            hint: '✅ Apple Mail rendert fast alles korrekt – Preview entspricht weitgehend dem Original.',
+            hintType: 'good',
+            mobile: false,
+            transforms: []
+        },
+        'apple-mobile': {
+            label: 'Apple Mail Mobile',
+            hint: '✅ Apple Mail Mobile rendert korrekt – hier nur Mobilansicht (375px).',
+            hintType: 'good',
+            mobile: true,
+            transforms: []
+        },
+        'webde-desktop': {
+            label: 'Web.de Desktop',
+            hint: '⚠️ Web.de entfernt <style>-Blöcke ähnlich wie Gmail. Annäherung.',
+            mobile: false,
+            transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        },
+        'webde-mobile': {
+            label: 'Web.de Mobile',
+            hint: '⚠️ Web.de Mobile: <style>-Blöcke entfernt + Mobilansicht (375px). Annäherung.',
+            mobile: true,
+            transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        },
+        'gmx-desktop': {
+            label: 'GMX Desktop',
+            hint: '⚠️ GMX entfernt <style>-Blöcke ähnlich wie Gmail. Annäherung.',
+            mobile: false,
+            transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        },
+        'gmx-mobile': {
+            label: 'GMX Mobile',
+            hint: '⚠️ GMX Mobile: <style>-Blöcke entfernt + Mobilansicht (375px). Annäherung.',
+            mobile: true,
+            transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        }
+    };
+    
+    // Header/Footer HTML-Templates für Platzhalter-Ersetzung in der Simulation
+    const SIM_HEADER_HTML = `<style type="text/css" style="-ms-text-size-adjust: 100%;-webkit-text-size-adjust: 100%;">
+  @media only screen and (max-width: 600px) {
+    .pw { width: 99% !important; }
+    .m100 { width: auto !important; }
+    .breakMobile { display: block !important; }
+  }
+  table.pw {
+      font-size: 10px !important;
+      line-height: normal !important;
+  }
+</style><table border="0" cellpadding="0" align="center" cellspacing="0" width="__WIDTH__" class="pw" style="border-collapse:collapse;">
+      <tr>
+    <td width="180" style="padding-bottom:5px;" align="left"><img src="https://www.img-server.de/logos/ac/autocockpit_nl_header_trans_neu.png" width="180" height="43" alt="autocockpit" title="autocockpit" style="display:block;"></td>
+    <td width="70" style="padding-bottom:5px;line-height:40px !important;">
+      <table cellspacing="0" cellpadding="0" border="0" style="line-height:40px !important;">
+        <tr style="line-height:1px !important; font-size:1px;">
+          <td style="line-height:1px !important; font-size:1px;"><img src="https://www.img-server.de/platzhalter.png" alt="" height="19" border="0"></td>
+        </tr>
+        <tr style="line-height:13px !important;">
+          <td style="font-size:11px;line-height:13px !important;font-family:Verdana, sans-serif;letter-spacing: 1px;" valign="middle" align="left"><span style="font-size:11px;font-family:sans-serif;letter-spacing: 1px;-webkit-text-size-adjust:none;color:__COLOR__;">empfiehlt</span></td>
+        </tr>
+        <tr style="line-height:1px !important; font-size:1px;">
+          <td style="line-height:1px !important; font-size:1px;"><img src="https://www.img-server.de/platzhalter.png" alt="" height="8" border="0"></td>
+        </tr>
+      </table>
+    </td>
+    <td width="350" class="m100" style="line-height:1px !important; font-size:1px;"><img src="https://www.img-server.de/platzhalter.png" alt="" height="11" border="0"></td>
+  </tr>
+  <tr>
+    <td colspan="3" align="center">
+      <a href="#" style="font-family:arial; font-size: 10px; text-decoration: underline; color: __COLOR__;-webkit-text-size-adjust:none;">Wenn dieser Newsletter nicht richtig angezeigt wird, klicken Sie bitte hier.</a>
+</td>
+  </tr>
+  <tr>
+    <td height="15"> </td>
+  </tr>
+</table>`;
+
+    const SIM_FOOTER_HTML = `<table border="0" align="center" cellpadding="0" cellspacing="0" width="__WIDTH__" class="pw" style="-webkit-text-size-adjust:none;">
+    <tr>
+        <td colspan="2" height="15"> </td>
+    </tr>
+    <tr>
+        <td colspan="2" align="left"><span style="color:__COLOR__; font-size:10px; font-family: Arial, Helvetica, sans-serif;"><strong>Warum bekommen Sie diese E-Mail?</strong><br>
+            <br>
+            Die Herkunft Ihrer Daten können Sie hier einsehen: <a style="color:__COLOR__; text-decoration: underline; font-size:10px; font-family: Arial, Helvetica, sans-serif;" href="#">Datenauskunft</a> <br>
+            Abmeldung jederzeit: <a href="#" style="color:__COLOR__; text-decoration: underline; font-size:10px; font-family: Arial, Helvetica, sans-serif;">hier abmelden</a> <br>
+            <br>
+            <br>
+            <strong>Verantwortlich gemäß § 5 TMG: </strong><br>
+            <br>
+            performance werk GmbH&nbsp;&nbsp;•&nbsp;&nbsp;Flugplatzstraße 100&nbsp;&nbsp;•&nbsp;&nbsp;90768 Fürth <br>
+            E-Mail: service[at]performancewerk.de <br>
+            <br><br>
+            <strong>Kontakt: </strong><br><br>
+            <a style="color:__COLOR__; text-decoration: underline; font-size:10px; font-family: Arial, Helvetica, sans-serif;" href="https://www.autocockpit.de/impressum/">Impressum</a>&nbsp;&nbsp;•&nbsp;&nbsp;<a style="color:__COLOR__; text-decoration: underline; font-size:10px; font-family: Arial, Helvetica, sans-serif;" href="https://kontakt.performancewerk.de">Kontaktformular</a> </span></td>
+    </tr>
+    <tr>
+        <td colspan="2" height="60" align="center"><span style="color:__COLOR__; font-size:10px; font-family: Arial, Helvetica, sans-serif;"> © <span style="font-family:Arial, Helvetica, sans-serif; font-size: 10px; color: __COLOR__;">autocockpit.de</span> __YEAR__ </span></td>
+    </tr>
+</table>`;
+
+    // Template-Breite erkennen (häufigste table width im Bereich 400-800px)
+    function detectTemplateWidth(html) {
+        const widthMatches = html.match(/<table[^>]*width\s*=\s*["'](\d+)["'][^>]*>/gi);
+        if (!widthMatches) return 600; // Fallback
+        
+        const widths = {};
+        widthMatches.forEach(match => {
+            const wMatch = match.match(/width\s*=\s*["'](\d+)["']/i);
+            if (wMatch) {
+                const w = parseInt(wMatch[1]);
+                if (w >= 400 && w <= 800) {
+                    widths[w] = (widths[w] || 0) + 1;
+                }
+            }
+        });
+        
+        let bestWidth = 600;
+        let bestCount = 0;
+        Object.keys(widths).forEach(w => {
+            if (widths[w] > bestCount) {
+                bestCount = widths[w];
+                bestWidth = parseInt(w);
+            }
+        });
+        
+        return bestWidth;
+    }
+    
+    // Platzhalter %header% und %footer% mit echtem HTML ersetzen
+    function replaceHeaderFooterPlaceholders(html, color, width) {
+        const year = new Date().getFullYear();
+        
+        let headerHtml = SIM_HEADER_HTML
+            .replace(/__COLOR__/g, color)
+            .replace(/__WIDTH__/g, width);
+        
+        let footerHtml = SIM_FOOTER_HTML
+            .replace(/__COLOR__/g, color)
+            .replace(/__WIDTH__/g, width)
+            .replace(/__YEAR__/g, year);
+        
+        html = html.replace(/%header%/gi, headerHtml);
+        html = html.replace(/%footer%/gi, footerHtml);
+        html = html.replace(/%promio-ignore-error%/gi, '');
+        html = html.replace(/!pixel!/gi, '');
+        
+        return html;
+    }
+    
+    // Einzelne Transformationen auf HTML anwenden
+    function applyClientTransform(html, transform) {
+        switch (transform) {
+            case 'strip-style-blocks':
+                return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '<!-- [CLIENT-SIM] style block removed -->');
+            
+            case 'strip-link-stylesheets':
+                return html.replace(/<link[^>]*rel\s*=\s*["']stylesheet["'][^>]*\/?>/gi, '<!-- [CLIENT-SIM] stylesheet link removed -->');
+            
+            case 'strip-class-attributes':
+                return html.replace(/\s+class\s*=\s*["'][^"']*["']/gi, '');
+            
+            case 'strip-border-radius':
+                return html.replace(/border-radius\s*:\s*[^;]+;?/gi, '');
+            
+            case 'strip-background-image':
+                return html.replace(/background-image\s*:\s*[^;]+;?/gi, '');
+            
+            case 'strip-box-shadow':
+                return html.replace(/box-shadow\s*:\s*[^;]+;?/gi, '');
+            
+            case 'strip-max-width':
+                return html.replace(/max-width\s*:\s*[^;]+;?/gi, '');
+            
+            case 'strip-css-float':
+                return html.replace(/(?:^|;)\s*float\s*:\s*[^;]+;?/gi, '');
+            
+            case 'strip-a-button-styles':
+                // Outlook ignoriert padding, background-color und display auf <a>-Tags
+                return html.replace(/<a\s[^>]*style\s*=\s*["'][^"']*["'][^>]*>/gi, function(match) {
+                    return match.replace(/style\s*=\s*["']([^"']*)["']/i, function(styleMatch, styleContent) {
+                        let cleaned = styleContent
+                            .replace(/padding(?:-(?:top|right|bottom|left))?\s*:\s*[^;]+;?/gi, '')
+                            .replace(/background(?:-color)?\s*:\s*[^;]+;?/gi, '')
+                            .replace(/display\s*:\s*[^;]+;?/gi, '')
+                            .replace(/;\s*;/g, ';')
+                            .replace(/^\s*;\s*/, '')
+                            .trim();
+                        return 'style="' + cleaned + '"';
+                    });
+                });
+            
+            default:
+                return html;
+        }
+    }
+    
+    // Haupt-Simulationsfunktion: Wendet alle Transforms eines Client-Profils an
+    function applyClientSimulation(html, clientId) {
+        const profile = CLIENT_PROFILES[clientId];
+        if (!profile || profile.transforms.length === 0) {
+            return html;
+        }
+        
+        let simHtml = html;
+        profile.transforms.forEach(transform => {
+            simHtml = applyClientTransform(simHtml, transform);
+        });
+        
+        if (window.DEV_MODE) {
+            console.log(`[CLIENT-SIM] Applied ${profile.transforms.length} transforms for ${profile.label}`);
+        }
+        
+        return simHtml;
+    }
+    
+    // Mobile-Modus umschalten (iframe-Breite einschränken)
+    function updateMobileSimulation(clientId) {
+        const profile = CLIENT_PROFILES[clientId];
+        const previewContainer = inspectorPreviewFrame ? inspectorPreviewFrame.parentElement : null;
+        if (!previewContainer) return;
+        
+        if (profile && profile.mobile) {
+            previewContainer.classList.add('mobile-sim');
+        } else {
+            previewContainer.classList.remove('mobile-sim');
+        }
+    }
+    
+    // Hint-Banner aktualisieren
+    function updateClientSimHint(clientId) {
+        const profile = CLIENT_PROFILES[clientId];
+        if (!clientSimHint || !clientSimHintText) return;
+        
+        if (!profile || !profile.hint || clientId === 'original') {
+            clientSimHint.style.display = 'none';
+            return;
+        }
+        
+        clientSimHintText.textContent = profile.hint;
+        clientSimHint.className = 'client-sim-hint ' + (profile.hintType === 'good' ? 'hint-good' : 'hint-info');
+        clientSimHint.style.display = 'block';
+    }
+    
+    // Event-Listener: Client-Dropdown
+    if (clientSimulatorSelect) {
+        clientSimulatorSelect.addEventListener('change', (e) => {
+            selectedClientSim = e.target.value;
+            updateClientSimHint(selectedClientSim);
+            updateMobileSimulation(selectedClientSim);
+            updateInspectorPreview();
+            if (window.DEV_MODE) {
+                console.log(`[CLIENT-SIM] Switched to: ${selectedClientSim}`);
+            }
+        });
+    }
+    
+    // Event-Listener: Farb-Dropdown
+    if (simColorSelect) {
+        simColorSelect.addEventListener('change', () => {
+            if (selectedClientSim && selectedClientSim !== 'original') {
+                updateInspectorPreview();
+            }
+        });
+    }
+    
     // Update Inspector Preview
     function updateInspectorPreview() {
         if (!currentWorkingHtml || !inspectorPreviewFrame) {
@@ -4720,8 +5023,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
+            // CLIENT SIMULATOR: Platzhalter ersetzen + Simulation anwenden (VOR Annotation)
+            let simSourceHtml = sourceHtml;
+            if (selectedClientSim && selectedClientSim !== 'original') {
+                const simColor = simColorSelect ? simColorSelect.value : '#999999';
+                const templateWidth = detectTemplateWidth(sourceHtml);
+                simSourceHtml = replaceHeaderFooterPlaceholders(simSourceHtml, simColor, templateWidth);
+                simSourceHtml = applyClientSimulation(simSourceHtml, selectedClientSim);
+                if (window.DEV_MODE) {
+                    console.log(`[CLIENT-SIM] Applied: ${selectedClientSim}, color: ${simColor}, width: ${templateWidth}`);
+                }
+            }
+            
             // Erzeuge annotierte Preview-Version (nur für iframe, nicht für Downloads)
-            const annotatedHtml = generateAnnotatedPreview(sourceHtml, currentInspectorTab);
+            const annotatedHtml = generateAnnotatedPreview(simSourceHtml, currentInspectorTab);
             
             // Null-Check: Falls Script-Syntax kaputt ist, gibt generateAnnotatedPreview null zurück
             if (!annotatedHtml) {

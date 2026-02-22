@@ -2477,3 +2477,116 @@ body {
     font-size: 12px;
     width: 80px;
 }
+
+/* ===== CLIENT SIMULATOR ===== */
+.preview-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f2a93b;
+}
+
+.preview-header-row h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    padding-bottom: 0;
+    border-bottom: none;
+    margin: 0;
+}
+
+.preview-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+}
+
+.client-simulator-select {
+    padding: 6px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    background: #fff;
+    cursor: pointer;
+    color: #333;
+    min-width: 200px;
+}
+
+.client-simulator-select:hover {
+    border-color: #f2a93b;
+}
+
+.client-simulator-select:focus {
+    outline: none;
+    border-color: #f2a93b;
+    box-shadow: 0 0 0 2px rgba(242, 169, 59, 0.2);
+}
+
+.sim-color-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sim-color-label {
+    font-size: 12px;
+    color: #666;
+    white-space: nowrap;
+}
+
+.sim-color-select {
+    padding: 3px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+    cursor: pointer;
+    color: #333;
+}
+
+.sim-color-select:hover {
+    border-color: #f2a93b;
+}
+
+.sim-color-select:focus {
+    outline: none;
+    border-color: #f2a93b;
+    box-shadow: 0 0 0 2px rgba(242, 169, 59, 0.2);
+}
+
+.client-sim-hint {
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: -8px;
+}
+
+.client-sim-hint.hint-info {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+}
+
+.client-sim-hint.hint-good {
+    background: #d4edda;
+    border: 1px solid #28a745;
+    color: #155724;
+}
+
+/* Mobile Simulation: iframe schmaler + zentriert */
+.preview-container.mobile-sim {
+    display: flex;
+    justify-content: center;
+    background: #e0e0e0;
+}
+
+.preview-container.mobile-sim .inspector-preview-frame {
+    width: 375px;
+    max-width: 375px;
+    border-left: 2px solid #ccc;
+    border-right: 2px solid #ccc;
+    background: #fff;
+}

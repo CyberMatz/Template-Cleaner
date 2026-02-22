@@ -161,7 +161,38 @@
 
             <!-- Rechte Spalte: Webansicht Template (Preview) -->
             <div class="inspector-right">
-                <h3>Webansicht Template</h3>
+                <div class="preview-header-row">
+                    <h3>Webansicht Template</h3>
+                    <div class="preview-controls">
+                        <select id="clientSimulatorSelect" class="client-simulator-select">
+                            <option value="original">Original (kein Client)</option>
+                            <optgroup label="Desktop">
+                                <option value="gmail-desktop">Gmail Desktop</option>
+                                <option value="outlook-desktop">Outlook Desktop (Word)</option>
+                                <option value="apple-desktop">Apple Mail Desktop</option>
+                                <option value="webde-desktop">Web.de Desktop</option>
+                                <option value="gmx-desktop">GMX Desktop</option>
+                            </optgroup>
+                            <optgroup label="Mobile (375px)">
+                                <option value="gmail-mobile">Gmail Mobile</option>
+                                <option value="apple-mobile">Apple Mail Mobile</option>
+                                <option value="webde-mobile">Web.de Mobile</option>
+                                <option value="gmx-mobile">GMX Mobile</option>
+                            </optgroup>
+                        </select>
+                        <div class="sim-color-row">
+                            <label class="sim-color-label">Header/Footer:</label>
+                            <select id="simColorSelect" class="sim-color-select">
+                                <option value="#000000">Schwarz</option>
+                                <option value="#999999" selected>Grau</option>
+                                <option value="#ffffff">Weiß</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="clientSimHint" class="client-sim-hint" style="display: none;">
+                    <span id="clientSimHintText"></span>
+                </div>
                 <div class="preview-container">
                     <iframe id="inspectorPreviewFrame" sandbox="allow-scripts allow-same-origin" class="inspector-preview-frame"></iframe>
                 </div>
