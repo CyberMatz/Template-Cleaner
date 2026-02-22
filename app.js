@@ -6647,6 +6647,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Extrahiere Bilder aus HTML
+    // Hilfsfunktion: URL kürzen mit sichtbarem Dateinamen
+    function shortenUrl(url, maxLen) {
+        maxLen = maxLen || 70;
+        if (!url || url.length <= maxLen) return url;
+        const lastSlash = url.lastIndexOf('/');
+        const filename = lastSlash >= 0 ? url.substring(lastSlash + 1) : url;
+        const domainMatch = url.match(/^https?:\/\/([^/]+)/i);
+        const domain = domainMatch ? domainMatch[1] : '';
+        if (domain && filename) {
+            return domain + '/…/' + filename;
+        }
+        return url.substring(0, 30) + '…' + url.substring(url.length - 30);
+    }
+    
     function extractImagesFromHTML(html) {
         if (!html) return [];
         
@@ -6793,7 +6807,7 @@ document.addEventListener('DOMContentLoaded', () => {
             images.push({
                 id: id,
                 src: src,
-                srcShort: src.length > 60 ? src.substring(0, 57) + '...' : src,
+                srcShort: shortenUrl(src, 70),
                 alt: alt.length > 40 ? alt.substring(0, 37) + '...' : alt,
                 width: width,
                 widthSource: widthSource,
@@ -6830,7 +6844,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const url = bgMatch[1];
                     bgImages.push({
                         url: url,
-                        urlShort: url.length > 50 ? url.substring(0, 47) + '...' : url,
+                        urlShort: shortenUrl(url, 60),
                         context: 'inline style auf ' + el.tagName.toLowerCase()
                     });
                 }
@@ -6847,7 +6861,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const url = match[1];
                         bgImages.push({
                             url: url,
-                            urlShort: url.length > 50 ? url.substring(0, 47) + '...' : url,
+                            urlShort: shortenUrl(url, 60),
                             context: '<style> Block'
                         });
                     }
