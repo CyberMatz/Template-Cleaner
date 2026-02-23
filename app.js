@@ -10501,12 +10501,14 @@ td[width] { width: auto !important; }
     function showTagReviewTab(tagreviewContent) {
         if (!tagreviewContent) return;
         
-        console.log('[INSPECTOR] Rendering Tag-Review Tab v2...');
+        console.log('[INSPECTOR] Rendering Tag-Review Tab v3 (2026-02-24)');
         
         // Daten sammeln
         const autoFixes = (processingResult && processingResult.autoFixes) ? processingResult.autoFixes : [];
         const tagProblems = (processingResult && processingResult.tagProblems) ? processingResult.tagProblems : [];
         const manualActions = (typeof manualActionLog !== 'undefined') ? manualActionLog : [];
+        
+        console.log('[TAG-REVIEW] autoFixes:', autoFixes.length, '| tagProblems:', tagProblems.length);
         
         // Zaehler
         const fixCount = autoFixes.length;
@@ -10698,6 +10700,11 @@ td[width] { width: auto !important; }
             html += '</div>';
         }
         
+        html += '</div>';
+        
+        // Debug-Version-Marker (hilft bei Caching-Problemen)
+        html += '<div style="margin-top: 16px; padding: 8px; background: #f0f0f0; border-radius: 4px; font-size: 10px; color: #999; text-align: right;">';
+        html += 'Tag-Review v3 | Fixes: ' + fixCount + ' (auto: ' + appliedCount + ', Vorschläge: ' + suggestedCount + ') | Probleme: ' + problemCount;
         html += '</div>';
         
         tagreviewContent.innerHTML = html;
