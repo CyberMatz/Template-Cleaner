@@ -527,7 +527,6 @@ class TemplateProcessor {
     checkTagBalancing() {
         const id = this.checklistType === 'dpl' ? 'P08_TAG_BALANCING' : 'P07_TAG_BALANCING';
         const tags = ['table', 'tr', 'td', 'a', 'div'];
-        let fixed = false;
         
         // Auto-Fixes Array initialisieren
         if (!this.autoFixes) {
@@ -541,11 +540,11 @@ class TemplateProcessor {
         
         // WICHTIG: E-Mail-Templates haben bedingte Kommentare wie:
         //   <!--[if mso]><table><tr><td><![endif]-->
+        //   <![if !mso]><div class="m">...</div><![endif]>
         // Diese enthalten Tags die NICHT mitgezaehlt werden duerfen!
-        // Loesung: Kommentare vor dem Zaehlen entfernen.
         const cleanHtml = this._stripHtmlComments(this.html);
         
-        // Boundary-Regeln
+        // Boundary-Regeln (für Smart-Position-Erkennung)
         const boundaries = {
             'a':     ['</td>', '</tr>', '</table>', '</div>', '</body>'],
             'td':    ['</tr>', '</table>', '</body>'],
@@ -565,7 +564,10 @@ class TemplateProcessor {
             if (openCount === closeCount) return;
 
             if (openCount > closeCount) {
-                // === FEHLENDE CLOSING-TAGS (smart fixen) ===
+                // === FEHLENDE CLOSING-TAGS ===
+                // Nur MELDEN, nicht automatisch einfügen
+                // Bei komplexen Templates mit Conditional Comments ist die Position
+                // zu unsicher für automatische Korrekturen
                 const diff = openCount - closeCount;
                 for (let i = 0; i < diff; i++) {
                     const result = this._findSmartInsertPosition(tag, boundaries[tag] || ['</body>']);
@@ -579,7 +581,7 @@ class TemplateProcessor {
                         const linesBefore = this.html.substring(0, result.position).split('\n');
                         const linesAfter = this.html.substring(result.position).split('\n');
                         const snippetBefore = linesBefore.slice(-3).join('\n') + 
-                            '\n  \u25BA ' + inserted + ' \u25C4  (eingefuegt)\n' + 
+                            '\n  \u25BA ' + inserted + ' \u25C4  (vorgeschlagen)\n' + 
                             linesAfter.slice(0, 3).join('\n');
                         
                         this.autoFixes.push({
@@ -600,12 +602,9 @@ class TemplateProcessor {
                             openTagContext: result.openTagContext
                         });
                         
-                        // NUR bei hoher Sicherheit automatisch einfügen
-                        // Bei medium/low: nur melden, nicht einfügen (verhindert falsches Einfügen bei komplexen Templates)
-                        if (result.confidence === 'high') {
-                            this.html = this.html.substring(0, result.position) + inserted + this.html.substring(result.position);
-                            fixed = true;
-                        }
+                        // NICHT automatisch einfügen!
+                        // Tags werden nur als Vorschlag im Inspector gezeigt
+                        // Der Nutzer kann sie dort gezielt anwenden oder ignorieren
                     }
                 }
             } else if (closeCount > openCount) {
@@ -630,23 +629,15 @@ class TemplateProcessor {
             }
         });
 
-        // Zähle auto-gefixt vs. nur-gemeldet
-        const appliedFixes = this.autoFixes.filter(f => f.confidence === 'high').length;
-        const skippedFixes = this.autoFixes.filter(f => f.confidence !== 'high').length;
+        // Status-Meldung: Nur Meldungen, kein Auto-Fix
+        const missingTags = this.autoFixes.length;
+        const excessTags = this.tagProblems.length;
         
-        if (fixed && (this.tagProblems.length > 0 || skippedFixes > 0)) {
+        if (missingTags > 0 || excessTags > 0) {
             const parts = [];
-            if (appliedFixes > 0) parts.push(`${appliedFixes} sicher korrigiert`);
-            if (skippedFixes > 0) parts.push(`${skippedFixes} unsicher – bitte prüfen`);
-            if (this.tagProblems.length > 0) parts.push(`${this.tagProblems.length} überschüssige Tags`);
-            this.addCheck(id, 'FIXED', `Tag-Balancing: ${parts.join(', ')}`);
-        } else if (fixed) {
-            this.addCheck(id, 'FIXED', `Tag-Balancing korrigiert (${appliedFixes} Tags eingefügt)`);
-        } else if (skippedFixes > 0 || this.tagProblems.length > 0) {
-            const parts = [];
-            if (skippedFixes > 0) parts.push(`${skippedFixes} fehlende Tags (unsicher – bitte prüfen)`);
-            if (this.tagProblems.length > 0) parts.push(`${this.tagProblems.length} überschüssige Tags`);
-            this.addCheck(id, 'WARN', `Tag-Balancing: ${parts.join(', ')}`);
+            if (missingTags > 0) parts.push(`${missingTags} fehlende Tags`);
+            if (excessTags > 0) parts.push(`${excessTags} überschüssige Tags`);
+            this.addCheck(id, 'WARN', `Tag-Balancing: ${parts.join(', ')} – bitte im Inspector prüfen`);
         } else {
             this.addCheck(id, 'PASS', 'Tag-Balancing korrekt');
         }
@@ -661,7 +652,11 @@ class TemplateProcessor {
         
         // 2. Nicht-standard Conditional Comments (ohne <!-- Wrapper):
         //    <![if !mso]>...<![endif]>
-        //    Diese kommen in manchen Templates vor und enthalten Tags die nicht gezählt werden dürfen
+        //    Diese enthalten komplette HTML-Strukturen (z.B. Mobile-Content-Blöcke)
+        //    die eine parallele Ansicht darstellen → KOMPLETT entfernen inkl. Inhalt
+        result = result.replace(/<!\[if[^\]]*\]>[\s\S]*?<!\[endif\]>/gi, '');
+        
+        // 3. Einzelne verwaiste Marker entfernen (falls kein passender Partner gefunden)
         result = result.replace(/<!\[if[^\]]*\]>/gi, '');
         result = result.replace(/<!\[endif\]>/gi, '');
         
@@ -2705,35 +2700,75 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Unterscheide: angewendet vs. nur vorgeschlagen
+        const safeAutoFixTags = ['table'];
+        
         let html = '';
         autoFixes.forEach((autoFix, index) => {
+            autoFix._displayIndex = index;  // Für Toggle-Referenz
+            const wasApplied = autoFix.confidence === 'high' && safeAutoFixTags.includes(autoFix.tag);
             const snippetText = autoFix.snippetBefore + autoFix.inserted;
-            html += `
-                <div class="problem-item autofix-item" data-autofix-id="${autoFix.id}" data-snippet="${escapeHtml(snippetText)}">
-                    <div class="problem-header">
-                        <span class="problem-tag">${autoFix.inserted}</span>
-                        <span class="problem-status" style="background: #4caf50;">Auto-Closing eingefügt</span>
+            const confLabel = autoFix.confidence === 'high' ? '✅ Sicher' : (autoFix.confidence === 'medium' ? '⚠️ Prüfen' : '❓ Unsicher');
+            const confClass = 'conf-' + (autoFix.confidence || 'high');
+            
+            if (wasApplied) {
+                // === ANGEWENDETER FIX ===
+                html += `
+                    <div class="problem-item autofix-item autofix-applied" data-autofix-id="${autoFix.id}" data-snippet="${escapeHtml(snippetText)}" data-applied="true">
+                        <div class="problem-header">
+                            <span class="problem-tag">${autoFix.inserted}</span>
+                            <span class="problem-status" style="background: #4caf50;">Auto-Fix eingefügt</span>
+                            <span class="problem-status ${confClass}">${confLabel}</span>
+                        </div>
+                        <div class="problem-details">
+                            <strong>ID:</strong> ${autoFix.id} &nbsp;|&nbsp;
+                            <strong>Tag:</strong> &lt;${autoFix.tag}&gt; &nbsp;|&nbsp;
+                            <strong>Position:</strong> ${autoFix.insertPosition}
+                        </div>
+                        <div class="problem-snippet">
+                            <strong>Kontext:</strong>
+                            <pre>${escapeHtml(autoFix.snippetBefore)}${escapeHtml(autoFix.inserted)}</pre>
+                        </div>
+                        <div class="problem-actions">
+                            <button class="btn-undo-autofix" data-autofix-index="${index}">
+                                ↩️ Undo
+                            </button>
+                            <button class="btn-accept-autofix" data-autofix-index="${index}">
+                                ✅ Behalten
+                            </button>
+                        </div>
                     </div>
-                    <div class="problem-details">
-                        <strong>ID:</strong> ${autoFix.id}<br>
-                        <strong>Tag-Typ:</strong> &lt;${autoFix.tag}&gt;<br>
-                        <strong>Eingefügt:</strong> ${escapeHtml(autoFix.inserted)}<br>
-                        <strong>Position:</strong> ${autoFix.insertPosition}
+                `;
+            } else {
+                // === VORGESCHLAGENER FIX (nicht eingefügt) ===
+                html += `
+                    <div class="problem-item autofix-item autofix-suggested" data-autofix-id="${autoFix.id}" data-snippet="${escapeHtml(snippetText)}" data-applied="false">
+                        <div class="problem-header">
+                            <span class="problem-tag">${autoFix.inserted}</span>
+                            <span class="problem-status" style="background: #ff9800;">Vorschlag – nicht eingefügt</span>
+                            <span class="problem-status ${confClass}">${confLabel}</span>
+                        </div>
+                        <div class="problem-details">
+                            <strong>ID:</strong> ${autoFix.id} &nbsp;|&nbsp;
+                            <strong>Tag:</strong> &lt;${autoFix.tag}&gt; &nbsp;|&nbsp;
+                            <strong>Position:</strong> ${autoFix.insertPosition} &nbsp;|&nbsp;
+                            <strong>Grund:</strong> ${autoFix.confidence !== 'high' ? 'Position unsicher' : 'Tag-Typ zu riskant für Auto-Fix'}
+                        </div>
+                        <div class="problem-snippet">
+                            <strong>Vorgeschlagene Position:</strong>
+                            <pre>${escapeHtml(autoFix.snippetBefore)}${escapeHtml(autoFix.inserted)}</pre>
+                        </div>
+                        <div class="problem-actions">
+                            <button class="btn-apply-autofix" data-autofix-index="${index}">
+                                ➕ Trotzdem anwenden
+                            </button>
+                            <button class="btn-ignore-autofix" data-autofix-index="${index}">
+                                ❌ Ignorieren
+                            </button>
+                        </div>
                     </div>
-                    <div class="problem-snippet">
-                        <strong>Snippet (vor Einfügung):</strong>
-                        <pre>${escapeHtml(autoFix.snippetBefore)}${escapeHtml(autoFix.inserted)}</pre>
-                    </div>
-                    <div class="problem-actions">
-                        <button class="btn-undo-autofix" data-autofix-index="${index}">
-                            ↩️ Undo diesen Fix
-                        </button>
-                        <button class="btn-accept-autofix" data-autofix-index="${index}">
-                            ✅ Behalten
-                        </button>
-                    </div>
-                </div>
-            `;
+                `;
+            }
         });
         
         autoFixesList.innerHTML = html;
@@ -2763,20 +2798,38 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // Event-Listener für Buttons
+        // Event-Listener für Buttons: Undo (angewendete Fixes)
         document.querySelectorAll('.btn-undo-autofix').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                e.stopPropagation();  // Verhindere Item-Klick
+                e.stopPropagation();
                 const index = parseInt(e.target.getAttribute('data-autofix-index'));
                 undoAutoFix(autoFixes[index], e.target.closest('.autofix-item'));
             });
         });
         
+        // Event-Listener für Buttons: Behalten (angewendete Fixes)
         document.querySelectorAll('.btn-accept-autofix').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                e.stopPropagation();  // Verhindere Item-Klick
+                e.stopPropagation();
                 const index = parseInt(e.target.getAttribute('data-autofix-index'));
                 acceptAutoFix(e.target.closest('.autofix-item'));
+            });
+        });
+        
+        // Event-Listener für Buttons: Anwenden (vorgeschlagene Fixes)
+        document.querySelectorAll('.btn-apply-autofix').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const index = parseInt(e.target.getAttribute('data-autofix-index'));
+                applyAutoFix(autoFixes[index], e.target.closest('.autofix-item'));
+            });
+        });
+        
+        // Event-Listener für Buttons: Ignorieren (vorgeschlagene Fixes)
+        document.querySelectorAll('.btn-ignore-autofix').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                ignoreAutoFix(e.target.closest('.autofix-item'));
             });
         });
     }
@@ -2880,6 +2933,310 @@ document.addEventListener('DOMContentLoaded', () => {
         if (undoLastAction) {
             undoLastAction.disabled = false;
         }
+    }
+
+    // Vorgeschlagenen Fix manuell anwenden (für unsichere Fixes die nicht auto-eingefügt wurden)
+    function applyAutoFix(autoFix, autoFixElement) {
+        // Suche die Position im aktuellen HTML anhand des Kontexts
+        const searchPattern = autoFix.beforeCtx + autoFix.afterCtx;
+        const index = currentReviewHtml.indexOf(searchPattern);
+        
+        if (index === -1) {
+            showInspectorToast('⚠️ Position nicht mehr gefunden – HTML wurde möglicherweise bereits verändert');
+            return;
+        }
+        
+        // Prüfe ob mehrfach vorhanden
+        const lastIndex = currentReviewHtml.lastIndexOf(searchPattern);
+        if (index !== lastIndex) {
+            showInspectorToast('⚠️ Position nicht eindeutig – Pattern mehrfach vorhanden. Bitte manuell im Editor einfügen.');
+            return;
+        }
+        
+        // Speichere aktuellen State in History (für globalen Undo)
+        tagReviewHistory.push({
+            html: currentReviewHtml,
+            action: `SUGGESTION_APPLIED - ${autoFix.id}`,
+            element: autoFixElement.cloneNode(true)
+        });
+        
+        // Tag an der vorgeschlagenen Position einfügen
+        const insertPos = index + autoFix.beforeCtx.length;
+        currentReviewHtml = currentReviewHtml.substring(0, insertPos) + autoFix.inserted + currentReviewHtml.substring(insertPos);
+        
+        // Log
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_SUGGESTION_APPLIED - ${autoFix.id} ${autoFix.inserted} manuell angewendet (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // Update UI: Buttons austauschen → Undo-Button zeigen
+        autoFixElement.style.backgroundColor = '#e8f5e9';
+        autoFixElement.classList.remove('autofix-suggested');
+        autoFixElement.classList.add('autofix-applied');
+        const actionsDiv = autoFixElement.querySelector('.problem-actions');
+        actionsDiv.innerHTML = `
+            <button class="btn-undo-suggestion" data-autofix-index="${autoFix._displayIndex}">
+                ↩️ Rückgängig
+            </button>
+        `;
+        
+        // Event-Listener für den neuen Undo-Button
+        actionsDiv.querySelector('.btn-undo-suggestion').addEventListener('click', (e) => {
+            e.stopPropagation();
+            undoAppliedSuggestion(autoFix, autoFixElement);
+        });
+        
+        // Markierung ändern
+        const statusSpan = autoFixElement.querySelector('.problem-status');
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Manuell angewendet';
+            statusSpan.style.background = '#4caf50';
+        }
+        
+        // Update Preview
+        updatePreview();
+        
+        // Update Aktions-Counter
+        updateActionCounter();
+        
+        // Aktiviere globalen Undo-Button
+        if (undoLastAction) {
+            undoLastAction.disabled = false;
+        }
+        
+        showInspectorToast(`✅ ${autoFix.inserted} eingefügt`);
+    }
+    
+    // Vorgeschlagenen Fix ignorieren
+    function ignoreAutoFix(autoFixElement) {
+        const autoFixId = autoFixElement.getAttribute('data-autofix-id');
+        
+        // Log
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_SUGGESTION_IGNORED - ${autoFixId} ignoriert (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // UI: Ausgrauen, aber "Manuell platzieren" Button zeigen
+        autoFixElement.style.opacity = '0.7';
+        autoFixElement.style.backgroundColor = '#f5f5f5';
+        autoFixElement.classList.remove('autofix-suggested');
+        
+        // Buttons durch "Manuell platzieren" ersetzen
+        const actionsDiv = autoFixElement.querySelector('.problem-actions');
+        const autoFixIndex = autoFixElement.getAttribute('data-autofix-id');
+        actionsDiv.innerHTML = `
+            <button class="btn-manual-place" title="Im Code an gewünschter Stelle einfügen">
+                📍 Manuell platzieren
+            </button>
+            <span style="color: #999; font-size: 11px; margin-left: 8px;">❌ Ignoriert – manuell platzieren?</span>
+        `;
+        
+        // Event-Listener für manuelles Platzieren
+        actionsDiv.querySelector('.btn-manual-place').addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Finde den autoFix per Index aus dem gespeicherten Array
+            const allAutoFixes = (processingResult && processingResult.autoFixes) ? processingResult.autoFixes : [];
+            const matchingFix = allAutoFixes.find(f => f.id === autoFixId);
+            if (matchingFix) {
+                startManualPlacement(matchingFix, autoFixElement);
+            }
+        });
+        
+        // Update Aktions-Counter
+        updateActionCounter();
+    }
+
+    // Manuell angewendeten Vorschlag wieder rückgängig machen (Toggle)
+    function undoAppliedSuggestion(autoFix, autoFixElement) {
+        // Suche das eingefügte Tag und entferne es
+        const searchPattern = autoFix.beforeCtx + autoFix.inserted + autoFix.afterCtx;
+        const index = currentReviewHtml.indexOf(searchPattern);
+        
+        if (index === -1) {
+            showInspectorToast('⚠️ Undo nicht möglich – HTML wurde anderweitig verändert');
+            return;
+        }
+        
+        // Speichere State für globalen Undo
+        tagReviewHistory.push({
+            html: currentReviewHtml,
+            action: `SUGGESTION_UNDONE - ${autoFix.id}`,
+            element: autoFixElement.cloneNode(true)
+        });
+        
+        // Tag entfernen
+        const before = currentReviewHtml.substring(0, index + autoFix.beforeCtx.length);
+        const after = currentReviewHtml.substring(index + autoFix.beforeCtx.length + autoFix.inserted.length);
+        currentReviewHtml = before + after;
+        
+        // Log
+        const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_SUGGESTION_UNDONE - ${autoFix.id} ${autoFix.inserted} rückgängig gemacht (User Action)`;
+        manualActionLog.push(logEntry);
+        
+        // UI: Zurück auf "Vorschlag" mit Anwenden/Ignorieren Buttons
+        autoFixElement.style.backgroundColor = '#fff8e1';
+        autoFixElement.classList.remove('autofix-applied');
+        autoFixElement.classList.add('autofix-suggested');
+        
+        const actionsDiv = autoFixElement.querySelector('.problem-actions');
+        actionsDiv.innerHTML = `
+            <button class="btn-apply-autofix">
+                ➕ Trotzdem anwenden
+            </button>
+            <button class="btn-ignore-autofix">
+                ❌ Ignorieren
+            </button>
+        `;
+        
+        // Event-Listener neu binden
+        actionsDiv.querySelector('.btn-apply-autofix').addEventListener('click', (e) => {
+            e.stopPropagation();
+            applyAutoFix(autoFix, autoFixElement);
+        });
+        actionsDiv.querySelector('.btn-ignore-autofix').addEventListener('click', (e) => {
+            e.stopPropagation();
+            ignoreAutoFix(autoFixElement);
+        });
+        
+        // Status-Badge zurücksetzen
+        const statusSpan = autoFixElement.querySelector('.problem-status');
+        if (statusSpan) {
+            statusSpan.textContent = 'Vorschlag – nicht eingefügt';
+            statusSpan.style.background = '#ff9800';
+        }
+        
+        // Update Preview
+        updatePreview();
+        updateActionCounter();
+        
+        showInspectorToast(`↩️ ${autoFix.inserted} entfernt`);
+    }
+
+    // Manuelles Platzieren: Zeigt formatierten Code mit klickbaren Zeilen
+    function startManualPlacement(autoFix, autoFixElement) {
+        // Wechsel zu Code-Preview
+        if (showCodePreview && showWebPreview && codePreviewContainer && webPreviewContainer) {
+            showCodePreview.classList.add('active');
+            showWebPreview.classList.remove('active');
+            codePreviewContainer.style.display = 'block';
+            webPreviewContainer.style.display = 'none';
+        }
+        
+        const tagToInsert = autoFix.inserted;
+        
+        // Formatiere den gesamten HTML
+        const formattedHtml = formatHtmlForDisplay(currentReviewHtml);
+        const lines = formattedHtml.split('\n');
+        
+        // Baue die klickbare Code-Ansicht
+        let codeHtml = `
+            <div class="manual-place-toolbar">
+                <span class="manual-place-tag">${escapeHtml(tagToInsert)}</span>
+                <span class="manual-place-hint">Klicke auf eine Zeile um das Tag dort einzufügen</span>
+                <button id="cancelManualPlace" class="btn-cancel-place">✖ Abbrechen</button>
+            </div>
+            <div class="manual-place-code" id="manualPlaceCode">
+        `;
+        
+        lines.forEach((line, i) => {
+            const lineNum = (i + 1).toString().padStart(4, ' ');
+            const escapedLine = escapeHtml(line) || ' ';  // Leere Zeilen klickbar machen
+            codeHtml += `<div class="code-line" data-line-index="${i}" title="Klicke um ${escapeHtml(tagToInsert)} hier einzufügen">` +
+                `<span class="line-num">${lineNum}</span>` +
+                `<span class="line-content">${escapedLine}</span>` +
+                `</div>`;
+        });
+        
+        codeHtml += '</div>';
+        codePreviewContent.innerHTML = codeHtml;
+        
+        // Scroll zur ungefähren Position des Problems
+        setTimeout(() => {
+            // Finde die Zeile die dem Kontext des autoFix am nächsten ist
+            const searchText = autoFix.beforeCtx ? autoFix.beforeCtx.trim().slice(-30) : '';
+            if (searchText) {
+                const matchLine = lines.findIndex(line => line.includes(searchText));
+                if (matchLine !== -1) {
+                    const targetEl = document.querySelector(`.code-line[data-line-index="${matchLine}"]`);
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        targetEl.classList.add('code-line-suggested');
+                    }
+                }
+            }
+        }, 100);
+        
+        // Event-Listener: Klick auf Zeile → Tag einfügen
+        document.getElementById('manualPlaceCode').addEventListener('click', (e) => {
+            const lineEl = e.target.closest('.code-line');
+            if (!lineEl) return;
+            
+            const lineIndex = parseInt(lineEl.getAttribute('data-line-index'));
+            
+            // Berechne Position im ORIGINALEN (unformatierten) HTML
+            // Strategie: Nutze den Text-Inhalt der geklickten Zeile um die Position im Original zu finden
+            const clickedLineText = lines[lineIndex].trim();
+            
+            if (!clickedLineText) {
+                showInspectorToast('⚠️ Leere Zeile – bitte eine Zeile mit Inhalt wählen');
+                return;
+            }
+            
+            // Finde diese Stelle im originalen HTML
+            const searchStr = clickedLineText;
+            const posInOriginal = currentReviewHtml.indexOf(searchStr);
+            
+            if (posInOriginal === -1) {
+                showInspectorToast('⚠️ Position nicht gefunden – bitte andere Zeile wählen');
+                return;
+            }
+            
+            // Einfügen: VOR der geklickten Zeile (also am Anfang des Treffers)
+            tagReviewHistory.push({
+                html: currentReviewHtml,
+                action: `MANUAL_PLACEMENT - ${autoFix.id}`,
+                element: autoFixElement.cloneNode(true)
+            });
+            
+            currentReviewHtml = currentReviewHtml.substring(0, posInOriginal) + tagToInsert + currentReviewHtml.substring(posInOriginal);
+            
+            // Log
+            const logEntry = `R${(manualActionLog.length + 1).toString().padStart(2, '0')}_MANUAL_PLACED - ${autoFix.id} ${tagToInsert} manuell platziert vor "${searchStr.substring(0, 40)}" (User Action)`;
+            manualActionLog.push(logEntry);
+            
+            // UI-Update des AutoFix-Elements
+            autoFixElement.style.opacity = '0.6';
+            autoFixElement.style.backgroundColor = '#e8f5e9';
+            autoFixElement.classList.add('autofix-applied');
+            const actionsDiv = autoFixElement.querySelector('.problem-actions');
+            actionsDiv.innerHTML = `
+                <button class="btn-undo-suggestion">
+                    ↩️ Rückgängig
+                </button>
+            `;
+            actionsDiv.querySelector('.btn-undo-suggestion').addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                undoAppliedSuggestion(autoFix, autoFixElement);
+            });
+            
+            const statusSpan = autoFixElement.querySelector('.problem-status');
+            if (statusSpan) {
+                statusSpan.textContent = '📍 Manuell platziert';
+                statusSpan.style.background = '#4caf50';
+            }
+            
+            // Preview und Code-Ansicht aktualisieren
+            updatePreview();
+            updateActionCounter();
+            
+            if (undoLastAction) undoLastAction.disabled = false;
+            
+            showInspectorToast(`✅ ${tagToInsert} manuell eingefügt`);
+        });
+        
+        // Abbrechen-Button
+        document.getElementById('cancelManualPlace').addEventListener('click', () => {
+            updatePreview();  // Zurück zur normalen Ansicht
+            showInspectorToast('Manuelles Platzieren abgebrochen');
+        });
     }
 
     // Tag schließen (mit exakten Boundary-Regeln)

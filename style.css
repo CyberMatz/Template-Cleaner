@@ -3118,3 +3118,195 @@ body {
     border-right: 2px solid #ccc;
     background: #fff;
 }
+
+/* === Auto-Fix Inspector: Angewendet vs. Vorgeschlagen === */
+.autofix-applied {
+    border-left: 4px solid #4caf50 !important;
+}
+
+.autofix-suggested {
+    border-left: 4px solid #ff9800 !important;
+    background-color: #fff8e1;
+}
+
+.btn-apply-autofix {
+    background: #ff9800;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-apply-autofix:hover {
+    background: #f57c00;
+}
+
+.btn-apply-autofix:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.btn-ignore-autofix {
+    background: #e0e0e0;
+    color: #666;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-ignore-autofix:hover {
+    background: #bdbdbd;
+}
+
+.btn-ignore-autofix:disabled {
+    background: #f5f5f5;
+    color: #bbb;
+    cursor: not-allowed;
+}
+
+/* Confidence-Badges (generisch, für Inspector-Anzeige) */
+.problem-status.conf-high {
+    background: #4caf50 !important;
+    color: white;
+}
+
+.problem-status.conf-medium {
+    background: #ff9800 !important;
+    color: white;
+}
+
+.problem-status.conf-low {
+    background: #f44336 !important;
+    color: white;
+}
+
+.btn-undo-suggestion {
+    background: #ef5350;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-undo-suggestion:hover {
+    background: #d32f2f;
+}
+
+/* === Manuelles Platzieren === */
+.manual-place-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 15px;
+    background: #fff3e0;
+    border: 2px solid #ff9800;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.manual-place-tag {
+    background: #ff9800;
+    color: white;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.manual-place-hint {
+    font-size: 12px;
+    color: #555;
+    flex: 1;
+}
+
+.btn-cancel-place {
+    background: #666;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.btn-cancel-place:hover {
+    background: #444;
+}
+
+.btn-manual-place {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-manual-place:hover {
+    background: #5a6fd6;
+}
+
+.manual-place-code {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 600px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    border-radius: 6px;
+    padding: 8px 0;
+}
+
+.code-line {
+    display: flex;
+    cursor: pointer;
+    padding: 1px 8px;
+    transition: background 0.1s;
+    border-left: 3px solid transparent;
+}
+
+.code-line:hover {
+    background: #2d4a2d;
+    border-left: 3px solid #ff9800;
+}
+
+.code-line-suggested {
+    background: #3a2d00 !important;
+    border-left: 3px solid #ffeb3b !important;
+}
+
+.line-num {
+    color: #666;
+    min-width: 45px;
+    text-align: right;
+    padding-right: 12px;
+    user-select: none;
+    border-right: 1px solid #333;
+    margin-right: 12px;
+}
+
+.line-content {
+    color: #d4d4d4;
+    white-space: pre;
+    overflow-x: auto;
+}
