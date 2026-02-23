@@ -164,41 +164,81 @@ class TemplateProcessor {
     // P03/P04: Pre-Header
     checkPreheader() {
         const id = this.checklistType === 'dpl' ? 'P03_PREHEADER' : 'P04_PREHEADER';
-        const preheaderRegex = /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>.*?<\/div>/gi;
-        const preheaderMatches = this.html.match(preheaderRegex);
-        const preheaderCount = preheaderMatches ? preheaderMatches.length : 0;
-
+        
+        // Preheader-Erkennung: Nur ECHTE Preheader, keine Mobile-Content-Blöcke
+        // Ein echter Preheader:
+        //   - Hat display:none (oder max-height:0, visibility:hidden, font-size:0)
+        //   - Befindet sich in den ersten 2000 Zeichen nach <body>
+        //   - Enthält KEINE <table> Tags (Mobile-Blöcke enthalten Tabellen)
+        //   - Hat typischerweise KEINE CSS-Klasse (Mobile-Blöcke haben class="m" etc.)
+        
+        const bodyMatch = this.html.match(/<body[^>]*>/i);
+        if (!bodyMatch) {
+            this.addCheck(id, 'PASS', 'Pre-Header nicht prüfbar (kein Body-Tag)');
+            return;
+        }
+        
+        const bodyEndPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
+        
+        // Suche nur in den ersten 3000 Zeichen nach <body> (Preheader steht immer ganz oben)
+        const searchArea = this.html.substring(bodyEndPos, bodyEndPos + 3000);
+        
+        // Breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0
+        const preheaderPatterns = [
+            /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+            /<div[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+            /<div[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+            /<div[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi
+        ];
+        
+        // Sammle alle Kandidaten im Suchbereich
+        let candidates = [];
+        for (const pattern of preheaderPatterns) {
+            let match;
+            while ((match = pattern.exec(searchArea)) !== null) {
+                // Prüfe ob es ein echter Preheader ist (nicht Mobile-Content)
+                const div = match[0];
+                const hasClass = /class\s*=\s*["'][^"']+["']/i.test(div);
+                const hasTable = /<table/i.test(div);
+                const hasImg = /<img/i.test(div);
+                
+                // Nur als Preheader werten wenn: keine Klasse, keine Tabellen, keine Bilder
+                if (!hasClass && !hasTable && !hasImg) {
+                    // Prüfe ob dieser Kandidat nicht schon erfasst wurde (Duplikat-Vermeidung)
+                    const absPos = bodyEndPos + match.index;
+                    const alreadyFound = candidates.some(c => Math.abs(c.pos - absPos) < 50);
+                    if (!alreadyFound) {
+                        candidates.push({ pos: absPos, match: div, fullMatch: match[0] });
+                    }
+                }
+            }
+        }
+        
+        const preheaderCount = candidates.length;
+        
         if (preheaderCount === 1) {
-            // Genau ein Preheader vorhanden
             if (this.preheaderText) {
-                // Ersetze Text
-                this.html = this.html.replace(preheaderRegex, `<div style="display: none;">${this.preheaderText}</div>`);
+                const original = candidates[0].match;
+                this.html = this.html.replace(original, `<div style="display: none;">${this.preheaderText}</div>`);
                 this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt');
             } else {
                 this.addCheck(id, 'PASS', 'Pre-Header korrekt');
             }
         } else if (preheaderCount > 1) {
-            // Mehrere Preheader - auf 1 reduzieren
-            let first = true;
-            this.html = this.html.replace(preheaderRegex, (match) => {
-                if (first) {
-                    first = false;
-                    return this.preheaderText ? `<div style="display: none;">${this.preheaderText}</div>` : match;
-                }
-                return '';
-            });
+            // Mehrere echte Preheader - auf 1 reduzieren
+            // Behalte den ersten, entferne die anderen
+            for (let i = candidates.length - 1; i >= 1; i--) {
+                this.html = this.html.replace(candidates[i].match, '');
+            }
+            if (this.preheaderText) {
+                this.html = this.html.replace(candidates[0].match, `<div style="display: none;">${this.preheaderText}</div>`);
+            }
             this.addCheck(id, 'FIXED', `Pre-Header reduziert (${preheaderCount} → 1)`);
         } else if (preheaderCount === 0) {
-            // Kein Preheader - nur einfügen wenn Text angegeben
             if (this.preheaderText) {
-                const bodyMatch = this.html.match(/<body[^>]*>/i);
-                if (bodyMatch) {
-                    const insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
-                    this.html = this.html.slice(0, insertPos) + '\n' + `<div style="display: none;">${this.preheaderText}</div>` + '\n' + this.html.slice(insertPos);
-                    this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (Preheader-Text angegeben)');
-                } else {
-                    this.addCheck(id, 'FAIL', 'Body-Tag nicht gefunden');
-                }
+                const insertPos = bodyEndPos;
+                this.html = this.html.slice(0, insertPos) + '\n' + `<div style="display: none;">${this.preheaderText}</div>` + '\n' + this.html.slice(insertPos);
+                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (Preheader-Text angegeben)');
             } else {
                 this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional, kein Text angegeben)');
             }
@@ -560,9 +600,12 @@ class TemplateProcessor {
                             openTagContext: result.openTagContext
                         });
                         
-                        // Tag an der smarten Position einfuegen
-                        this.html = this.html.substring(0, result.position) + inserted + this.html.substring(result.position);
-                        fixed = true;
+                        // NUR bei hoher Sicherheit automatisch einfügen
+                        // Bei medium/low: nur melden, nicht einfügen (verhindert falsches Einfügen bei komplexen Templates)
+                        if (result.confidence === 'high') {
+                            this.html = this.html.substring(0, result.position) + inserted + this.html.substring(result.position);
+                            fixed = true;
+                        }
                     }
                 }
             } else if (closeCount > openCount) {
@@ -587,12 +630,23 @@ class TemplateProcessor {
             }
         });
 
-        if (fixed && this.tagProblems.length > 0) {
-            this.addCheck(id, 'FIXED', 'Tag-Balancing teilweise korrigiert \u2013 offene Probleme vorhanden');
+        // Zähle auto-gefixt vs. nur-gemeldet
+        const appliedFixes = this.autoFixes.filter(f => f.confidence === 'high').length;
+        const skippedFixes = this.autoFixes.filter(f => f.confidence !== 'high').length;
+        
+        if (fixed && (this.tagProblems.length > 0 || skippedFixes > 0)) {
+            const parts = [];
+            if (appliedFixes > 0) parts.push(`${appliedFixes} sicher korrigiert`);
+            if (skippedFixes > 0) parts.push(`${skippedFixes} unsicher – bitte prüfen`);
+            if (this.tagProblems.length > 0) parts.push(`${this.tagProblems.length} überschüssige Tags`);
+            this.addCheck(id, 'FIXED', `Tag-Balancing: ${parts.join(', ')}`);
         } else if (fixed) {
-            this.addCheck(id, 'FIXED', 'Tag-Balancing korrigiert');
-        } else if (this.tagProblems.length > 0) {
-            this.addCheck(id, 'WARN', 'Tag-Balancing: \u00DCberschuessige Closing-Tags gefunden');
+            this.addCheck(id, 'FIXED', `Tag-Balancing korrigiert (${appliedFixes} Tags eingefügt)`);
+        } else if (skippedFixes > 0 || this.tagProblems.length > 0) {
+            const parts = [];
+            if (skippedFixes > 0) parts.push(`${skippedFixes} fehlende Tags (unsicher – bitte prüfen)`);
+            if (this.tagProblems.length > 0) parts.push(`${this.tagProblems.length} überschüssige Tags`);
+            this.addCheck(id, 'WARN', `Tag-Balancing: ${parts.join(', ')}`);
         } else {
             this.addCheck(id, 'PASS', 'Tag-Balancing korrekt');
         }
@@ -601,7 +655,17 @@ class TemplateProcessor {
     // HTML-Kommentare entfernen (fuer saubere Tag-Zaehlung)
     // Entfernt: <!-- ... -->, <!--[if ...]>...<![endif]-->, etc.
     _stripHtmlComments(html) {
-        return html.replace(/<!--[\s\S]*?-->/g, '');
+        // 1. Standard HTML-Kommentare: <!-- ... -->
+        //    Inkludiert: <!--[if mso]>...<![endif]-->, <!--[if !mso]><!-->...<!--<![endif]-->
+        let result = html.replace(/<!--[\s\S]*?-->/g, '');
+        
+        // 2. Nicht-standard Conditional Comments (ohne <!-- Wrapper):
+        //    <![if !mso]>...<![endif]>
+        //    Diese kommen in manchen Templates vor und enthalten Tags die nicht gezählt werden dürfen
+        result = result.replace(/<!\[if[^\]]*\]>/gi, '');
+        result = result.replace(/<!\[endif\]>/gi, '');
+        
+        return result;
     }
     
     // Hilfsfunktion: Finde die beste Einfuegeposition per Boundary-Logik
