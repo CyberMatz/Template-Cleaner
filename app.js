@@ -5811,7 +5811,7 @@ td[width] { width: auto !important; }
                 groupLinks.forEach(link => {
                     html += '<div class="link-card" data-link-id="' + link.id + '">';
                     
-                    // Header: ID + Typ Badge + UTM Status
+                    // Header: ID + Typ Badge
                     html += '<div class="link-card-header">';
                     html += '<span class="link-card-id">' + link.id + '</span>';
                     html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
@@ -6641,6 +6641,20 @@ td[width] { width: auto !important; }
                 html += '<button class="btn-image-alt-apply btn-small" data-img-id="' + img.id + '" title="Alt-Text übernehmen">✓</button>';
                 html += '</div>';
                 
+                // Alt-Text Vorschlag (nur bei leerem Alt)
+                if (img.altEmpty && img.altSuggestion && img.altSuggestionSource !== 'pixel') {
+                    var sourceLabel = img.altSuggestionSource === 'link' ? 'aus Link-Text' : 
+                                     img.altSuggestionSource === 'title' ? 'aus title' : 'aus Dateiname';
+                    html += '<div class="alt-suggestion">';
+                    html += '<span class="alt-suggestion-text">💡 Vorschlag (' + sourceLabel + '): <strong>' + escapeHtml(img.altSuggestion) + '</strong></span>';
+                    html += '<button class="btn-alt-suggestion-apply" data-img-id="' + img.id + '" data-suggestion="' + escapeHtml(img.altSuggestion) + '">Übernehmen</button>';
+                    html += '</div>';
+                } else if (img.altEmpty && img.altSuggestionSource === 'pixel') {
+                    html += '<div class="alt-suggestion alt-suggestion-ok">';
+                    html += '<span class="alt-suggestion-text">✓ Tracking-Pixel – leerer Alt-Text ist korrekt</span>';
+                    html += '</div>';
+                }
+                
                 // Property Chips
                 html += '<div class="image-card-new-props">';
                 if (img.width) {
@@ -6947,6 +6961,76 @@ td[width] { width: auto !important; }
                 paddingAsymmetric = containerPadding.left !== containerPadding.right;
             }
             
+            // ═══ Alt-Text Vorschlag generieren ═══
+            let altSuggestion = '';
+            let altSuggestionSource = '';
+            
+            if (rawAlt === null || rawAlt === '') {
+                // 1) Tracking-Pixel: leerer Alt ist korrekt
+                const imgWidth = img.getAttribute('width');
+                const imgHeight = img.getAttribute('height');
+                const imgStyle = img.getAttribute('style') || '';
+                const is1x1 = (imgWidth === '1' && imgHeight === '1') || 
+                              imgStyle.includes('width:1px') || imgStyle.includes('height:1px');
+                
+                if (is1x1) {
+                    altSuggestion = '';
+                    altSuggestionSource = 'pixel';
+                } else {
+                    // 2) Link-Text: Wenn Bild in einem <a> mit Text steckt
+                    let parentA = img.parentElement;
+                    for (let i = 0; i < 3 && parentA; i++) {
+                        if (parentA.tagName && parentA.tagName.toLowerCase() === 'a') {
+                            // Sammle Text aus dem Link (ohne den Bild-alt)
+                            let linkText = '';
+                            parentA.childNodes.forEach(function(child) {
+                                if (child.nodeType === 3) linkText += child.textContent.trim();
+                                else if (child !== img && child.textContent) linkText += child.textContent.trim();
+                            });
+                            linkText = linkText.replace(/\s+/g, ' ').trim();
+                            if (linkText.length > 3 && linkText.length < 100) {
+                                altSuggestion = linkText;
+                                altSuggestionSource = 'link';
+                            }
+                            break;
+                        }
+                        parentA = parentA.parentElement;
+                    }
+                    
+                    // 3) title-Attribut des Bildes
+                    if (!altSuggestion) {
+                        var imgTitle = img.getAttribute('title');
+                        if (imgTitle && imgTitle.trim().length > 1) {
+                            altSuggestion = imgTitle.trim();
+                            altSuggestionSource = 'title';
+                        }
+                    }
+                    
+                    // 4) Dateiname aus der URL
+                    if (!altSuggestion && src) {
+                        try {
+                            var urlPath = src.split('?')[0].split('#')[0];
+                            var filename = urlPath.split('/').pop();
+                            if (filename && filename.includes('.')) {
+                                // Endung entfernen
+                                var nameOnly = filename.replace(/\.[^.]+$/, '');
+                                // Bindestriche/Unterstriche durch Leerzeichen
+                                nameOnly = nameOnly.replace(/[-_]+/g, ' ');
+                                // Zahlenblöcke am Ende entfernen (z.B. "banner 1234")
+                                nameOnly = nameOnly.replace(/\s*\d{3,}$/g, '');
+                                // Ersten Buchstaben groß
+                                nameOnly = nameOnly.trim();
+                                if (nameOnly.length > 2 && nameOnly.length < 80) {
+                                    nameOnly = nameOnly.charAt(0).toUpperCase() + nameOnly.slice(1);
+                                    altSuggestion = nameOnly;
+                                    altSuggestionSource = 'filename';
+                                }
+                            }
+                        } catch(e) { /* ignore */ }
+                    }
+                }
+            }
+            
             images.push({
                 id: id,
                 src: src,
@@ -6955,6 +7039,8 @@ td[width] { width: auto !important; }
                 altFull: rawAlt || '',
                 altMissing: rawAlt === null,
                 altEmpty: rawAlt === '' || rawAlt === null,
+                altSuggestion: altSuggestion,
+                altSuggestionSource: altSuggestionSource,
                 width: width,
                 widthSource: widthSource,
                 height: height,
@@ -7083,6 +7169,16 @@ td[width] { width: auto !important; }
                     const imgId = this.getAttribute('data-img-id');
                     handleImageAltChange(imgId, this.value);
                 }
+            });
+        });
+        
+        // Alt-Text Vorschlag übernehmen
+        document.querySelectorAll('.btn-alt-suggestion-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
+                const suggestion = this.getAttribute('data-suggestion');
+                handleImageAltChange(imgId, suggestion);
             });
         });
         
