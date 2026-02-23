@@ -5735,22 +5735,17 @@ td[width] { width: auto !important; }
             return 'other';
         }
         
-        // --- Helfer: Hat Link UTM-Parameter? ---
-        function hasUtm(href) {
-            return /utm_/i.test(href);
-        }
+        // --- UTM nicht relevant für Workflow, daher nicht anzeigen ---
+        
+        // --- UTM nicht relevant für Workflow, daher nicht anzeigen ---
         
         // --- Kategorisiere Links ---
         const linkGroups = { cta: [], image: [], social: [], text: [], other: [] };
         links.forEach(link => {
             const type = classifyLink(link);
             link._type = type;
-            link._hasUtm = hasUtm(link.href);
             linkGroups[type].push(link);
         });
-        
-        // --- UTM-Statistik ---
-        const untrackedCount = links.filter(l => !l._hasUtm).length;
         
         // Render Tracking Tab
         let html = '<div class="tracking-tab-content">';
@@ -5759,7 +5754,7 @@ td[width] { width: auto !important; }
         html += '<div class="tracking-summary-stats">';
         html += '<div class="summary-stat stat-links"><div class="summary-stat-value">' + links.length + '</div><div class="summary-stat-label">Links gesamt</div></div>';
         html += '<div class="summary-stat stat-pixel"><div class="summary-stat-value">' + (trackingPixel ? '1' : '0') + '</div><div class="summary-stat-label">Tracking Pixel</div></div>';
-        html += '<div class="summary-stat stat-untracked"><div class="summary-stat-value">' + untrackedCount + '</div><div class="summary-stat-label">Ohne UTM</div></div>';
+        html += '<div class="summary-stat" style="background:#f0fdf4;border:1px solid #bbf7d0;"><div class="summary-stat-value" style="color:#059669;">' + linkGroups.cta.length + '</div><div class="summary-stat-label">CTA Links</div></div>';
         html += '</div>';
         
         // ═══ Sektion: Link Insert UI ═══
@@ -5820,7 +5815,6 @@ td[width] { width: auto !important; }
                     html += '<div class="link-card-header">';
                     html += '<span class="link-card-id">' + link.id + '</span>';
                     html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
-                    html += '<span class="link-card-status" title="' + (link._hasUtm ? 'UTM vorhanden' : 'Kein UTM') + '">' + (link._hasUtm ? '✅' : '⚠️') + '</span>';
                     html += '</div>';
                     
                     // Text
@@ -5828,15 +5822,6 @@ td[width] { width: auto !important; }
                     
                     // URL
                     html += '<div class="link-card-url" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</div>';
-                    
-                    // Meta Chips
-                    html += '<div class="link-card-meta">';
-                    if (link._hasUtm) {
-                        html += '<span class="meta-chip has-utm">✓ UTM</span>';
-                    } else {
-                        html += '<span class="meta-chip no-utm">✗ Kein UTM</span>';
-                    }
-                    html += '</div>';
                     
                     // Actions + Edit Row
                     html += '<div class="link-card-actions">';
@@ -6648,9 +6633,12 @@ td[width] { width: auto !important; }
                 // src URL
                 html += '<div class="image-card-new-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
                 
-                // Alt text
-                html += '<div class="image-card-new-alt">';
-                html += '<span class="alt-label">Alt:</span> ' + escapeHtml(img.alt);
+                // Alt text – editable inline
+                var altNeedsAttention = img.altEmpty;
+                html += '<div class="image-alt-edit-row' + (altNeedsAttention ? ' alt-missing' : '') + '">';
+                html += '<span class="alt-label">Alt:</span>';
+                html += '<input type="text" class="image-alt-input' + (altNeedsAttention ? ' alt-input-warn' : '') + '" data-img-id="' + img.id + '" value="' + escapeHtml(img.altFull) + '" placeholder="' + (altNeedsAttention ? 'Alt-Text fehlt – bitte eintragen' : 'Alt-Text') + '">';
+                html += '<button class="btn-image-alt-apply btn-small" data-img-id="' + img.id + '" title="Alt-Text übernehmen">✓</button>';
                 html += '</div>';
                 
                 // Property Chips
@@ -6825,7 +6813,8 @@ td[width] { width: auto !important; }
         const images = [];
         imgElements.forEach((img, index) => {
             const src = img.getAttribute('src') || '';
-            const alt = img.getAttribute('alt') || '[kein alt]';
+            const rawAlt = img.getAttribute('alt');
+            const alt = rawAlt === null ? '[kein alt]' : (rawAlt === '' ? '(leer)' : rawAlt);
             const id = 'I' + String(index + 1).padStart(3, '0');
             
             // Breite ermitteln: width-Attribut > style width > natürliche Breite
@@ -6963,6 +6952,9 @@ td[width] { width: auto !important; }
                 src: src,
                 srcShort: shortenUrl(src, 70),
                 alt: alt.length > 40 ? alt.substring(0, 37) + '...' : alt,
+                altFull: rawAlt || '',
+                altMissing: rawAlt === null,
+                altEmpty: rawAlt === '' || rawAlt === null,
                 width: width,
                 widthSource: widthSource,
                 height: height,
@@ -7069,6 +7061,28 @@ td[width] { width: auto !important; }
                 const imgId = this.getAttribute('data-img-id');
                 const src = this.getAttribute('data-src');
                 highlightImageInPreview(imgId, src);
+            });
+        });
+        
+        // Alt-Text Apply Buttons
+        document.querySelectorAll('.btn-image-alt-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const imgId = this.getAttribute('data-img-id');
+                const input = document.querySelector('.image-alt-input[data-img-id="' + imgId + '"]');
+                const newAlt = input ? input.value : '';
+                handleImageAltChange(imgId, newAlt);
+            });
+        });
+        
+        // Alt-Text: Enter-Taste übernimmt auch
+        document.querySelectorAll('.image-alt-input').forEach(input => {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const imgId = this.getAttribute('data-img-id');
+                    handleImageAltChange(imgId, this.value);
+                }
             });
         });
         
@@ -7273,6 +7287,47 @@ td[width] { width: auto !important; }
         }
     }
     
+    // Handle Image Alt-Text Change
+    function handleImageAltChange(imgId, newAlt) {
+        console.log('[INSPECTOR] Changing image alt:', imgId, 'to:', newAlt);
+        
+        // Speichere in History
+        imagesHistory.push(imagesTabHtml);
+        
+        // Finde Image via imgId
+        const imgIndex = parseInt(imgId.substring(1)) - 1;
+        
+        // Parse HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
+        const images = doc.querySelectorAll('img');
+        
+        if (imgIndex >= 0 && imgIndex < images.length) {
+            const img = images[imgIndex];
+            
+            // Setze alt-Attribut
+            img.setAttribute('alt', newAlt);
+            
+            // Serialisiere zurück
+            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            
+            // Check Pending
+            checkImagesPending();
+            
+            // Update Preview
+            updateInspectorPreview();
+            
+            // Re-render Images Tab
+            showImagesTab(imagesContent);
+            
+            showInspectorToast('✅ Alt-Text für ' + imgId + ' geändert');
+            console.log('[INSPECTOR] Image alt changed:', imgId);
+        } else {
+            console.error('[INSPECTOR] Image not found:', imgId);
+            imagesHistory.pop();
+        }
+    }
+
     // Handle Image Width Change
     function handleImageWidthChange(imgId, newWidth) {
         console.log('[INSPECTOR] Changing image width:', imgId, 'to:', newWidth);
