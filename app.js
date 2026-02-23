@@ -1208,6 +1208,7 @@ class TemplateProcessor {
         
         let ctasFixed = 0;
         let ctasMismatched = 0;
+        let ctasSkippedTable = 0;
         
         // Prüfe für jeden CTA ob ein VML-Block in der Nähe ist
         for (const cta of allCtaPositions) {
@@ -1222,23 +1223,36 @@ class TemplateProcessor {
                 }
             }
             
+            // Typ B (table mit bgcolor): Outlook versteht bgcolor nativ → KEIN VML nötig
+            // VML wird nur für Typ A (inline CSS background) generiert
+            if (cta.type === 'table' && !hasVml) {
+                ctasSkippedTable++;
+                continue;
+            }
+            
             if (!hasVml) {
-                // Kein VML → Auto-Fix
+                // Typ A ohne VML → Auto-Fix: VML einfügen + HTML-Button für Outlook verstecken
                 const btnProps = this._extractButtonProperties(cta);
                 
                 if (btnProps && btnProps.href) {
                     const vmlCode = this._generateVmlButton(btnProps);
+                    const notMsoOpen = '<!--[if !mso]><!-->\n';
+                    const notMsoClose = '\n<!--<![endif]-->';
                     
-                    // Füge VML VOR dem CTA-Container ein
+                    // Füge VML VOR dem CTA-Container ein + !mso Wrapper um originalen Button
                     const insertPos = cta.containerIndex || cta.index;
+                    const ctaEndPos = cta.endIndex;
                     this.html = this.html.substring(0, insertPos) + 
                                 vmlCode + '\n' +
-                                this.html.substring(insertPos);
+                                notMsoOpen +
+                                this.html.substring(insertPos, ctaEndPos) +
+                                notMsoClose +
+                                this.html.substring(ctaEndPos);
                     
                     ctasFixed++;
                     
-                    // Aktualisiere Positionen
-                    const offset = vmlCode.length + 1;
+                    // Aktualisiere Positionen (VML + beide Wrapper-Tags)
+                    const offset = vmlCode.length + 1 + notMsoOpen.length + notMsoClose.length;
                     for (const otherCta of allCtaPositions) {
                         if (otherCta.index > insertPos) {
                             otherCta.index += offset;
@@ -1254,7 +1268,7 @@ class TemplateProcessor {
                     }
                 }
             } else if (vmlBlock) {
-                // VML vorhanden → Prüfe Link
+                // VML bereits vorhanden (vom Kunden angeliefert) → Prüfe nur Link-Konsistenz
                 const vmlHref = vmlBlock.fullMatch.match(/href\s*=\s*["']([^"']*)["']/i);
                 if (vmlHref && cta.href && vmlHref[1] !== cta.href) {
                     const fixedVml = vmlBlock.fullMatch.replace(
@@ -1266,6 +1280,37 @@ class TemplateProcessor {
                                 this.html.substring(vmlBlock.endIndex);
                     ctasMismatched++;
                 }
+                
+                // Prüfe ob der HTML-Button bereits in <!--[if !mso]> gewrapped ist
+                const ctaStart = cta.containerIndex || cta.index;
+                const beforeCtaCheck = this.html.substring(Math.max(0, ctaStart - 80), ctaStart);
+                if (!/<!--\[if\s+!mso\]><!-->/i.test(beforeCtaCheck)) {
+                    // !mso Wrapper fehlt → hinzufügen damit Outlook nur VML zeigt
+                    const notMsoOpen = '<!--[if !mso]><!-->\n';
+                    const notMsoClose = '\n<!--<![endif]-->';
+                    const ctaEnd = cta.endIndex;
+                    this.html = this.html.substring(0, ctaStart) + 
+                                notMsoOpen +
+                                this.html.substring(ctaStart, ctaEnd) +
+                                notMsoClose +
+                                this.html.substring(ctaEnd);
+                    
+                    // Positionen der nachfolgenden CTAs aktualisieren
+                    const wrapOffset = notMsoOpen.length + notMsoClose.length;
+                    for (const otherCta of allCtaPositions) {
+                        if (otherCta.index > ctaStart && otherCta !== cta) {
+                            otherCta.index += wrapOffset;
+                            otherCta.endIndex += wrapOffset;
+                            if (otherCta.containerIndex) otherCta.containerIndex += wrapOffset;
+                        }
+                    }
+                    for (const otherVml of vmlPositions) {
+                        if (otherVml.index > ctaStart) {
+                            otherVml.index += wrapOffset;
+                            otherVml.endIndex += wrapOffset;
+                        }
+                    }
+                }
             }
         }
         
@@ -1276,14 +1321,16 @@ class TemplateProcessor {
             return;
         }
         
-        if (ctasFixed > 0 && ctasMismatched > 0) {
-            this.addCheck(id, 'FIXED', `${ctasFixed} VML-Button(s) für Outlook generiert, ${ctasMismatched} Link(s) synchronisiert (${totalCtas} CTAs gesamt)`);
-        } else if (ctasFixed > 0) {
-            this.addCheck(id, 'FIXED', `${ctasFixed} VML-Button(s) für Outlook automatisch generiert (${totalCtas} CTAs gesamt)`);
-        } else if (ctasMismatched > 0) {
-            this.addCheck(id, 'FIXED', `${ctasMismatched} VML-Link(s) mit HTML-Button synchronisiert (${totalCtas} CTAs gesamt)`);
+        // Report-Meldung zusammenbauen
+        const parts = [];
+        if (ctasFixed > 0) parts.push(`${ctasFixed} VML-Button(s) für Outlook generiert (CSS-Buttons)`);
+        if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
+        if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
+        
+        if (ctasFixed > 0 || ctasMismatched > 0) {
+            this.addCheck(id, 'FIXED', parts.join(', ') + ` (${totalCtas} CTAs gesamt)`);
         } else {
-            this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) haben korrekten Outlook-Fallback`);
+            this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) Outlook-kompatibel` + (ctasSkippedTable > 0 ? ` (${ctasSkippedTable} Tabellen-Button(s) nativ kompatibel)` : ''));
         }
     }
     
@@ -8285,6 +8332,8 @@ td[width] { width: auto !important; }
                 html += '<span class="button-item-id">' + btn.id + '</span>';
                 if (btn.vmlStatus === 'ok') {
                     html += '<span class="button-status button-status-ok">✅ VML korrekt</span>';
+                } else if (btn.vmlStatus === 'native_ok') {
+                    html += '<span class="button-status button-status-ok">✅ Outlook-kompatibel (bgcolor)</span>';
                 } else if (btn.vmlStatus === 'mismatch') {
                     html += '<span class="button-status button-status-warn">⚠️ VML Link/Text abweichend</span>';
                 } else {
@@ -9276,11 +9325,15 @@ td[width] { width: auto !important; }
             
             const vml = checkVmlStatus(match.index, href, linkText);
             
+            // Typ B (td mit bgcolor): Outlook versteht bgcolor nativ → VML nicht nötig
+            // Wenn kein VML vorhanden ist, ist das korrekt (kein Fehler)
+            const vmlStatusFinal = (!vml.hasVml) ? 'native_ok' : vml.vmlStatus;
+            
             const bgImageInfo = checkBackgroundImage(linkMatch[0]);
             
             buttons.push({
                 id, type: 'table', href, text: linkText, bgColor, textColor, width, height,
-                borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vmlStatusFinal,
                 bgImageInfo: bgImageInfo,
                 matchIndex: match.index, fullMatch: fullTdMatch
             });
@@ -9744,6 +9797,12 @@ td[width] { width: auto !important; }
             return;
         }
         
+        // Typ B (td mit bgcolor): Outlook versteht bgcolor nativ → kein VML nötig
+        if (btnData.type === 'table') {
+            showInspectorToast('ℹ️ Tabellen-Button (bgcolor) – kein VML nötig, Outlook zeigt diesen Button korrekt an');
+            return;
+        }
+        
         // Speichere in History
         buttonsHistory.push(buttonsTabHtml);
         
@@ -9781,10 +9840,31 @@ td[width] { width: auto !important; }
         vml += '</v:roundrect>\n';
         vml += '<![endif]-->\n';
         
-        // Füge VML VOR dem Button ein
+        // Füge VML VOR dem Button ein + !mso Wrapper um originalen Button
         const btnPos = html.indexOf(btnData.fullMatch);
         if (btnPos >= 0) {
-            html = html.substring(0, btnPos) + vml + html.substring(btnPos);
+            // Prüfe ob der Button bereits einen !mso Wrapper hat
+            const beforeBtn = html.substring(Math.max(0, btnPos - 80), btnPos);
+            const hasNotMsoWrapper = /<!--\[if\s+!mso\]><!-->/i.test(beforeBtn);
+            
+            if (hasNotMsoWrapper) {
+                // Wrapper existiert bereits → VML VOR dem Wrapper einfügen
+                const wrapperPos = html.lastIndexOf('<!--[if !mso]><!-->', btnPos);
+                if (wrapperPos >= 0) {
+                    html = html.substring(0, wrapperPos) + vml + html.substring(wrapperPos);
+                } else {
+                    html = html.substring(0, btnPos) + vml + html.substring(btnPos);
+                }
+            } else {
+                // Kein Wrapper → VML einfügen + !mso Wrapper um Button
+                const btnEnd = btnPos + btnData.fullMatch.length;
+                html = html.substring(0, btnPos) + 
+                       vml + 
+                       '<!--[if !mso]><!-->\n' +
+                       html.substring(btnPos, btnEnd) +
+                       '\n<!--<![endif]-->' +
+                       html.substring(btnEnd);
+            }
         }
         
         buttonsTabHtml = html;
