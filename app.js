@@ -25,12 +25,20 @@ class TemplateProcessor {
 
     // Phase A: Automatische Korrekturen
     phaseA_SafeFix() {
+        // === PHASE A0: Sanitize (Struktur-Reparatur ZUERST) ===
         // P01: DOCTYPE
         this.checkDoctype();
 
         // P02: HTML-Tag Attribute
         this.checkHtmlAttributes();
 
+        // Dokumentstruktur reparieren (fehlende </body>, </html>) – VOR Platzhalter-Einfügung
+        this.checkDocumentStructure();
+
+        // Self-Closing Tags reparieren (<td/> → <td></td>) – VOR Tag-Balancing
+        this.fixSelfClosingTags();
+
+        // === PHASE A1: Platzhalter & Inhalte ===
         // P03/P04: Pre-Header
         this.checkPreheader();
 
@@ -42,12 +50,10 @@ class TemplateProcessor {
             this.checkOutlookConditionalComments();
         }
 
-        // Dokumentstruktur reparieren (fehlende </body>, </html>)
-        this.checkDocumentStructure();
-
         // P05/P07: Footer Platzhalter
         this.checkFooterPlaceholder();
 
+        // === PHASE A2: Tag-Reparatur ===
         // P07/P08: Tag-Balancing
         this.checkTagBalancing();
 
@@ -345,6 +351,43 @@ class TemplateProcessor {
 
         if (fixes.length > 0) {
             this.addCheck('P_DOC_STRUCTURE', 'FIXED', 'Fehlende Schließ-Tags ergänzt: ' + fixes.join(', '));
+        }
+    }
+
+    // Self-Closing Tags reparieren
+    // Viele Templates haben <td .../> oder <th .../> statt <td ...></td>
+    // Das ist in XHTML erlaubt, aber E-Mail-Clients interpretieren es unterschiedlich
+    // und es verfälscht das Tag-Balancing (wird als "offen" gezählt)
+    fixSelfClosingTags() {
+        const id = 'P_SELF_CLOSING_TAGS';
+        
+        // Tags die NICHT self-closing sein dürfen in E-Mail-HTML
+        // (img, br, hr, input, meta, link DÜRFEN self-closing sein)
+        const blockTags = ['td', 'th', 'tr', 'table', 'div', 'span', 'a', 'p', 'center', 'tbody'];
+        
+        let totalFixed = 0;
+        const fixedTags = {};
+        
+        blockTags.forEach(tag => {
+            // Regex: <td ... /> oder <td/> (mit optionalem Whitespace vor /)
+            // WICHTIG: Nicht innerhalb von Kommentaren matchen
+            const regex = new RegExp(`<${tag}(\\b[^>]*)\\s*/>`, 'gi');
+            const matches = this.html.match(regex);
+            
+            if (matches && matches.length > 0) {
+                this.html = this.html.replace(regex, `<${tag}$1></${tag}>`);
+                totalFixed += matches.length;
+                fixedTags[tag] = matches.length;
+            }
+        });
+        
+        if (totalFixed > 0) {
+            const details = Object.entries(fixedTags)
+                .map(([tag, count]) => `<${tag}/> ×${count}`)
+                .join(', ');
+            this.addCheck(id, 'FIXED', `${totalFixed} Self-Closing Tags repariert (${details})`);
+        } else {
+            this.addCheck(id, 'PASS', 'Keine problematischen Self-Closing Tags gefunden');
         }
     }
 
@@ -998,17 +1041,44 @@ class TemplateProcessor {
             return;
         }
         
-        // Prüfe auf Media Queries
-        const hasMediaQueries = /@media[^{]*max-width[^{]*\{/i.test(this.html);
+        // Prüfe ob bereits Responsive-Regeln für TABELLEN-BREITEN existieren
+        // (nicht nur irgendwelche Media Queries – z.B. Footer-Mobile-Styles zählen nicht)
+        const allMediaBlocks = this.html.match(/@media[^{]*max-width[^{]*\{[\s\S]*?\}\s*\}/gi) || [];
+        const hasTableResponsiveRules = allMediaBlocks.some(mq => {
+            // Suche nach echten Tabellen-Selektoren (nicht .footer-table o.ä.)
+            // Matches: table[width=...], table { width, table, td { width
+            return /(?:^|[\s,{;])table\s*[\[{,]/im.test(mq) && /width/i.test(mq);
+        });
         
-        if (!hasMediaQueries) {
-            // Keine Media Queries - Responsive Styles hinzufügen
+        // Prüfe ob EIGENE Media Queries vom Kunden vorhanden sind
+        // (wir erkennen unsere eigenen hinzugefügten Footer-Styles anhand des Selektors)
+        const hasCustomerMediaQueries = allMediaBlocks.some(mq => 
+            !/(\.footer-table|Footer Mobile)/i.test(mq)
+        );
+        
+        if (!hasTableResponsiveRules) {
+            // Keine Tabellen-Responsive-Regeln - hinzufügen
             const headCloseMatch = this.html.match(/<\/head>/i);
             if (headCloseMatch) {
                 const insertPos = this.html.indexOf(headCloseMatch[0]);
-                const responsiveStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    /* Sichere Fallbacks: Bilder und Container */\n    img { max-width: 100% !important; height: auto !important; }\n    table[width="500"], table[width="520"], table[width="540"], table[width="560"],\n    table[width="580"], table[width="600"], table[width="620"], table[width="640"],\n    table[width="660"], table[width="680"], table[width="700"] {\n        width: 100% !important;\n    }\n    /* Checklisten-Regel: class="responsive" Selektoren */\n    table[class="responsive"] { width: 100% !important; }\n    td[class="responsive"] { width: 100% !important; display: block !important; }\n    img[class="responsive"] { width: 100% !important; height: auto !important; }\n}\n</style>\n`;
+                
+                // DYNAMISCH: Tatsächliche Breiten aus dem Template erkennen
+                const detectedWidths = this._detectAllContentWidths();
+                
+                // Generiere width-Selektoren für alle erkannten Breiten
+                let tableSelectors = '';
+                if (detectedWidths.length > 0) {
+                    const selectors = detectedWidths.map(w => `table[width="${w}"]`).join(', ');
+                    tableSelectors = `    ${selectors} {\n        width: 100% !important;\n    }\n`;
+                }
+                
+                const responsiveStyles = `\n<style>\n@media screen and (max-width: 600px) {\n    /* Sichere Fallbacks: Bilder und Container */\n    img { max-width: 100% !important; height: auto !important; }\n${tableSelectors}    /* Checklisten-Regel: class="responsive" Selektoren */\n    table[class="responsive"] { width: 100% !important; }\n    td[class="responsive"] { width: 100% !important; display: block !important; }\n    img[class="responsive"] { width: 100% !important; height: auto !important; }\n}\n</style>\n`;
                 this.html = this.html.slice(0, insertPos) + responsiveStyles + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Mobile-Responsive Styles hinzugefügt (Fallbacks + Checklisten-Regel)');
+                
+                const widthInfo = detectedWidths.length > 0 
+                    ? `für ${detectedWidths.length} erkannte Breiten: ${detectedWidths.join('px, ')}px`
+                    : 'mit Standard-Fallbacks';
+                this.addCheck(id, 'FIXED', `Mobile-Responsive Styles hinzugefügt (${widthInfo})`);
             } else {
                 this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Responsive Styles nicht hinzugefügt');
             }
@@ -1025,6 +1095,38 @@ class TemplateProcessor {
                 this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber keine Responsive-Regeln für Bilder/Tabellen erkannt');
             }
         }
+    }
+
+    // Hilfsfunktion: Alle relevanten Pixel-Breiten aus dem Template erkennen
+    _detectAllContentWidths() {
+        const widthCounts = {};
+        
+        // Finde alle table width="NNN" Attribute
+        const tableWidthRegex = /<table[^>]*width\s*=\s*["'](\d+)["'][^>]*>/gi;
+        let match;
+        while ((match = tableWidthRegex.exec(this.html)) !== null) {
+            const w = parseInt(match[1]);
+            // Nur relevante Breiten: 200px–1000px (schließt Spacer-1px und 100% aus)
+            if (w >= 200 && w <= 1000) {
+                widthCounts[w] = (widthCounts[w] || 0) + 1;
+            }
+        }
+        
+        // Finde auch td width="NNN" (für größere Zellen die auf Mobile 100% werden sollten)
+        const tdWidthRegex = /<td[^>]*width\s*=\s*["'](\d+)["'][^>]*>/gi;
+        while ((match = tdWidthRegex.exec(this.html)) !== null) {
+            const w = parseInt(match[1]);
+            // Nur größere td-Breiten (>= 300px), die auf Mobile problematisch sind
+            if (w >= 300 && w <= 1000) {
+                if (!widthCounts[w]) widthCounts[w] = 0;
+                widthCounts[w]++;
+            }
+        }
+        
+        // Sortiere nach Häufigkeit (häufigste zuerst), dann nach Breite
+        return Object.keys(widthCounts)
+            .map(Number)
+            .sort((a, b) => widthCounts[b] - widthCounts[a] || b - a);
     }
 
     // P11: Viewport Meta-Tag Check (nur Standard-Templates)
