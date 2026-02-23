@@ -808,6 +808,7 @@ body {
     flex-direction: column;
     gap: 15px;
     padding: 20px 24px;
+    position: relative;
 }
 
 .inspector-left {
@@ -3309,4 +3310,24 @@ body {
     color: #d4d4d4;
     white-space: pre;
     overflow-x: auto;
+}
+
+/* Manual Place Overlay */
+.manual-place-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #fff;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.manual-place-overlay .manual-place-code {
+    flex: 1;
+    max-height: none;
+    border-radius: 0;
 }

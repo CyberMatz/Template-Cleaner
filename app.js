@@ -10511,9 +10511,9 @@ td[width] { width: auto !important; }
         // Zaehler
         const fixCount = autoFixes.length;
         const problemCount = tagProblems.length;
-        const highConfCount = autoFixes.filter(f => f.confidence === 'high').length;
-        const medConfCount = autoFixes.filter(f => f.confidence === 'medium').length;
-        const lowConfCount = autoFixes.filter(f => f.confidence === 'low').length;
+        const safeAutoFixTagsSummary = ['table'];
+        const appliedCount = autoFixes.filter(f => f.confidence === 'high' && safeAutoFixTagsSummary.includes(f.tag)).length;
+        const suggestedCount = fixCount - appliedCount;
         const excessCount = tagProblems.filter(p => p.type === 'EXCESS_CLOSING_TAG').length;
         const unclosedCount = tagProblems.filter(p => p.type === 'UNCLOSED_TAG').length;
         
@@ -10523,27 +10523,26 @@ td[width] { width: auto !important; }
         // SEKTION 1: ZUSAMMENFASSUNG (Status-Bar)
         // ========================================
         const allGood = fixCount === 0 && problemCount === 0;
-        const statusClass = allGood ? 'summary-ok' : (problemCount > 0 ? 'summary-warn' : 'summary-info');
+        const statusClass = allGood ? 'summary-ok' : (problemCount > 0 || suggestedCount > 0 ? 'summary-warn' : 'summary-info');
         
         html += '<div class="tagreview-summary ' + statusClass + '">';
         html += '<div class="tagreview-summary-title">';
         if (allGood) {
             html += '✅ Tag-Balancing: Alles in Ordnung';
-        } else if (problemCount > 0 && fixCount > 0) {
-            html += '⚠️ Tag-Balancing: ' + fixCount + ' Auto-Fix(es), ' + problemCount + ' offene(s) Problem(e)';
-        } else if (fixCount > 0) {
-            html += '⚙️ Tag-Balancing: ' + fixCount + ' Tag(s) automatisch korrigiert';
         } else {
-            html += '⚠️ Tag-Balancing: ' + problemCount + ' Problem(e) erkannt';
+            const parts = [];
+            if (appliedCount > 0) parts.push(appliedCount + ' auto-korrigiert');
+            if (suggestedCount > 0) parts.push(suggestedCount + ' Vorschläge');
+            if (problemCount > 0) parts.push(problemCount + ' offene Probleme');
+            html += '⚙️ Tag-Balancing: ' + parts.join(', ');
         }
         html += '</div>';
         
         // Detail-Chips
         if (!allGood) {
             html += '<div class="tagreview-summary-chips">';
-            if (highConfCount > 0) html += '<span class="chip chip-high">' + highConfCount + '× sicher gefixt</span>';
-            if (medConfCount > 0) html += '<span class="chip chip-medium">' + medConfCount + '× bitte prüfen</span>';
-            if (lowConfCount > 0) html += '<span class="chip chip-low">' + lowConfCount + '× unsicher (Dateiende)</span>';
+            if (appliedCount > 0) html += '<span class="chip chip-high">' + appliedCount + '× sicher gefixt</span>';
+            if (suggestedCount > 0) html += '<span class="chip chip-medium">' + suggestedCount + '× bitte prüfen</span>';
             if (excessCount > 0) html += '<span class="chip chip-excess">' + excessCount + '× überzähliges Tag</span>';
             if (unclosedCount > 0) html += '<span class="chip chip-unclosed">' + unclosedCount + '× nicht schließbar</span>';
             html += '</div>';
@@ -10553,53 +10552,76 @@ td[width] { width: auto !important; }
         // ========================================
         // SEKTION 2: AUTOMATISCHE FIXES
         // ========================================
-        html += '<div class="tagreview-section">';
-        html += '<h3 class="tagreview-section-title">⚙️ Automatisch geschlossene Tags (' + fixCount + ')</h3>';
+        const safeAutoFixTags = ['table'];
+        const appliedFixes = autoFixes.filter(f => f.confidence === 'high' && safeAutoFixTags.includes(f.tag));
+        const suggestedFixes = autoFixes.filter(f => !(f.confidence === 'high' && safeAutoFixTags.includes(f.tag)));
         
-        if (fixCount === 0) {
-            html += '<p class="tagreview-empty">Keine automatischen Tag-Schließungen nötig.</p>';
-        } else {
+        html += '<div class="tagreview-section">';
+        
+        // --- Angewendete Fixes ---
+        if (appliedFixes.length > 0) {
+            html += '<h3 class="tagreview-section-title">✅ Automatisch korrigiert (' + appliedFixes.length + ')</h3>';
             html += '<div class="tagreview-fixes-list">';
-            autoFixes.forEach(fix => {
-                // Konfidenz-Farbe und Label
-                const confLabel = fix.confidence === 'high' ? '✅ Sicher' : (fix.confidence === 'medium' ? '⚠️ Prüfen' : '❓ Unsicher');
+            appliedFixes.forEach(fix => {
                 const confClass = 'conf-' + (fix.confidence || 'high');
                 const methodLabel = fix.method === 'boundary' ? 'Vor ' + escapeHtml(fix.boundaryTag || '') + ' eingefügt' :
                                    (fix.method === 'boundary-ambiguous' ? 'Vor ' + escapeHtml(fix.boundaryTag || '') + ' (mehrdeutig)' :
                                    'Am Dateiende eingefügt (Fallback)');
                 
-                html += '<div class="tagreview-fix-item ' + confClass + '" data-fix-id="' + fix.id + '">';
+                html += '<div class="tagreview-fix-item ' + confClass + ' autofix-applied" data-fix-id="' + fix.id + '">';
+                html += '<div class="tagreview-fix-header">';
+                html += '<span class="tagreview-fix-id">' + fix.id + '</span>';
+                html += '<span class="tagreview-fix-tag">&lt;/' + escapeHtml(fix.tag) + '&gt;</span>';
+                html += '<span class="tagreview-conf-badge conf-high">✅ Auto-Fix eingefügt</span>';
+                html += '</div>';
+                html += '<div class="tagreview-fix-details">';
+                html += '<span class="tagreview-detail-label">Methode:</span> ' + methodLabel + '<br>';
+                html += '<span class="tagreview-detail-label">Position:</span> Zeichen ' + fix.insertPosition;
+                html += '</div>';
+                html += '<div class="tagreview-fix-snippet"><pre>' + escapeHtml(fix.snippetBefore) + '</pre></div>';
+                html += '<div class="tagreview-fix-actions">';
+                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↩️ Undo</button>';
+                html += '<button class="btn-tagreview-accept" data-fix-id="' + fix.id + '">✅ Behalten</button>';
+                html += '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+        
+        // --- Vorgeschlagene Fixes ---
+        if (suggestedFixes.length > 0) {
+            html += '<h3 class="tagreview-section-title" style="margin-top: 16px;">⚠️ Vorschläge – bitte prüfen (' + suggestedFixes.length + ')</h3>';
+            html += '<p style="font-size: 12px; color: #666; margin: 4px 0 12px;">Diese Tags wurden <strong>nicht</strong> automatisch eingefügt. Prüfe ob sie nötig sind.</p>';
+            html += '<div class="tagreview-fixes-list">';
+            suggestedFixes.forEach(fix => {
+                const confLabel = fix.confidence === 'high' ? '⚠️ Sicher, aber riskanter Tag-Typ' : (fix.confidence === 'medium' ? '⚠️ Position unsicher' : '❓ Sehr unsicher');
+                const confClass = 'conf-' + (fix.confidence || 'medium');
                 
-                // Header-Zeile: ID + Tag + Konfidenz
+                html += '<div class="tagreview-fix-item ' + confClass + ' autofix-suggested" data-fix-id="' + fix.id + '">';
                 html += '<div class="tagreview-fix-header">';
                 html += '<span class="tagreview-fix-id">' + fix.id + '</span>';
                 html += '<span class="tagreview-fix-tag">&lt;/' + escapeHtml(fix.tag) + '&gt;</span>';
                 html += '<span class="tagreview-conf-badge ' + confClass + '">' + confLabel + '</span>';
                 html += '</div>';
-                
-                // Details
                 html += '<div class="tagreview-fix-details">';
-                html += '<span class="tagreview-detail-label">Methode:</span> ' + methodLabel + '<br>';
-                html += '<span class="tagreview-detail-label">Position:</span> Zeichen ' + fix.insertPosition;
+                html += '<span class="tagreview-detail-label">Grund:</span> ' + (safeAutoFixTags.includes(fix.tag) ? 'Position unsicher' : 'Tag-Typ (' + fix.tag + ') zu riskant für Auto-Fix') + '<br>';
+                html += '<span class="tagreview-detail-label">Vorgeschlagene Position:</span> Zeichen ' + fix.insertPosition;
                 html += '</div>';
-                
-                // Code-Snippet
-                html += '<div class="tagreview-fix-snippet">';
-                html += '<pre>' + escapeHtml(fix.snippetBefore) + '</pre>';
-                html += '</div>';
-                
-                // Buttons
+                html += '<div class="tagreview-fix-snippet"><pre>' + escapeHtml(fix.snippetBefore) + '</pre></div>';
                 html += '<div class="tagreview-fix-actions">';
-                if (fix.tag === 'td' || fix.tag === 'a') {
-                    html += '<button class="btn-tagreview-locate" data-fix-id="' + fix.id + '" data-tag="' + escapeHtml(fix.tag) + '" data-position="' + fix.insertPosition + '">👁️ Locate</button>';
-                }
-                html += '<button class="btn-tagreview-undo" data-fix-id="' + fix.id + '">↶ Rückgängig</button>';
+                html += '<button class="btn-tagreview-apply" data-fix-id="' + fix.id + '">➕ Anwenden</button>';
+                html += '<button class="btn-tagreview-ignore-fix" data-fix-id="' + fix.id + '">❌ Ignorieren</button>';
                 html += '</div>';
-                
                 html += '</div>';
             });
             html += '</div>';
         }
+        
+        if (appliedFixes.length === 0 && suggestedFixes.length === 0) {
+            html += '<h3 class="tagreview-section-title">⚙️ Automatische Fixes</h3>';
+            html += '<p class="tagreview-empty">Keine automatischen Tag-Schließungen nötig.</p>';
+        }
+        
         html += '</div>';
         
         // ========================================
@@ -10686,7 +10708,7 @@ td[width] { width: auto !important; }
         attachTagReviewProblemListeners(tagProblems);
         
         // Update Tab Count Badge
-        updateTabCountBadge('tagreview', fixCount + problemCount);
+        updateTabCountBadge('tagreview', suggestedCount + problemCount);
     }
     
     // Event Listener fuer Fix-Klicks (Locate in Preview)
@@ -10704,9 +10726,9 @@ td[width] { width: auto !important; }
         });
     }
     
-    // Event Listener fuer Undo/Locate Buttons bei Auto-Fixes
+    // Event Listener fuer Undo/Locate/Apply/Ignore Buttons bei Auto-Fixes
     function attachTagReviewActionListeners(autoFixes) {
-        // Undo Buttons
+        // Undo Buttons (angewendete Fixes rückgängig)
         document.querySelectorAll('.btn-tagreview-undo').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -10718,6 +10740,47 @@ td[width] { width: auto !important; }
             });
         });
         
+        // Behalten Buttons (visuelles Abhaken)
+        document.querySelectorAll('.btn-tagreview-accept').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const fixElement = this.closest('.tagreview-fix-item');
+                fixElement.style.opacity = '0.6';
+                fixElement.style.backgroundColor = '#e8f5e9';
+                this.disabled = true;
+                this.textContent = '✅ OK';
+                showInspectorToast('✅ Fix als geprüft markiert');
+            });
+        });
+        
+        // Anwenden Buttons (vorgeschlagene Fixes manuell einfügen)
+        document.querySelectorAll('.btn-tagreview-apply').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const fixId = this.getAttribute('data-fix-id');
+                const fix = autoFixes.find(f => f.id === fixId);
+                if (fix) {
+                    applyTagReviewSuggestion(fix, this.closest('.tagreview-fix-item'));
+                }
+            });
+        });
+        
+        // Ignorieren Buttons (Vorschlag ignorieren → Manuell platzieren anbieten)
+        document.querySelectorAll('.btn-tagreview-ignore-fix').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const fixId = this.getAttribute('data-fix-id');
+                const fix = autoFixes.find(f => f.id === fixId);
+                const fixElement = this.closest('.tagreview-fix-item');
+                if (fix) {
+                    ignoreTagReviewSuggestion(fix, fixElement);
+                }
+            });
+        });
+        
+        // Manuell Platzieren Buttons (werden dynamisch nach Ignorieren hinzugefügt)
+        // → Listener werden in ignoreTagReviewSuggestion() gebunden
+        
         // Locate Buttons (in Fixes UND Problemen)
         document.querySelectorAll('.btn-tagreview-locate').forEach(btn => {
             btn.addEventListener('click', function(e) {
@@ -10726,7 +10789,6 @@ td[width] { width: auto !important; }
                 const position = parseInt(this.getAttribute('data-position')) || 0;
                 const fixId = this.getAttribute('data-fix-id');
                 
-                // Wenn es ein Fix ist, nutze den Kontext vom OFFENEN Tag (nicht von der Einfügestelle)
                 let contextHint = '';
                 if (fixId) {
                     const fix = autoFixes.find(f => f.id === fixId);
@@ -10741,6 +10803,244 @@ td[width] { width: auto !important; }
                 
                 locateTagInPreview(tag, position, contextHint);
             });
+        });
+    }
+    
+    // Vorgeschlagenen Fix im Tag-Review anwenden
+    function applyTagReviewSuggestion(fix, fixElement) {
+        console.log('[INSPECTOR] Apply suggestion:', fix.id);
+        
+        // Suche Position im HTML anhand des Kontexts
+        const searchPattern = fix.beforeCtx + fix.afterCtx;
+        const index = currentWorkingHtml.indexOf(searchPattern);
+        
+        if (index === -1) {
+            showInspectorToast('⚠️ Position nicht gefunden – HTML wurde möglicherweise bereits verändert');
+            return;
+        }
+        
+        const lastIndex = currentWorkingHtml.lastIndexOf(searchPattern);
+        if (index !== lastIndex) {
+            showInspectorToast('⚠️ Position nicht eindeutig. Nutze "📍 Manuell platzieren" für präzise Kontrolle.');
+            return;
+        }
+        
+        // Tag einfügen
+        const insertPos = index + fix.beforeCtx.length;
+        currentWorkingHtml = currentWorkingHtml.substring(0, insertPos) + fix.inserted + currentWorkingHtml.substring(insertPos);
+        
+        // Log
+        if (typeof manualActionLog !== 'undefined') {
+            manualActionLog.push('SUGGESTION_APPLIED - ' + fix.id + ' ' + fix.inserted + ' angewendet');
+        }
+        
+        // UI: Button wechselt zu Undo
+        fixElement.classList.remove('autofix-suggested');
+        fixElement.classList.add('autofix-applied');
+        fixElement.style.backgroundColor = '#e8f5e9';
+        
+        const badge = fixElement.querySelector('.tagreview-conf-badge');
+        if (badge) {
+            badge.textContent = '✅ Manuell angewendet';
+            badge.className = 'tagreview-conf-badge conf-high';
+        }
+        
+        const actionsDiv = fixElement.querySelector('.tagreview-fix-actions');
+        actionsDiv.innerHTML = '<button class="btn-tagreview-undo-suggestion" data-fix-id="' + fix.id + '">↩️ Rückgängig</button>';
+        actionsDiv.querySelector('.btn-tagreview-undo-suggestion').addEventListener('click', function(e) {
+            e.stopPropagation();
+            undoTagReviewSuggestion(fix, fixElement);
+        });
+        
+        // Preview aktualisieren
+        updateInspectorPreview();
+        showInspectorToast('✅ ' + fix.inserted + ' eingefügt');
+    }
+    
+    // Angewendeten Vorschlag rückgängig machen (Toggle zurück)
+    function undoTagReviewSuggestion(fix, fixElement) {
+        console.log('[INSPECTOR] Undo suggestion:', fix.id);
+        
+        const searchPattern = fix.beforeCtx + fix.inserted + fix.afterCtx;
+        const index = currentWorkingHtml.indexOf(searchPattern);
+        
+        if (index === -1) {
+            showInspectorToast('⚠️ Undo nicht möglich – HTML wurde anderweitig verändert');
+            return;
+        }
+        
+        // Tag entfernen
+        const before = currentWorkingHtml.substring(0, index + fix.beforeCtx.length);
+        const after = currentWorkingHtml.substring(index + fix.beforeCtx.length + fix.inserted.length);
+        currentWorkingHtml = before + after;
+        
+        // Log
+        if (typeof manualActionLog !== 'undefined') {
+            manualActionLog.push('SUGGESTION_UNDONE - ' + fix.id + ' ' + fix.inserted + ' rückgängig');
+        }
+        
+        // UI: Zurück auf Vorschlag
+        fixElement.classList.remove('autofix-applied');
+        fixElement.classList.add('autofix-suggested');
+        fixElement.style.backgroundColor = '';
+        
+        const badge = fixElement.querySelector('.tagreview-conf-badge');
+        if (badge) {
+            const confLabel = fix.confidence === 'high' ? '⚠️ Sicher, aber riskanter Tag-Typ' : (fix.confidence === 'medium' ? '⚠️ Position unsicher' : '❓ Sehr unsicher');
+            badge.textContent = confLabel;
+            badge.className = 'tagreview-conf-badge conf-' + (fix.confidence || 'medium');
+        }
+        
+        const actionsDiv = fixElement.querySelector('.tagreview-fix-actions');
+        actionsDiv.innerHTML = 
+            '<button class="btn-tagreview-apply" data-fix-id="' + fix.id + '">➕ Anwenden</button>' +
+            '<button class="btn-tagreview-ignore-fix" data-fix-id="' + fix.id + '">❌ Ignorieren</button>';
+        
+        // Listener neu binden
+        actionsDiv.querySelector('.btn-tagreview-apply').addEventListener('click', function(e) {
+            e.stopPropagation();
+            applyTagReviewSuggestion(fix, fixElement);
+        });
+        actionsDiv.querySelector('.btn-tagreview-ignore-fix').addEventListener('click', function(e) {
+            e.stopPropagation();
+            ignoreTagReviewSuggestion(fix, fixElement);
+        });
+        
+        updateInspectorPreview();
+        showInspectorToast('↩️ ' + fix.inserted + ' entfernt');
+    }
+    
+    // Vorschlag ignorieren → Manuell platzieren anbieten
+    function ignoreTagReviewSuggestion(fix, fixElement) {
+        console.log('[INSPECTOR] Ignore suggestion:', fix.id);
+        
+        if (typeof manualActionLog !== 'undefined') {
+            manualActionLog.push('SUGGESTION_IGNORED - ' + fix.id + ' ignoriert');
+        }
+        
+        fixElement.style.opacity = '0.7';
+        fixElement.style.backgroundColor = '#f5f5f5';
+        fixElement.classList.remove('autofix-suggested');
+        
+        const actionsDiv = fixElement.querySelector('.tagreview-fix-actions');
+        actionsDiv.innerHTML = 
+            '<button class="btn-tagreview-manual-place" data-fix-id="' + fix.id + '">📍 Manuell platzieren</button>' +
+            '<span style="color: #999; font-size: 11px; margin-left: 8px;">Ignoriert</span>';
+        
+        actionsDiv.querySelector('.btn-tagreview-manual-place').addEventListener('click', function(e) {
+            e.stopPropagation();
+            startTagReviewManualPlacement(fix, fixElement);
+        });
+    }
+    
+    // Manuelles Platzieren im Tag-Review: Code-Ansicht mit klickbaren Zeilen
+    function startTagReviewManualPlacement(fix, fixElement) {
+        const tagToInsert = fix.inserted;
+        
+        // Formatiere den gesamten HTML
+        const formattedHtml = formatHtmlForDisplay(currentWorkingHtml);
+        const lines = formattedHtml.split('\n');
+        
+        // Baue klickbare Code-Ansicht im Inspector-Preview (rechts)
+        // Nutze dafür einen temporären Overlay im Preview-Bereich
+        const previewRight = document.querySelector('.inspector-right');
+        if (!previewRight) {
+            showInspectorToast('⚠️ Preview-Bereich nicht gefunden');
+            return;
+        }
+        
+        // Overlay erstellen
+        const overlay = document.createElement('div');
+        overlay.id = 'manualPlaceOverlay';
+        overlay.className = 'manual-place-overlay';
+        
+        let overlayHtml = '<div class="manual-place-toolbar">';
+        overlayHtml += '<span class="manual-place-tag">' + escapeHtml(tagToInsert) + '</span>';
+        overlayHtml += '<span class="manual-place-hint">Klicke auf eine Zeile um das Tag dort einzufügen</span>';
+        overlayHtml += '<button id="cancelManualPlaceBtn" class="btn-cancel-place">✖ Abbrechen</button>';
+        overlayHtml += '</div>';
+        overlayHtml += '<div class="manual-place-code" id="manualPlaceCodeArea">';
+        
+        lines.forEach((line, i) => {
+            const lineNum = (i + 1).toString().padStart(4, ' ');
+            const escapedLine = escapeHtml(line) || ' ';
+            overlayHtml += '<div class="code-line" data-line-index="' + i + '" title="Klicke um ' + escapeHtml(tagToInsert) + ' hier einzufügen">';
+            overlayHtml += '<span class="line-num">' + lineNum + '</span>';
+            overlayHtml += '<span class="line-content">' + escapedLine + '</span>';
+            overlayHtml += '</div>';
+        });
+        
+        overlayHtml += '</div>';
+        overlay.innerHTML = overlayHtml;
+        previewRight.appendChild(overlay);
+        
+        // Scroll zur ungefähren Position
+        setTimeout(() => {
+            const searchText = fix.beforeCtx ? fix.beforeCtx.trim().slice(-30) : '';
+            if (searchText) {
+                const matchLine = lines.findIndex(line => line.includes(searchText));
+                if (matchLine !== -1) {
+                    const targetEl = overlay.querySelector('.code-line[data-line-index="' + matchLine + '"]');
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        targetEl.classList.add('code-line-suggested');
+                    }
+                }
+            }
+        }, 100);
+        
+        // Klick auf Zeile → Tag einfügen
+        overlay.querySelector('#manualPlaceCodeArea').addEventListener('click', function(e) {
+            const lineEl = e.target.closest('.code-line');
+            if (!lineEl) return;
+            
+            const clickedLineText = lines[parseInt(lineEl.getAttribute('data-line-index'))].trim();
+            if (!clickedLineText) {
+                showInspectorToast('⚠️ Leere Zeile – bitte eine Zeile mit Inhalt wählen');
+                return;
+            }
+            
+            const posInOriginal = currentWorkingHtml.indexOf(clickedLineText);
+            if (posInOriginal === -1) {
+                showInspectorToast('⚠️ Position nicht gefunden – bitte andere Zeile wählen');
+                return;
+            }
+            
+            // Einfügen
+            currentWorkingHtml = currentWorkingHtml.substring(0, posInOriginal) + tagToInsert + currentWorkingHtml.substring(posInOriginal);
+            
+            if (typeof manualActionLog !== 'undefined') {
+                manualActionLog.push('MANUAL_PLACED - ' + fix.id + ' ' + tagToInsert + ' vor "' + clickedLineText.substring(0, 40) + '"');
+            }
+            
+            // UI Update
+            fixElement.style.opacity = '0.6';
+            fixElement.style.backgroundColor = '#e8f5e9';
+            fixElement.classList.add('autofix-applied');
+            const badge = fixElement.querySelector('.tagreview-conf-badge');
+            if (badge) {
+                badge.textContent = '📍 Manuell platziert';
+                badge.className = 'tagreview-conf-badge conf-high';
+            }
+            const actionsDiv = fixElement.querySelector('.tagreview-fix-actions');
+            actionsDiv.innerHTML = '<button class="btn-tagreview-undo-suggestion" data-fix-id="' + fix.id + '">↩️ Rückgängig</button>';
+            actionsDiv.querySelector('.btn-tagreview-undo-suggestion').addEventListener('click', function(ev) {
+                ev.stopPropagation();
+                undoTagReviewSuggestion(fix, fixElement);
+            });
+            
+            // Overlay entfernen
+            overlay.remove();
+            
+            // Preview aktualisieren
+            updateInspectorPreview();
+            showInspectorToast('✅ ' + tagToInsert + ' manuell eingefügt');
+        });
+        
+        // Abbrechen
+        overlay.querySelector('#cancelManualPlaceBtn').addEventListener('click', function() {
+            overlay.remove();
+            showInspectorToast('Manuelles Platzieren abgebrochen');
         });
     }
     
