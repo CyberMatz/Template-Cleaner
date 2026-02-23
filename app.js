@@ -527,6 +527,11 @@ class TemplateProcessor {
     checkTagBalancing() {
         const id = this.checklistType === 'dpl' ? 'P08_TAG_BALANCING' : 'P07_TAG_BALANCING';
         const tags = ['table', 'tr', 'td', 'a', 'div'];
+        let fixed = false;
+        
+        // Nur </table> mit hoher Sicherheit auto-einfügen (landen am Dateiende, sehr sicher)
+        // Alles andere: nur als Vorschlag melden
+        const safeToAutoFix = ['table'];
         
         // Auto-Fixes Array initialisieren
         if (!this.autoFixes) {
@@ -544,6 +549,9 @@ class TemplateProcessor {
         // Diese enthalten Tags die NICHT mitgezaehlt werden duerfen!
         const cleanHtml = this._stripHtmlComments(this.html);
         
+        // DEBUG: Tag-Counts loggen
+        console.log('[TAG-BALANCE] HTML length:', this.html.length, '| Clean HTML length:', cleanHtml.length);
+        
         // Boundary-Regeln (für Smart-Position-Erkennung)
         const boundaries = {
             'a':     ['</td>', '</tr>', '</table>', '</div>', '</body>'],
@@ -560,14 +568,15 @@ class TemplateProcessor {
             // Zaehle auf dem BEREINIGTEN HTML (ohne Kommentare)
             const openCount = (cleanHtml.match(openRegex) || []).length;
             const closeCount = (cleanHtml.match(closeRegex) || []).length;
+            
+            if (openCount !== closeCount) {
+                console.log(`[TAG-BALANCE] <${tag}>: open=${openCount}, close=${closeCount}, diff=${openCount - closeCount}`);
+            }
 
             if (openCount === closeCount) return;
 
             if (openCount > closeCount) {
                 // === FEHLENDE CLOSING-TAGS ===
-                // Nur MELDEN, nicht automatisch einfügen
-                // Bei komplexen Templates mit Conditional Comments ist die Position
-                // zu unsicher für automatische Korrekturen
                 const diff = openCount - closeCount;
                 for (let i = 0; i < diff; i++) {
                     const result = this._findSmartInsertPosition(tag, boundaries[tag] || ['</body>']);
@@ -581,7 +590,7 @@ class TemplateProcessor {
                         const linesBefore = this.html.substring(0, result.position).split('\n');
                         const linesAfter = this.html.substring(result.position).split('\n');
                         const snippetBefore = linesBefore.slice(-3).join('\n') + 
-                            '\n  \u25BA ' + inserted + ' \u25C4  (vorgeschlagen)\n' + 
+                            '\n  \u25BA ' + inserted + ' \u25C4  (eingefuegt)\n' + 
                             linesAfter.slice(0, 3).join('\n');
                         
                         this.autoFixes.push({
@@ -602,9 +611,11 @@ class TemplateProcessor {
                             openTagContext: result.openTagContext
                         });
                         
-                        // NICHT automatisch einfügen!
-                        // Tags werden nur als Vorschlag im Inspector gezeigt
-                        // Der Nutzer kann sie dort gezielt anwenden oder ignorieren
+                        // NUR bei hoher Sicherheit UND sicherem Tag-Typ automatisch einfügen
+                        if (result.confidence === 'high' && safeToAutoFix.includes(tag)) {
+                            this.html = this.html.substring(0, result.position) + inserted + this.html.substring(result.position);
+                            fixed = true;
+                        }
                     }
                 }
             } else if (closeCount > openCount) {
@@ -629,13 +640,22 @@ class TemplateProcessor {
             }
         });
 
-        // Status-Meldung: Nur Meldungen, kein Auto-Fix
-        const missingTags = this.autoFixes.length;
+        // Status-Meldung
+        const appliedCount = this.autoFixes.filter(f => f.confidence === 'high' && safeToAutoFix.includes(f.tag)).length;
+        const suggestedCount = this.autoFixes.length - appliedCount;
         const excessTags = this.tagProblems.length;
         
-        if (missingTags > 0 || excessTags > 0) {
+        if (fixed && (suggestedCount > 0 || excessTags > 0)) {
             const parts = [];
-            if (missingTags > 0) parts.push(`${missingTags} fehlende Tags`);
+            if (appliedCount > 0) parts.push(`${appliedCount} sicher korrigiert`);
+            if (suggestedCount > 0) parts.push(`${suggestedCount} Vorschläge`);
+            if (excessTags > 0) parts.push(`${excessTags} überschüssige Tags`);
+            this.addCheck(id, 'FIXED', `Tag-Balancing: ${parts.join(', ')}`);
+        } else if (fixed) {
+            this.addCheck(id, 'FIXED', `Tag-Balancing korrigiert (${appliedCount} Tags eingefügt)`);
+        } else if (suggestedCount > 0 || excessTags > 0) {
+            const parts = [];
+            if (suggestedCount > 0) parts.push(`${suggestedCount} fehlende Tags (Vorschläge)`);
             if (excessTags > 0) parts.push(`${excessTags} überschüssige Tags`);
             this.addCheck(id, 'WARN', `Tag-Balancing: ${parts.join(', ')} – bitte im Inspector prüfen`);
         } else {
@@ -652,11 +672,8 @@ class TemplateProcessor {
         
         // 2. Nicht-standard Conditional Comments (ohne <!-- Wrapper):
         //    <![if !mso]>...<![endif]>
-        //    Diese enthalten komplette HTML-Strukturen (z.B. Mobile-Content-Blöcke)
-        //    die eine parallele Ansicht darstellen → KOMPLETT entfernen inkl. Inhalt
-        result = result.replace(/<!\[if[^\]]*\]>[\s\S]*?<!\[endif\]>/gi, '');
-        
-        // 3. Einzelne verwaiste Marker entfernen (falls kein passender Partner gefunden)
+        //    NUR die Marker entfernen, NICHT den Inhalt!
+        //    Der Inhalt enthält Tags die gezählt werden müssen.
         result = result.replace(/<!\[if[^\]]*\]>/gi, '');
         result = result.replace(/<!\[endif\]>/gi, '');
         
