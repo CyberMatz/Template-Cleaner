@@ -5720,14 +5720,49 @@ td[width] { width: auto !important; }
         // Erkenne Öffnerpixel
         const trackingPixel = detectTrackingPixel(trackingTabHtml);
         
+        // --- Helfer: Link-Typ erkennen ---
+        function classifyLink(link) {
+            const href = (link.href || '').toLowerCase();
+            const text = (link.text || '').toLowerCase();
+            // CTA: typische Button-Texte
+            if (/jetzt|kaufen|sichern|bestellen|mehr erfahren|angebot|shop|entdecken|gratis|rabatt|anmelden|registrier|hier klicken|zum shop|cta/i.test(link.text)) return 'cta';
+            // Social
+            if (/facebook|instagram|twitter|linkedin|youtube|tiktok|pinterest|xing|x\.com/i.test(href)) return 'social';
+            // Image-Link: Text enthält nur whitespace oder ist [ohne Text] und kein Social
+            if (!link.text || link.text === '[ohne Text]' || link.text.trim().length < 3) return 'image';
+            // Abmeldung / Footer
+            if (/abmeld|abbestell|unsubscrib|impressum|datenschutz|privacy|agb|kontakt|browser/i.test(text) || /abmeld|abbestell|unsubscrib|impressum|datenschutz|privacy|agb|kontakt|browser/i.test(href)) return 'text';
+            return 'other';
+        }
+        
+        // --- Helfer: Hat Link UTM-Parameter? ---
+        function hasUtm(href) {
+            return /utm_/i.test(href);
+        }
+        
+        // --- Kategorisiere Links ---
+        const linkGroups = { cta: [], image: [], social: [], text: [], other: [] };
+        links.forEach(link => {
+            const type = classifyLink(link);
+            link._type = type;
+            link._hasUtm = hasUtm(link.href);
+            linkGroups[type].push(link);
+        });
+        
+        // --- UTM-Statistik ---
+        const untrackedCount = links.filter(l => !l._hasUtm).length;
+        
         // Render Tracking Tab
         let html = '<div class="tracking-tab-content">';
         
-        // Sektion 1: Klick-Links
-        html += '<div class="tracking-section">';
-        html += '<h3>📧 Klick-Links (' + links.length + ')</h3>';
+        // ═══ Summary Stats ═══
+        html += '<div class="tracking-summary-stats">';
+        html += '<div class="summary-stat stat-links"><div class="summary-stat-value">' + links.length + '</div><div class="summary-stat-label">Links gesamt</div></div>';
+        html += '<div class="summary-stat stat-pixel"><div class="summary-stat-value">' + (trackingPixel ? '1' : '0') + '</div><div class="summary-stat-label">Tracking Pixel</div></div>';
+        html += '<div class="summary-stat stat-untracked"><div class="summary-stat-value">' + untrackedCount + '</div><div class="summary-stat-label">Ohne UTM</div></div>';
+        html += '</div>';
         
-        // Phase 8B: Link Insert UI
+        // ═══ Sektion: Link Insert UI ═══
         html += '<div class="tracking-insert-section">';
         if (!trackingInsertMode) {
             html += '<button id="trackingStartInsert" class="btn-tracking-insert">➤ Element in Preview auswählen</button>';
@@ -5757,35 +5792,75 @@ td[width] { width: auto !important; }
         }
         html += '</div>';
         
+        // ═══ Link-Karten nach Gruppen ═══
+        const typeLabels = { cta: 'CTA Links', image: 'Bild-Links', social: 'Social Links', text: 'Text / Footer', other: 'Sonstige' };
+        const typeBadgeLabels = { cta: 'CTA', image: 'Bild', social: 'Social', text: 'Text', other: 'Link' };
+        const typeCssClasses = { cta: 'link-type-cta', image: 'link-type-image', social: 'link-type-social', text: 'link-type-text', other: 'link-type-other' };
+        
+        const groupOrder = ['cta', 'image', 'social', 'text', 'other'];
+        
         if (links.length === 0) {
             html += '<p class="tracking-empty">Keine Links gefunden.</p>';
         } else {
-            html += '<div class="tracking-links-list">';
-            links.forEach(link => {
-                html += '<div class="tracking-link-item-edit" data-link-id="' + link.id + '">';
-                html += '<div class="tracking-link-header">';
-                html += '<span class="tracking-link-id">' + link.id + '</span>';
-                html += '<span class="tracking-link-text">' + escapeHtml(link.text) + '</span>';
+            groupOrder.forEach(groupKey => {
+                const groupLinks = linkGroups[groupKey];
+                if (groupLinks.length === 0) return;
+                
+                // Section Divider
+                html += '<div class="section-divider">';
+                html += '<div class="section-divider-line"></div>';
+                html += '<div class="section-divider-label">' + typeLabels[groupKey] + '</div>';
+                html += '<div class="section-divider-line"></div>';
                 html += '</div>';
-                html += '<div class="tracking-link-href-display">';
-                html += '<strong>Aktuell:</strong> ';
-                html += '<code title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</code>';
-                html += '<button class="btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
-                html += '</div>';
-                html += '<div class="tracking-link-edit-controls">';
-                html += '<input type="text" class="tracking-link-input" placeholder="Neue URL eingeben..." data-link-id="' + link.id + '">';
-                html += '<button class="btn-tracking-apply" data-link-id="' + link.id + '">✓ Anwenden</button>';
-                html += '<button class="btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">👁️ Locate</button>';
-                html += '</div>';
-                html += '</div>';
+                
+                groupLinks.forEach(link => {
+                    html += '<div class="link-card" data-link-id="' + link.id + '">';
+                    
+                    // Header: ID + Typ Badge + UTM Status
+                    html += '<div class="link-card-header">';
+                    html += '<span class="link-card-id">' + link.id + '</span>';
+                    html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
+                    html += '<span class="link-card-status" title="' + (link._hasUtm ? 'UTM vorhanden' : 'Kein UTM') + '">' + (link._hasUtm ? '✅' : '⚠️') + '</span>';
+                    html += '</div>';
+                    
+                    // Text
+                    html += '<div class="link-card-text">' + escapeHtml(link.text) + '</div>';
+                    
+                    // URL
+                    html += '<div class="link-card-url" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</div>';
+                    
+                    // Meta Chips
+                    html += '<div class="link-card-meta">';
+                    if (link._hasUtm) {
+                        html += '<span class="meta-chip has-utm">✓ UTM</span>';
+                    } else {
+                        html += '<span class="meta-chip no-utm">✗ Kein UTM</span>';
+                    }
+                    html += '</div>';
+                    
+                    // Actions + Edit Row
+                    html += '<div class="link-card-actions">';
+                    html += '<button class="btn-card-action btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">📍 Finden</button>';
+                    html += '<button class="btn-card-action btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
+                    html += '</div>';
+                    
+                    // Edit Input Row
+                    html += '<div class="link-card-edit-row">';
+                    html += '<input type="text" class="tracking-link-input" placeholder="Neue URL eingeben..." data-link-id="' + link.id + '">';
+                    html += '<button class="btn-card-action action-primary btn-tracking-apply" data-link-id="' + link.id + '">✓</button>';
+                    html += '</div>';
+                    
+                    html += '</div>'; // link-card
+                });
             });
-            html += '</div>';
         }
-        html += '</div>';
         
-        // Sektion 2: Öffnerpixel
-        html += '<div class="tracking-section">';
-        html += '<h3>👁️ Öffnerpixel</h3>';
+        // ═══ Sektion: Öffnerpixel ═══
+        html += '<div class="section-divider">';
+        html += '<div class="section-divider-line"></div>';
+        html += '<div class="section-divider-label">Öffnerpixel</div>';
+        html += '<div class="section-divider-line"></div>';
+        html += '</div>';
         
         if (trackingPixel) {
             html += '<div class="tracking-pixel-info">';
@@ -5800,7 +5875,6 @@ td[width] { width: auto !important; }
             html += '</div>';
             html += '</div>';
         } else {
-            // Phase 8A: Pixel Insert UI (nur wenn fehlt)
             html += '<div class="tracking-pixel-info">';
             html += '<div class="tracking-pixel-status tracking-pixel-missing">⚠ Kein Öffnerpixel gefunden</div>';
             html += '<div class="tracking-pixel-insert-controls">';
@@ -5810,7 +5884,6 @@ td[width] { width: auto !important; }
             html += '<p class="tracking-note">ℹ️ Pixel wird nach &lt;body&gt; eingefügt (unsichtbarer 1x1 Block).</p>';
             html += '</div>';
         }
-        html += '</div>';
         
         // Undo Button
         if (trackingHistory.length > 0) {
@@ -5833,6 +5906,9 @@ td[width] { width: auto !important; }
         
         // Event Listener
         attachTrackingEditListeners();
+        
+        // Update Tab Count Badge
+        updateTabCountBadge('tracking', links.length);
     }
     
     // Extrahiere Links aus HTML
@@ -6546,21 +6622,54 @@ td[width] { width: auto !important; }
         
         // Sektion 1: IMG src
         html += '<div class="images-section">';
-        html += '<h3>🖼️ IMG src (' + images.length + ')</h3>';
+        
+        // Section divider
+        html += '<div class="section-divider">';
+        html += '<div class="section-divider-line"></div>';
+        html += '<div class="section-divider-label">Content-Bilder (' + images.length + ')</div>';
+        html += '<div class="section-divider-line"></div>';
+        html += '</div>';
         
         if (images.length === 0) {
             html += '<p class="images-empty">Keine Bilder gefunden.</p>';
         } else {
             html += '<div class="images-list">';
             images.forEach(img => {
-                html += '<div class="image-item-edit" data-img-id="' + img.id + '">';
-                html += '<div class="image-header">';
-                html += '<span class="image-id">' + img.id + '</span>';
-                html += '<span class="image-alt">' + escapeHtml(img.alt) + '</span>';
+                html += '<div class="image-item-edit image-card-new" data-img-id="' + img.id + '">';
+                
+                // New Card Header: ID + Dimensions
+                html += '<div class="image-card-new-header">';
+                html += '<span class="image-card-new-id">' + img.id + '</span>';
+                if (img.width || img.height) {
+                    html += '<span class="image-card-new-dims">' + (img.width || '?') + ' × ' + (img.height || '?') + '</span>';
+                }
                 html += '</div>';
-                html += '<div class="image-src-display">';
-                html += '<strong>Aktuell:</strong> ';
-                html += '<code title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</code>';
+                
+                // src URL
+                html += '<div class="image-card-new-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
+                
+                // Alt text
+                html += '<div class="image-card-new-alt">';
+                html += '<span class="alt-label">Alt:</span> ' + escapeHtml(img.alt);
+                html += '</div>';
+                
+                // Property Chips
+                html += '<div class="image-card-new-props">';
+                if (img.width) {
+                    html += '<span class="prop-chip prop-size">' + img.width + (img.width === '100%' ? '' : 'px') + ' breit</span>';
+                }
+                if (img.align) {
+                    var alignSymbol = img.align === 'left' ? '← ' : img.align === 'right' ? '→ ' : '↔ ';
+                    var alignLabel = img.align === 'left' ? 'Links' : img.align === 'right' ? 'Rechts' : 'Zentriert';
+                    html += '<span class="prop-chip prop-align">' + alignSymbol + alignLabel + '</span>';
+                }
+                if (img.containerPadding.found) {
+                    if (img.paddingAsymmetric) {
+                        html += '<span class="prop-chip prop-padding-warn">⚠ Padding asym.</span>';
+                    } else {
+                        html += '<span class="prop-chip prop-padding-ok">✓ Padding sym.</span>';
+                    }
+                }
                 html += '</div>';
                 
                 // Breite + Ausrichtung Controls
@@ -6628,7 +6737,11 @@ td[width] { width: auto !important; }
         // Sektion 2: Background Images (optional, read-only)
         if (bgImages.length > 0) {
             html += '<div class="images-section">';
-            html += '<h3>🎨 Background Images (' + bgImages.length + ')</h3>';
+            html += '<div class="section-divider">';
+            html += '<div class="section-divider-line"></div>';
+            html += '<div class="section-divider-label">Background Images (' + bgImages.length + ')</div>';
+            html += '<div class="section-divider-line"></div>';
+            html += '</div>';
             html += '<div class="bg-images-list">';
             bgImages.forEach(bg => {
                 html += '<div class="bg-image-item">';
@@ -6682,6 +6795,9 @@ td[width] { width: auto !important; }
         
         // Event Listener
         attachImagesEditListeners();
+        
+        // Update Tab Count Badge
+        updateTabCountBadge('images', images.length);
     }
     
     // Extrahiere Bilder aus HTML
@@ -8167,6 +8283,9 @@ td[width] { width: auto !important; }
         
         // Event Listener
         attachButtonsEditListeners();
+        
+        // Update Tab Count Badge
+        updateTabCountBadge('buttons', buttons.length);
     }
     
     // ===== PLATZIERUNGS-ASSISTENT (Placement Tab) =====
@@ -9838,6 +9957,9 @@ td[width] { width: auto !important; }
         attachTagReviewFixListeners(autoFixes);
         attachTagReviewActionListeners(autoFixes);
         attachTagReviewProblemListeners(tagProblems);
+        
+        // Update Tab Count Badge
+        updateTabCountBadge('tagreview', fixCount + problemCount);
     }
     
     // Event Listener fuer Fix-Klicks (Locate in Preview)
@@ -10942,9 +11064,51 @@ td[width] { width: auto !important; }
             buttons: buttonsPending
         });
         
+        // Update Tab Pending Dots (visuell auf den Tab-Buttons)
+        updateTabPendingDots();
+        
         // Update Global Finalize Button (Phase 11 B2)
         updateGlobalFinalizeButton();
         updateDownloadManualOptimizedButton();
+    }
+    
+    // ═══ Tab Count Badge Update ═══
+    function updateTabCountBadge(tabName, count) {
+        const badgeId = tabName + 'TabCount';
+        const badge = document.getElementById(badgeId);
+        if (badge) {
+            badge.textContent = count > 0 ? count : '';
+        }
+    }
+    
+    // ═══ Tab Pending Dots Update ═══
+    function updateTabPendingDots() {
+        const dots = {
+            tracking: document.getElementById('trackingPendingDot'),
+            images: document.getElementById('imagesPendingDot'),
+            editor: document.getElementById('editorPendingDot'),
+            buttons: document.getElementById('buttonsPendingDot'),
+            placement: document.getElementById('placementPendingDot')
+        };
+        
+        const pendingStates = {
+            tracking: trackingPending,
+            images: imagesPending,
+            editor: editorPending,
+            buttons: buttonsPending,
+            placement: placementPending
+        };
+        
+        Object.keys(dots).forEach(key => {
+            const dot = dots[key];
+            if (dot) {
+                if (pendingStates[key]) {
+                    dot.classList.add('visible');
+                } else {
+                    dot.classList.remove('visible');
+                }
+            }
+        });
     }
     
     function prepareHighlightAPI() {
