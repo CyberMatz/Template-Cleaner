@@ -16,11 +16,6 @@ class TemplateProcessor {
 
     // Haupt-Verarbeitungsmethode
     process() {
-        // Auto-Erkennung des Checklist-Typs
-        if (this.checklistType === 'auto') {
-            this.checklistType = this.html.toLowerCase().includes('dpl') ? 'dpl' : 'standard';
-        }
-
         // Phase A: Safe Fix
         this.phaseA_SafeFix();
 
@@ -1590,16 +1585,6 @@ class TemplateProcessor {
         report += `${this.checks.length} checks, ${failCount} failures, ${fixedCount} fixes, ${replacedCount} replacements, ${warnCount} warnings\n`;
         report += `Status: ${status.toUpperCase()}\n\n`;
 
-        // Verifikation
-        const originalBytes = new Blob([this.originalHtml]).size;
-        const optimizedBytes = new Blob([this.html]).size;
-        const originalSha256 = this.sha256(this.originalHtml);
-        const optimizedSha256 = this.sha256(this.html);
-
-        report += `--- VERIFICATION ---\n`;
-        report += `ORIGINAL_BYTES=${originalBytes} OPTIMIZED_BYTES=${optimizedBytes}\n`;
-        report += `ORIGINAL_SHA256=${originalSha256} OPTIMIZED_SHA256=${optimizedSha256}\n`;
-
         // Unresolved generieren
         let unresolved = '=== UNRESOLVED ISSUES ===\n\n';
         const unresolvedChecks = this.checks.filter(c => c.status === 'FAIL' || c.status === 'STILL_FAIL' || c.status === 'WARN');
@@ -1623,18 +1608,6 @@ class TemplateProcessor {
         };
     }
 
-    // Einfache SHA256-Implementierung (für Browser)
-    sha256(str) {
-        // Vereinfachte Hash-Funktion für Demonstration
-        // In Produktion: crypto.subtle.digest verwenden
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash;
-        }
-        return Math.abs(hash).toString(16).padStart(16, '0');
-    }
 }
 
 // UI-Logik
