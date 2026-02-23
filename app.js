@@ -1789,7 +1789,16 @@ class TemplateProcessor {
 }
 
 // UI-Logik
+const APP_VERSION = 'v3.2-2026-02-24';
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('%c[APP] Template Cleaner ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
+    
+    // Sichtbare Versionsanzeige im Status-Bereich
+    const versionTag = document.createElement('div');
+    versionTag.style.cssText = 'position:fixed;bottom:5px;right:5px;background:#333;color:#4CAF50;padding:4px 10px;border-radius:4px;font-size:11px;z-index:99999;font-family:monospace;';
+    versionTag.textContent = 'app.js ' + APP_VERSION;
+    document.body.appendChild(versionTag);
+    
     // Element-Checks mit console.error
     const fileInput = document.getElementById('fileInput');
     if (!fileInput) console.error('[INIT] fileInput not found!');
