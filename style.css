@@ -3495,22 +3495,27 @@ body {
 
 /* === Neues Template Reset Button === */
 .btn-reset {
-    padding: 10px 20px;
-    border: 2px solid #78909c;
-    border-radius: 8px;
-    background: #fff;
-    color: #546e7a;
-    font-size: 14px;
+    background: #78909c;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 16px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    width: fit-content;
 }
 
 .btn-reset:hover {
-    background: #546e7a;
-    color: #fff;
-    border-color: #546e7a;
+    background: #607d8b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.upload-btn-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
 }

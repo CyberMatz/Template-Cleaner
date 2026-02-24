@@ -2275,10 +2275,18 @@ document.addEventListener('DOMContentLoaded', () => {
     resetBtn.innerHTML = '🔄 Neues Template';
     resetBtn.title = 'Alles zurücksetzen und neues Template laden';
     resetBtn.style.display = 'none';
-    // Einfügen neben Upload-Button
+    // Einfügen rechts neben Upload-Button (in einer Zeile)
     const uploadBtnEl = document.getElementById('uploadBtn');
-    if (uploadBtnEl && uploadBtnEl.parentElement) {
-        uploadBtnEl.parentElement.appendChild(resetBtn);
+    if (uploadBtnEl) {
+        // Wrapper für Upload + Reset nebeneinander
+        let uploadRow = uploadBtnEl.parentElement.querySelector('.upload-btn-row');
+        if (!uploadRow) {
+            uploadRow = document.createElement('div');
+            uploadRow.className = 'upload-btn-row';
+            uploadBtnEl.parentElement.insertBefore(uploadRow, uploadBtnEl);
+            uploadRow.appendChild(uploadBtnEl);
+        }
+        uploadRow.appendChild(resetBtn);
     }
     
     // Reset-Funktion: Setzt alles sauber auf Anfangszustand zurück
