@@ -2862,7 +2862,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.6.1-2026-02-24';
+const APP_VERSION = 'v3.6.2-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -3688,6 +3688,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 processingResult.optimizedHtml = html;
             }
             
+            // Inspector-Tabs synchronisieren (damit kein Tab den alten Stand zurückschreibt)
+            if (typeof resetNonPendingTabHtmls === 'function') {
+                resetNonPendingTabHtmls();
+            }
+            // Aktiven Tab neu laden falls Inspector offen
+            const inspectorSection = document.getElementById('inspectorSection');
+            if (inspectorSection && inspectorSection.style.display !== 'none') {
+                if (typeof currentInspectorTab !== 'undefined' && typeof loadInspectorTabContent === 'function') {
+                    loadInspectorTabContent(currentInspectorTab);
+                }
+                if (typeof updateInspectorPreview === 'function') {
+                    updateInspectorPreview();
+                }
+            }
+            
             showInspectorToast('✅ Aktualisiert: ' + changes.join(', '));
             console.log('[UPDATE] Title/Preheader updated:', changes);
         });
@@ -3704,6 +3719,15 @@ document.addEventListener('DOMContentLoaded', () => {
         result = result.replace(/\s+data-qa-[a-z-]+="[^"]*"/gi, '');
         // data-editor-* Attribute
         result = result.replace(/\s+data-editor-[a-z-]+="[^"]*"/gi, '');
+        // CMS-Klassen entfernen (qa-selected, qa-editable etc.)
+        result = result.replace(/\s+class="qa-[^"]*"/gi, '');
+        // class="qa-..." auch wenn Teil einer gemischten class entfernen
+        result = result.replace(/class="([^"]*)"/gi, (match, classContent) => {
+            const cleaned = classContent.split(/\s+/).filter(c => !c.startsWith('qa-')).join(' ').trim();
+            if (cleaned === classContent.trim()) return match; // Keine Änderung
+            if (cleaned === '') return ''; // Klasse komplett leer
+            return 'class="' + cleaned + '"';
+        });
         // Editor-spezifische Inline-Styles entfernen
         result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
             const props = styleContent.split(';').map(p => p.trim()).filter(p => p.length > 0);
@@ -3720,6 +3744,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return match;
         });
+        // Leerzeichen-Reste bereinigen: <p > → <p>, <td  > → <td>
+        result = result.replace(/<([a-z][a-z0-9]*)\s+>/gi, '<$1>');
+        // Doppelte Leerzeichen in Tags: <p  class → <p class
+        result = result.replace(/<([a-z][a-z0-9]*)\s{2,}/gi, '<$1 ');
         return result;
     }
 
