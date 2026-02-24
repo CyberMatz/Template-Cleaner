@@ -194,11 +194,17 @@ class TemplateProcessor {
     // Der Spacer füllt die Vorschauzeile mit unsichtbaren Zeichen,
     // damit E-Mail-Clients keinen Body-Text nach dem Preheader anzeigen.
     _buildPreheaderHtml(text) {
-        // Spacer direkt nach dem Text im GLEICHEN Div – verhindert dass GMX/Web.de
+        // Spacer direkt nach dem Text im GLEICHEN Div – verhindert dass GMX/Web.de/Apple Mail
         // nach kurzem Preheader sichtbaren Body-Text in die Vorschau zieht.
         // &#847; = Combining Grapheme Joiner, &zwnj; = Zero-Width Non-Joiner, 
         // &nbsp; = geschütztes Leerzeichen → zusammen unsichtbar aber füllen die Vorschauzeile
-        const spacer = '&zwnj;&nbsp;&#847;'.repeat(80);
+        //
+        // Dynamisch: Kurzer Text → viele Spacer, langer Text → weniger nötig
+        // Vorschauzeile ist ca. 100-150 Zeichen, 2 Zeilen bei Apple Mail ~250
+        const targetLength = 300; // Ausreichend für 2-Zeilen-Vorschau
+        const textLength = text.length;
+        const spacerCount = Math.max(30, Math.ceil((targetLength - textLength) / 2));
+        const spacer = '&zwnj;&nbsp;&#847;'.repeat(spacerCount);
         return `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;">${text}${spacer}</div>`;
     }
 
