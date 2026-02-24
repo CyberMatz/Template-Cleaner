@@ -34,12 +34,20 @@
             animation: fadeInDown 0.6s ease-out;
         }
 
+        .dashboard-logo-box {
+            display: inline-block;
+            background: #fff;
+            padding: 20px 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+
         .dashboard-logo {
-            max-width: 340px;
+            max-width: 280px;
             width: 100%;
             height: auto;
-            margin-bottom: 20px;
-            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.1));
+            display: block;
         }
 
         .dashboard-title {
@@ -64,9 +72,9 @@
            =========================== */
         .tiles-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: 1fr 1fr;
             gap: 24px;
-            max-width: 960px;
+            max-width: 820px;
             width: 100%;
             animation: fadeInUp 0.6s ease-out 0.2s both;
         }
@@ -215,8 +223,12 @@
                 max-width: 400px;
             }
 
+            .dashboard-logo-box {
+                padding: 16px 24px;
+            }
+
             .dashboard-logo {
-                max-width: 260px;
+                max-width: 220px;
             }
 
             .dashboard-title {
@@ -234,7 +246,9 @@
 
     <!-- Logo & Titel -->
     <div class="dashboard-header">
-        <img src="pw-logo-full.png" alt="performancewerk Logo" class="dashboard-logo">
+        <div class="dashboard-logo-box">
+            <img src="pw-logo-full.png" alt="performancewerk Logo" class="dashboard-logo">
+        </div>
         <h1 class="dashboard-title">Toolbox</h1>
         <p class="dashboard-subtitle">Interne Werkzeuge für das Template-Team</p>
     </div>
@@ -252,16 +266,6 @@
             <span class="tile-badge tile-badge--active">✓ Verfügbar</span>
         </a>
 
-        <!-- Template Ersteller (KOMMT BALD) -->
-        <div class="tile tile--coming-soon">
-            <div class="tile-icon">🛠️</div>
-            <div class="tile-name">Template Ersteller</div>
-            <div class="tile-description">
-                Neue E-Mail-Templates schnell und standardkonform erstellen.
-            </div>
-            <span class="tile-badge tile-badge--soon">Kommt bald</span>
-        </div>
-
         <!-- Checkout Checker (AKTIV) -->
         <a href="checkout-checker.html" class="tile tile--active">
             <div class="tile-icon">✅</div>
@@ -271,6 +275,16 @@
             </div>
             <span class="tile-badge tile-badge--active">✓ Verfügbar</span>
         </a>
+
+        <!-- Template Ersteller (KOMMT BALD) -->
+        <div class="tile tile--coming-soon">
+            <div class="tile-icon">🛠️</div>
+            <div class="tile-name">Template Ersteller</div>
+            <div class="tile-description">
+                Neue E-Mail-Templates schnell und standardkonform erstellen.
+            </div>
+            <span class="tile-badge tile-badge--soon">Kommt bald</span>
+        </div>
 
         <!-- Platzhalter (KOMMT BALD) -->
         <div class="tile tile--coming-soon">
