@@ -2030,16 +2030,63 @@ body {
 .button-status-warn { color: #f39c12; }
 .button-status-missing { color: #e74c3c; }
 
+.button-text-preview-wrapper {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-bottom: 10px;
+    position: relative;
+}
+
 .button-text-preview {
     background: #f8f9fa;
     border-left: 3px solid #f2a93b;
     padding: 8px 12px;
-    border-radius: 0 6px 6px 0;
+    border-radius: 0 0 0 0;
     font-size: 14px;
     font-weight: 600;
     color: #333;
-    margin-bottom: 10px;
     word-break: break-word;
+    flex: 1;
+    min-height: 20px;
+}
+
+.button-text-input {
+    flex: 1;
+    background: #fff;
+    border: 2px solid #f2a93b;
+    border-left: 3px solid #f2a93b;
+    padding: 7px 11px;
+    border-radius: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    font-family: inherit;
+    outline: none;
+    min-height: 20px;
+}
+
+.button-text-input:focus {
+    border-color: #e08e1b;
+    background: #fffdf5;
+}
+
+.btn-edit-text {
+    background: #f8f9fa;
+    border: none;
+    border-left: 1px solid #e0e0e0;
+    padding: 0 10px;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 0 6px 6px 0;
+    transition: background 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.btn-edit-text:hover {
+    background: #e8e8e8;
 }
 
 .button-link-display {

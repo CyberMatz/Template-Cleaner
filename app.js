@@ -7924,8 +7924,12 @@ td[width] { width: auto !important; }
                 }
                 html += '</div>';
                 
-                // Button-Text Vorschau
-                html += '<div class="button-text-preview">' + escapeHtml(btn.text || '(kein Text)') + '</div>';
+                // Button-Text Vorschau (editierbar per Stift-Klick)
+                html += '<div class="button-text-preview-wrapper">';
+                html += '<div class="button-text-preview" data-btn-id="' + btn.id + '">' + escapeHtml(btn.text || '(kein Text)') + '</div>';
+                html += '<input type="text" class="button-text-input" data-btn-id="' + btn.id + '" value="' + escapeHtml(btn.text || '') + '" style="display:none;">';
+                html += '<button class="btn-edit-text" data-btn-id="' + btn.id + '" title="Text bearbeiten">✏️</button>';
+                html += '</div>';
                 
                 // Link-Anzeige
                 html += '<div class="button-link-display">';
@@ -9368,6 +9372,58 @@ td[width] { width: auto !important; }
                 handleGmailFix(btnId, bgColor, cssClass, this);
             });
         });
+        
+        // Text-Bearbeiten Buttons (Stift-Icon)
+        document.querySelectorAll('.btn-edit-text').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const btnId = this.getAttribute('data-btn-id');
+                const wrapper = this.closest('.button-text-preview-wrapper');
+                const preview = wrapper.querySelector('.button-text-preview');
+                const input = wrapper.querySelector('.button-text-input');
+                
+                if (input.style.display === 'none') {
+                    // Aktiviere Bearbeitungsmodus
+                    preview.style.display = 'none';
+                    input.style.display = 'block';
+                    input.focus();
+                    input.select();
+                    this.textContent = '✅';
+                    this.title = 'Bestätigen';
+                } else {
+                    // Deaktiviere Bearbeitungsmodus
+                    const newText = input.value.trim();
+                    preview.textContent = newText || '(kein Text)';
+                    preview.style.display = '';
+                    input.style.display = 'none';
+                    this.textContent = '✏️';
+                    this.title = 'Text bearbeiten';
+                }
+            });
+        });
+        
+        // Enter-Taste in Text-Inputs → Bearbeitungsmodus beenden
+        document.querySelectorAll('.button-text-input').forEach(input => {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const wrapper = this.closest('.button-text-preview-wrapper');
+                    const editBtn = wrapper.querySelector('.btn-edit-text');
+                    editBtn.click(); // Toggle zurück
+                }
+                if (e.key === 'Escape') {
+                    // Abbrechen: Original-Text wiederherstellen
+                    const wrapper = this.closest('.button-text-preview-wrapper');
+                    const preview = wrapper.querySelector('.button-text-preview');
+                    const editBtn = wrapper.querySelector('.btn-edit-text');
+                    this.value = preview.textContent;
+                    preview.style.display = '';
+                    this.style.display = 'none';
+                    editBtn.textContent = '✏️';
+                    editBtn.title = 'Text bearbeiten';
+                }
+            });
+        });
     }
     
     // Gmail-Fix: Inline background-color als Fallback für CSS-Klassen-Buttons einfügen
@@ -9447,11 +9503,14 @@ td[width] { width: auto !important; }
         const textHex = document.querySelector('.button-color-hex[data-btn-id="' + btnId + '"][data-prop="textColorHex"]');
         const widthInput = document.querySelector('.button-width-input[data-btn-id="' + btnId + '"]');
         const heightInput = document.querySelector('.button-height-input[data-btn-id="' + btnId + '"]');
+        const textInput = document.querySelector('.button-text-input[data-btn-id="' + btnId + '"]');
         
         const newBgColor = (bgHex && /^#[a-fA-F0-9]{6}$/.test(bgHex.value)) ? bgHex.value : btnData.bgColor;
         const newTextColor = (textHex && /^#[a-fA-F0-9]{6}$/.test(textHex.value)) ? textHex.value : btnData.textColor;
         const newWidth = widthInput ? parseInt(widthInput.value) : btnData.width;
         const newHeight = heightInput ? parseInt(heightInput.value) : btnData.height;
+        const newText = textInput ? textInput.value.trim() : btnData.text;
+        const textChanged = newText && newText !== btnData.text;
         
         // Speichere in History
         buttonsHistory.push(buttonsTabHtml);
@@ -9574,6 +9633,22 @@ td[width] { width: auto !important; }
             }
         }
         
+        // === Button-Text ändern (falls bearbeitet) ===
+        if (textChanged) {
+            // Text im <a>-Tag ersetzen: <a ...>ALTEN TEXT</a> → <a ...>NEUEN TEXT</a>
+            newBtnHtml = newBtnHtml.replace(
+                /(<a\b[^>]*>)([\s\S]*?)(<\/a>)/i,
+                function(match, open, inner, close) {
+                    // Prüfe ob der alte Text (ohne Tags) dem erwarteten entspricht
+                    const cleanInner = inner.replace(/<[^>]*>/g, '').trim();
+                    if (cleanInner === btnData.text || cleanInner.replace(/\s+/g, ' ') === btnData.text.replace(/\s+/g, ' ')) {
+                        return open + newText + close;
+                    }
+                    return match;
+                }
+            );
+        }
+        
         html = html.replace(oldBtnHtml, newBtnHtml);
         
         // === Parent <td bgcolor> mit-updaten (für Typ A + Typ B) ===
@@ -9673,6 +9748,14 @@ td[width] { width: auto !important; }
                     newVml = newVml.replace(/width\s*:\s*\d+px/i, 'width:' + newWidth + 'px');
                     newVml = newVml.replace(/height\s*:\s*\d+px/i, 'height:' + newHeight + 'px');
                     newVml = newVml.replace(/(color\s*:\s*)#?[a-fA-F0-9]{3,6}/i, '$1' + newTextColor);
+                    
+                    // Text im VML aktualisieren
+                    if (textChanged) {
+                        newVml = newVml.replace(
+                            /(<center[^>]*>)\s*([\s\S]*?)\s*(<\/center>)/i,
+                            '$1\n' + newText + '\n$3'
+                        );
+                    }
                     
                     html = html.replace(vmlMatch[1], newVml);
                     break;
