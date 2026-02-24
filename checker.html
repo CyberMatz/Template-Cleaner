@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Check & Clean</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="main-header">
+        <img src="pw-logo.png" alt="PW Logo" class="header-logo">
+        <h1>Template Check & Clean</h1>
+    </header>
+
+    <!-- Main Control Panel (gemäß Scribble) -->
+    <div class="control-panel">
+        <!-- Upload Button -->
+        <div class="control-item">
+            <input type="file" id="fileInput" accept=".html,.htm" style="display: none;" />
+            <button id="uploadBtn" class="btn-upload">
+                📁 Upload Template
+            </button>
+            <div id="fileName" class="file-name-display"></div>
+        </div>
+
+        <!-- Checklist Typ (Radio Buttons) -->
+        <div class="control-item">
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="checklistType" value="standard" id="checklistStandard" checked>
+                    <span>Checklist Typ: Standard</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="checklistType" value="dpl" id="checklistDPL">
+                    <span>Checklist Typ: DPL</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Title-Tag + Textfeld -->
+        <div class="control-item control-inline">
+            <label for="titleText" class="inline-label">Title-Tag</label>
+            <input type="text" id="titleText" class="inline-input" placeholder="z.B. Markenname oder Betreffzeile (optional)" />
+        </div>
+
+        <!-- Pre-Header + Textfeld -->
+        <div class="control-item control-inline">
+            <label for="preheaderText" class="inline-label">Pre-Header</label>
+            <input type="text" id="preheaderText" class="inline-input" placeholder="Freitextfeld" />
+        </div>
+
+        <!-- Checkbox Externe Fonts -->
+        <div class="control-item">
+            <label class="checkbox-label">
+                <input type="checkbox" id="removeFonts" checked>
+                <span>Externe Fonts entfernen</span>
+            </label>
+        </div>
+
+        <!-- Action Buttons: Links nebeneinander -->
+        <div class="control-actions">
+            <button id="processBtn" class="btn-action" disabled>
+                ⚙️ Template verarbeiten
+            </button>
+            <button id="downloadOptimized" class="btn-download" disabled>
+                ⬇️ Download Optimized Temp.
+            </button>
+        </div>
+
+        <!-- Inspector Button: Rechts separat -->
+        <div class="control-inspector">
+            <button id="showInspectorBtn" class="btn-inspector" disabled>
+                🔍 Open Inspector
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden: Upload Hint -->
+    <div id="uploadHint" style="display: none;"></div>
+
+    <!-- Hidden: Old Results Section Elements (für Kompatibilität) -->
+    <div id="resultsSection" style="display: none;">
+        <div id="statusBadge"></div>
+        <button id="downloadReport" style="display: none;"></button>
+        <button id="downloadUnresolved" style="display: none;"></button>
+        <button id="downloadFinalOutput" style="display: none;"></button>
+        <button id="showDiffBtn" style="display: none;"></button>
+        <button id="showTagReviewBtn" style="display: none;"></button>
+        <button id="showAssetReviewBtn" style="display: none;"></button>
+        <div id="tagReviewHint" style="display: none;"></div>
+        <div id="reportPreview" style="display: none;"></div>
+    </div>
+
+    <!-- Inspector Section (gemäß Scribble) -->
+    <section id="inspectorSection" class="inspector-section" style="display: none;">
+        <!-- Tabs -->
+        <div class="inspector-tabs">
+            <button id="trackingTab" class="inspector-tab active" data-tab="tracking">
+                <span class="tab-icon">🔗</span>
+                Tracking
+                <span class="tab-count" id="trackingTabCount"></span>
+                <span class="tab-pending-dot" id="trackingPendingDot"></span>
+            </button>
+            <button id="imagesTab" class="inspector-tab" data-tab="images">
+                <span class="tab-icon">🖼️</span>
+                Bilder
+                <span class="tab-count" id="imagesTabCount"></span>
+                <span class="tab-pending-dot" id="imagesPendingDot"></span>
+            </button>
+            <button id="tagReviewTab" class="inspector-tab" data-tab="tagreview">
+                <span class="tab-icon">🏷️</span>
+                Tag-Review
+                <span class="tab-count" id="tagreviewTabCount"></span>
+            </button>
+            <button id="editorTab" class="inspector-tab" data-tab="editor">
+                <span class="tab-icon">✏️</span>
+                Editor
+                <span class="tab-pending-dot" id="editorPendingDot"></span>
+            </button>
+            <button id="buttonsTab" class="inspector-tab" data-tab="buttons">
+                <span class="tab-icon">🔘</span>
+                Buttons
+                <span class="tab-count" id="buttonsTabCount"></span>
+                <span class="tab-pending-dot" id="buttonsPendingDot"></span>
+            </button>
+            <button id="placementTab" class="inspector-tab" data-tab="placement">
+                <span class="tab-icon">📍</span>
+                Platzierung
+                <span class="tab-pending-dot" id="placementPendingDot"></span>
+            </button>
+        </div>
+
+        <!-- 2-Spalten-Layout -->
+        <div class="inspector-layout">
+            <!-- Linke Spalte: Quellcode Template -->
+            <div class="inspector-left">
+                <h3>Quellcode Template</h3>
+                
+                <!-- Tracking Panel -->
+                <div id="trackingPanel" class="inspector-panel active">
+                    <div id="trackingContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Images Panel -->
+                <div id="imagesPanel" class="inspector-panel" style="display: none;">
+                    <div id="imagesContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Tag-Review Panel -->
+                <div id="tagreviewPanel" class="inspector-panel" style="display: none;">
+                    <div id="tagreviewContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Editor Panel -->
+                <div id="editorPanel" class="inspector-panel" style="display: none;">
+                    <div id="editorContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Buttons Panel -->
+                <div id="buttonsPanel" class="inspector-panel" style="display: none;">
+                    <div id="buttonsContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+                
+                <!-- Platzierung Panel -->
+                <div id="placementPanel" class="inspector-panel" style="display: none;">
+                    <div id="placementContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rechte Spalte: Webansicht Template (Preview) -->
+            <div class="inspector-right">
+                <div class="preview-header-row">
+                    <h3>Webansicht Template</h3>
+                    <div class="preview-controls">
+                        <select id="clientSimulatorSelect" class="client-simulator-select">
+                            <option value="original">Original (kein Client)</option>
+                            <optgroup label="Desktop">
+                                <option value="gmail-desktop">Gmail Desktop</option>
+                                <option value="outlook-desktop">Outlook Desktop (Word)</option>
+                                <option value="apple-desktop">Apple Mail Desktop</option>
+                                <option value="webde-desktop">Web.de Desktop</option>
+                                <option value="gmx-desktop">GMX Desktop</option>
+                            </optgroup>
+                            <optgroup label="Mobile (375px)">
+                                <option value="gmail-mobile">Gmail Mobile</option>
+                                <option value="apple-mobile">Apple Mail Mobile</option>
+                                <option value="webde-mobile">Web.de Mobile</option>
+                                <option value="gmx-mobile">GMX Mobile</option>
+                            </optgroup>
+                        </select>
+                        <div class="sim-color-row">
+                            <label class="sim-color-label">Header/Footer:</label>
+                            <select id="simColorSelect" class="sim-color-select">
+                                <option value="#000000">Schwarz</option>
+                                <option value="#999999" selected>Grau</option>
+                                <option value="#ffffff">Weiß</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="clientSimHint" class="client-sim-hint" style="display: none;">
+                    <span id="clientSimHintText"></span>
+                </div>
+                <div class="preview-container">
+                    <iframe id="inspectorPreviewFrame" sandbox="allow-scripts allow-same-origin" class="inspector-preview-frame"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- Untere Button-Leiste -->
+        <div class="inspector-footer">
+            <button id="commitChangesBtn" class="btn-footer-left">
+                ✅ Anpassungen übernehmen
+            </button>
+            <button id="openEmailOnAcid" class="btn-footer-eoa" title="Template kopieren und Email on Acid öffnen">
+                🧪 In Email on Acid testen
+            </button>
+            <button id="downloadManualOptimized" class="btn-footer-right" disabled>
+                ⬇️ Download manuell optimized Temp.
+            </button>
+        </div>
+    </section>
+
+    <!-- Hidden: Old Inspector Elements (für Kompatibilität) -->
+    <div style="display: none;">
+        <div id="globalPendingIndicator">
+            <div id="trackingStatusChip"></div>
+            <div id="imagesStatusChip"></div>
+            <div id="tagreviewStatusChip"></div>
+            <div id="editorStatusChip"></div>
+            <div id="buttonsStatusChip"></div>
+            <div id="pendingWarning"></div>
+        </div>
+        <button id="globalFinalizeBtn"></button>
+    </div>
+
+    <!-- Diff Modal (unverändert für Kompatibilität) -->
+    <div id="diffModal" class="diff-modal" style="display: none;">
+        <div class="diff-modal-content">
+            <div class="diff-modal-header">
+                <h2>📊 Änderungen zwischen Original und Optimiert</h2>
+                <button id="closeDiffModal" class="close-modal">×</button>
+            </div>
+            <div class="diff-info">
+                ℹ️ Diese Ansicht zeigt nur Änderungen. Es werden keine Anpassungen vorgenommen.
+            </div>
+            <div id="diffPendingHint" class="diff-pending-hint" style="display: none;">
+                <strong>Hinweis:</strong> Es gibt nicht übernommene Änderungen. Diff zeigt den letzten übernommenen Stand.
+            </div>
+            <div class="diff-container">
+                <div class="diff-pane">
+                    <h3>📄 Original</h3>
+                    <pre id="diffOriginal" class="diff-code"></pre>
+                </div>
+                <div class="diff-pane">
+                    <h3>✅ Optimiert</h3>
+                    <pre id="diffOptimized" class="diff-code"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== LEGACY COMPATIBILITY BLOCK ===== -->
+    <!-- Nur Elemente die AUSSCHLIESSLICH hier definiert sind (tagReviewModal, assetReviewModal) -->
+    <!-- Alle anderen IDs existieren bereits in der sichtbaren UI oben - keine Duplikate! -->
+    <div id="legacyCompat" style="display: none;">
+        <!-- Tag-Review Modal -->
+        <div id="tagReviewModal">
+            <button id="closeTagReviewModal"></button>
+            <div id="tagProblemsList"></div>
+            <button id="undoLastAction"></button>
+            <iframe id="webPreviewFrame"></iframe>
+            <pre id="codePreviewContent"></pre>
+            <button id="showWebPreview"></button>
+            <button id="showCodePreview"></button>
+            <div id="webPreviewContainer"></div>
+            <div id="codePreviewContainer"></div>
+            <div id="changeSnippet">
+                <pre id="snippetBefore"></pre>
+                <pre id="snippetAfter"></pre>
+            </div>
+            <div id="tagReviewHint"></div>
+            <span id="problemsCountBadge"></span>
+            <span id="autoFixesCountBadge"></span>
+            <button id="commitReviewChanges"></button>
+            <div id="reviewHint"></div>
+            <div id="autoFixesList"></div>
+            <div id="manualActionsCounter"></div>
+        </div>
+        
+        <!-- Asset-Review Modal -->
+        <div id="assetReviewModal">
+            <button id="closeAssetReviewModal"></button>
+            <button id="assetUndoBtn"></button>
+            <button id="assetCommitBtn"></button>
+            <iframe id="assetWebPreviewFrame"></iframe>
+            <pre id="assetCodePreviewContent"></pre>
+            <button id="showAssetWebPreview"></button>
+            <button id="showAssetCodePreview"></button>
+            <div id="assetWebPreviewContainer"></div>
+            <div id="assetCodePreviewContainer"></div>
+            <div id="assetActionsCounter"></div>
+            <div id="preheaderInfo"></div>
+            <div id="imagesList"></div>
+            <div id="linksList"></div>
+            <div id="trackingInfo"></div>
+        </div>
+        
+    </div>
+    <!-- ===== END LEGACY COMPATIBILITY BLOCK ===== -->
+
+    <!-- Toast Container (für Phase 12 Toasts) -->
+    <div id="inspectorToast" class="inspector-toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
