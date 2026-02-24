@@ -1521,7 +1521,7 @@ class TemplateProcessor {
         
         // Report-Meldung zusammenbauen
         const parts = [];
-        if (ctasFixed > 0) parts.push(`${ctasFixed} VML-Button(s) für Outlook generiert (CSS-Buttons)`);
+        if (ctasFixed > 0) parts.push(`${ctasFixed} VML-Button(s) für Outlook generiert`);
         if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
         if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
         
@@ -4840,10 +4840,25 @@ td[width] { width: auto !important; }
         scriptLines.push('      }');
         scriptLines.push('    }');
         scriptLines.push('');
-        scriptLines.push('    // HIGHLIGHT_BUTTON (CTA Buttons - Typ A: a mit bg-color, Typ B: td mit bgcolor + a)');
+        scriptLines.push('    // HIGHLIGHT_BUTTON (CTA Buttons - Typ A: a mit bg-color, Typ B: td mit bgcolor + a, Typ C: CSS-Klassen mit background)');
         scriptLines.push('    if (event.data.type === "HIGHLIGHT_BUTTON") {');
         scriptLines.push('      var btnIndex = event.data.index;');
         scriptLines.push('      var ctaElements = [];');
+        scriptLines.push('      // Sammle CSS-Klassen mit background aus <style>-Blöcken');
+        scriptLines.push('      var bgCssClasses = {};');
+        scriptLines.push('      var styleEls = document.querySelectorAll("style");');
+        scriptLines.push('      styleEls.forEach(function(styleEl) {');
+        scriptLines.push('        var css = styleEl.textContent || "";');
+        scriptLines.push('        // Entferne @media-Blöcke');
+        scriptLines.push('        css = css.replace(/@media[^{]*\\{[\\s\\S]*?\\}\\s*\\}/gi, "");');
+        scriptLines.push('        var re = /\\.([a-zA-Z][\\w-]*)\\s*\\{([^}]*background[^}]*)\\}/gi;');
+        scriptLines.push('        var m;');
+        scriptLines.push('        while ((m = re.exec(css)) !== null) {');
+        scriptLines.push('          if (/background(?:-color)?\\s*:/.test(m[2]) && !/transparent|none|#fff|white/i.test(m[2].match(/background(?:-color)?\\s*:[^;]*/i)?.[0] || "")) {');
+        scriptLines.push('            bgCssClasses[m[1]] = true;');
+        scriptLines.push('          }');
+        scriptLines.push('        }');
+        scriptLines.push('      });');
         scriptLines.push('      // Typ A: Links mit background-color im style');
         scriptLines.push('      var allLinks = Array.from(document.querySelectorAll("a[style]"));');
         scriptLines.push('      allLinks.forEach(function(a) {');
@@ -4866,6 +4881,29 @@ td[width] { width: auto !important; }
         scriptLines.push('        // Prüfe ob bereits als Typ A erfasst');
         scriptLines.push('        if (ctaElements.indexOf(link) >= 0) return;');
         scriptLines.push('        ctaElements.push(td);');
+        scriptLines.push('      });');
+        scriptLines.push('      // Typ C: td oder a mit CSS-Klasse die background hat');
+        scriptLines.push('      var classNames = Object.keys(bgCssClasses);');
+        scriptLines.push('      classNames.forEach(function(cls) {');
+        scriptLines.push('        // td mit dieser Klasse');
+        scriptLines.push('        document.querySelectorAll("td." + cls).forEach(function(td) {');
+        scriptLines.push('          var link = td.querySelector("a[href]");');
+        scriptLines.push('          if (!link) return;');
+        scriptLines.push('          var text = link.textContent.trim();');
+        scriptLines.push('          if (!text) return;');
+        scriptLines.push('          if (ctaElements.indexOf(td) >= 0 || ctaElements.indexOf(link) >= 0) return;');
+        scriptLines.push('          ctaElements.push(td);');
+        scriptLines.push('        });');
+        scriptLines.push('        // a mit dieser Klasse');
+        scriptLines.push('        document.querySelectorAll("a." + cls).forEach(function(a) {');
+        scriptLines.push('          var text = a.textContent.trim();');
+        scriptLines.push('          if (!text) return;');
+        scriptLines.push('          if (ctaElements.indexOf(a) >= 0) return;');
+        scriptLines.push('          // Prüfe ob parent td bereits erfasst');
+        scriptLines.push('          var parentTd = a.closest("td");');
+        scriptLines.push('          if (parentTd && ctaElements.indexOf(parentTd) >= 0) return;');
+        scriptLines.push('          ctaElements.push(a);');
+        scriptLines.push('        });');
         scriptLines.push('      });');
         scriptLines.push('      if (btnIndex >= 0 && btnIndex < ctaElements.length) {');
         scriptLines.push('        var btn = ctaElements[btnIndex];');
@@ -7839,6 +7877,19 @@ td[width] { width: auto !important; }
                     html += '</div>';
                 }
                 
+                // Gmail-Kompatibilitätswarnung für CSS-Klassen-Buttons ohne inline background
+                if ((btn.type === 'css-class' || btn.type === 'css-class-link') && btn.hasGradient) {
+                    html += '<div class="button-gmail-warning">';
+                    html += '<span class="button-gmail-icon">📧</span>';
+                    html += '<div class="button-gmail-text">';
+                    html += '<strong>Gmail/Mobile-Problem:</strong> Der Hintergrund kommt nur aus der CSS-Klasse <code>.' + escapeHtml(btn.cssClass) + '</code> mit <code>linear-gradient</code>. ';
+                    html += 'Gmail und viele Mobile-Clients unterstützen das nicht → <strong>Button wird unsichtbar</strong> (weißer Text auf transparentem Hintergrund).';
+                    html += '<br><span style="color:#888">Fix: Inline <code>background-color: ' + escapeHtml(btn.bgColor) + '</code> als Fallback einfügen.</span>';
+                    html += '</div>';
+                    html += '<button class="btn-gmail-fix" data-btn-id="' + btn.id + '" data-bg-color="' + escapeHtml(btn.bgColor) + '" data-css-class="' + escapeHtml(btn.cssClass) + '">🔧 Fix anwenden</button>';
+                    html += '</div>';
+                }
+                
                 // Schriftfarbe
                 html += '<div class="button-edit-group">';
                 html += '<label>Schriftfarbe</label>';
@@ -9171,6 +9222,80 @@ td[width] { width: auto !important; }
                 locateLinkInPreview(textIdx);
             });
         });
+        
+        // Gmail-Fix Buttons (inline background-color für CSS-Klassen-Buttons)
+        document.querySelectorAll('.btn-gmail-fix').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const btnId = this.getAttribute('data-btn-id');
+                const bgColor = this.getAttribute('data-bg-color');
+                const cssClass = this.getAttribute('data-css-class');
+                handleGmailFix(btnId, bgColor, cssClass, this);
+            });
+        });
+    }
+    
+    // Gmail-Fix: Inline background-color als Fallback für CSS-Klassen-Buttons einfügen
+    function handleGmailFix(btnId, bgColor, cssClass, buttonElement) {
+        if (!buttonsTabHtml) return;
+        
+        // History speichern für Undo
+        buttonsHistory.push(buttonsTabHtml);
+        
+        let html = buttonsTabHtml;
+        let fixCount = 0;
+        const escapedClass = cssClass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Finde alle Elemente mit dieser CSS-Klasse und füge inline background-color ein
+        // Pattern: <td ... class="...className..." style="..."> oder <a ... class="...className..." style="...">
+        const elRegex = new RegExp('(<(?:td|a|span)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'][^>]*)(style\\s*=\\s*["\'])([^"\']*["\'])', 'gi');
+        
+        html = html.replace(elRegex, function(match, before, styleAttr, styleValue) {
+            // Prüfe ob schon ein background im inline style ist
+            if (/background(?:-color)?\s*:/i.test(styleValue)) {
+                return match; // Schon vorhanden, nichts ändern
+            }
+            // background-color als erstes Style einfügen
+            const quoteChar = styleValue.charAt(styleValue.length - 1);
+            const stylesContent = styleValue.slice(0, -1); // ohne schließendes Quote
+            fixCount++;
+            return before + styleAttr + 'background-color:' + bgColor + '; ' + stylesContent + quoteChar;
+        });
+        
+        // Fallback: Elemente mit class aber OHNE style-Attribut
+        const elNoStyleRegex = new RegExp('(<(?:td|a|span)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'])(?![^>]*style\\s*=)([^>]*>)', 'gi');
+        
+        html = html.replace(elNoStyleRegex, function(match, before, after) {
+            fixCount++;
+            return before + ' style="background-color:' + bgColor + ';"' + after;
+        });
+        
+        if (fixCount > 0) {
+            buttonsTabHtml = html;
+            
+            // Button durch Erfolgs-Anzeige ersetzen
+            const warningDiv = buttonElement.closest('.button-gmail-warning');
+            if (warningDiv) {
+                warningDiv.innerHTML = '<span class="button-gmail-icon">✅</span>' +
+                    '<div class="button-gmail-text"><strong>Gmail-Fix angewendet:</strong> ' +
+                    'Inline <code>background-color: ' + escapeHtml(bgColor) + '</code> auf ' + fixCount + ' Element(e) mit Klasse <code>.' + escapeHtml(cssClass) + '</code> eingefügt.' +
+                    '</div>';
+                warningDiv.style.borderColor = '#4caf50';
+                warningDiv.style.background = 'rgba(76, 175, 80, 0.08)';
+            }
+            
+            // Pending-Status aktualisieren
+            checkButtonsPending();
+            updateGlobalPendingIndicator();
+            
+            // Preview aktualisieren
+            updateInspectorPreview(buttonsTabHtml);
+            
+            showInspectorToast('✅ Gmail-Fix: ' + fixCount + '× inline background-color eingefügt');
+            console.log('[GMAIL-FIX] ' + fixCount + ' Elemente mit .' + cssClass + ' → background-color: ' + bgColor);
+        } else {
+            showInspectorToast('ℹ️ Alle Elemente haben bereits ein inline background');
+        }
     }
     
     // Apply: Farbe/Breite/Höhe im VML-Block und HTML-Button ändern

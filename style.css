@@ -2238,6 +2238,61 @@ body {
 }
 
 /* Image Layout Controls (Breite + Ausrichtung) */
+
+.button-gmail-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(244, 67, 54, 0.06);
+    border: 1px solid #ef9a9a;
+    border-radius: 6px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    transition: all 0.3s ease;
+}
+
+.button-gmail-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.button-gmail-text {
+    font-size: 11px;
+    color: #b71c1c;
+    line-height: 1.5;
+    flex: 1;
+}
+
+.button-gmail-text code {
+    font-size: 10px;
+    background: rgba(0,0,0,0.06);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.btn-gmail-fix {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid #ef9a9a;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: #c62828;
+    transition: all 0.15s;
+    align-self: center;
+    white-space: nowrap;
+}
+
+.btn-gmail-fix:hover {
+    background: #c62828;
+    color: #fff;
+    border-color: #c62828;
+}
+
 .image-layout-controls {
     display: flex;
     gap: 16px;
