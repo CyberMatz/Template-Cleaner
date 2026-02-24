@@ -2355,7 +2355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInput.value = '';
         
         // UI zurücksetzen
-        if (fileNameDisplay) fileNameDisplay.textContent = '';
+        if (fileName) fileName.textContent = '';
         
         // Preheader-Feld leeren
         const preheaderInput = document.getElementById('preheaderText');
