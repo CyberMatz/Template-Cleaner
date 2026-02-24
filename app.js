@@ -4,6 +4,9 @@
 // Phase 13 P6: DEV_MODE Schalter (false = Produktion, true = Debug Logs)
 window.DEV_MODE = false;
 
+// Globale DOCTYPE-Konstante – wird überall verwendet statt Hardcoding
+const XHTML_DOCTYPE = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">';
+
 class TemplateProcessor {
     constructor(html, checklistType, preheaderText = '', removeFonts = true, titleText = '') {
         this.originalHtml = html;
@@ -61,6 +64,9 @@ class TemplateProcessor {
         // S05: Doppelte style-Attribute auf Elementen entfernen (zweites wird ignoriert)
         // z.B. <body style="..." style="..."> → zusammenführen
         this.fixDuplicateStyleAttributes();
+
+        // S06: CMS-Editor-Reste entfernen (contenteditable, data-qa-*, Editor-Styling)
+        this.removeCmsEditorArtifacts();
 
         // P01: DOCTYPE
         this.checkDoctype();
@@ -167,7 +173,7 @@ class TemplateProcessor {
     // P01: DOCTYPE Check
     checkDoctype() {
         const id = 'P01_DOCTYPE';
-        const correctDoctype = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">';
+        const correctDoctype = XHTML_DOCTYPE;
         
         const doctypeRegex = /<!DOCTYPE[^>]*>/gi;
         const doctypeMatches = this.html.match(doctypeRegex);
@@ -748,8 +754,98 @@ class TemplateProcessor {
             });
         } while (this.html !== prevHtml);
         
+        // S05b: Doppelte CSS-Eigenschaften innerhalb eines style-Attributs entfernen
+        // z.B. style="text-align:center; text-align: center; margin: 0px;" → style="text-align:center; margin:0px;"
+        let propFixCount = 0;
+        this.html = this.html.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            // CSS-Eigenschaften aufteilen
+            const props = styleContent.split(';').map(p => p.trim()).filter(p => p.length > 0);
+            const seen = new Map(); // property-name → full declaration
+            for (const prop of props) {
+                const colonIdx = prop.indexOf(':');
+                if (colonIdx > 0) {
+                    const propName = prop.substring(0, colonIdx).trim().toLowerCase();
+                    if (seen.has(propName)) {
+                        propFixCount++;
+                    }
+                    seen.set(propName, prop); // Letzter Wert gewinnt (CSS-Regel)
+                }
+            }
+            if (seen.size < props.length) {
+                // Es gab Duplikate – bereinigen
+                const deduped = Array.from(seen.values()).join('; ');
+                return 'style="' + deduped + ';"';
+            }
+            return match;
+        });
+        
+        if (fixCount > 0 || propFixCount > 0) {
+            const parts = [];
+            if (fixCount > 0) parts.push(fixCount + '× doppelte style-Attribute zusammengeführt');
+            if (propFixCount > 0) parts.push(propFixCount + '× doppelte CSS-Eigenschaften entfernt');
+            this.addCheck('S05_DUP_STYLE', 'FIXED', parts.join(', '));
+        }
+    }
+
+    // S06: CMS-Editor-Reste entfernen
+    // Templates die in CMS-Editoren bearbeitet wurden enthalten oft Artefakte wie
+    // contenteditable="true", data-qa-*, Editor-spezifische Inline-Styles etc.
+    removeCmsEditorArtifacts() {
+        let fixCount = 0;
+        
+        // 1. contenteditable Attribut entfernen
+        const ceCount = (this.html.match(/\s+contenteditable="[^"]*"/gi) || []).length;
+        if (ceCount > 0) {
+            this.html = this.html.replace(/\s+contenteditable="[^"]*"/gi, '');
+            fixCount += ceCount;
+        }
+        
+        // 2. data-qa-* Attribute entfernen (Test/QA-Attribute des CMS)
+        const qaCount = (this.html.match(/\s+data-qa-[a-z-]+="[^"]*"/gi) || []).length;
+        if (qaCount > 0) {
+            this.html = this.html.replace(/\s+data-qa-[a-z-]+="[^"]*"/gi, '');
+            fixCount += qaCount;
+        }
+        
+        // 3. data-editor-* Attribute entfernen
+        const editorAttrCount = (this.html.match(/\s+data-editor-[a-z-]+="[^"]*"/gi) || []).length;
+        if (editorAttrCount > 0) {
+            this.html = this.html.replace(/\s+data-editor-[a-z-]+="[^"]*"/gi, '');
+            fixCount += editorAttrCount;
+        }
+        
+        // 4. Editor-spezifische Inline-Styles entfernen (cursor, outline mit dashed)
+        // z.B. style="cursor: text; outline: rgba(108, 52, 131, 0.35) dashed 1px; min-height: 1em;"
+        // Diese Styles kommen vom CMS-Editor und haben in der finalen E-Mail nichts zu suchen
+        let editorStyleCount = 0;
+        this.html = this.html.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            const props = styleContent.split(';').map(p => p.trim()).filter(p => p.length > 0);
+            const cleanedProps = props.filter(prop => {
+                const lower = prop.toLowerCase();
+                // Editor-typische Styles erkennen und entfernen
+                if (lower.startsWith('cursor:') && lower.includes('text')) return false;
+                if (lower.startsWith('outline:') && lower.includes('dashed')) return false;
+                if (lower.startsWith('min-height:') && lower.includes('1em')) return false;
+                return true;
+            });
+            if (cleanedProps.length < props.length) {
+                editorStyleCount += (props.length - cleanedProps.length);
+                if (cleanedProps.length === 0) {
+                    return ''; // Ganzes style-Attribut entfernen wenn nichts übrig bleibt
+                }
+                return 'style="' + cleanedProps.join('; ') + ';"';
+            }
+            return match;
+        });
+        fixCount += editorStyleCount;
+        
         if (fixCount > 0) {
-            this.addCheck('S05_DUP_STYLE', 'FIXED', fixCount + '× doppelte style-Attribute zusammengeführt');
+            const details = [];
+            if (ceCount > 0) details.push(ceCount + '× contenteditable');
+            if (qaCount > 0) details.push(qaCount + '× data-qa-*');
+            if (editorAttrCount > 0) details.push(editorAttrCount + '× data-editor-*');
+            if (editorStyleCount > 0) details.push(editorStyleCount + '× Editor-Styles');
+            this.addCheck('S06_CMS_ARTIFACTS', 'FIXED', 'CMS-Editor-Reste entfernt: ' + details.join(', '));
         }
     }
 
@@ -2766,7 +2862,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.6-2026-02-24';
+const APP_VERSION = 'v3.6.1-2026-02-24';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -2909,6 +3005,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ===== INSPECTOR STATE =====
     let currentWorkingHtml = null;  // Single Source of Truth für Inspector
+    let isProcessed = false;  // Tracking ob Template verarbeitet wurde (für Button-Wechsel)
     let currentInspectorTab = 'tracking';  // Aktueller Tab
     
     // Preview Ready State (für Message Queue)
@@ -3070,7 +3167,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Buttons deaktivieren
         processBtn.disabled = true;
         processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
-        if (downloadOptimized) { downloadOptimized.disabled = true; }
+        isProcessed = false;
+        if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = ''; }
         if (showDiffBtn) { showDiffBtn.disabled = true; }
         if (showTagReviewBtn) { showTagReviewBtn.disabled = true; }
         if (showAssetReviewBtn) { showAssetReviewBtn.disabled = true; }
@@ -3078,6 +3176,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Results & Inspector ausblenden
         resultsSection.style.display = 'none';
+        const updateWrapperReset = document.getElementById('updateTitlePreheaderWrapper');
+        if (updateWrapperReset) updateWrapperReset.style.display = 'none';
         const inspectorSection = document.getElementById('inspectorSection');
         if (inspectorSection) inspectorSection.style.display = 'none';
         
@@ -3146,6 +3246,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 processBtn.disabled = false;
                 processBtn.classList.remove('disabled');
                 processBtn.removeAttribute('aria-disabled');
+                isProcessed = false;
+                processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
                 
                 // Download & Inspector Buttons deaktivieren (bis Processing abgeschlossen)
                 if (downloadOptimized) downloadOptimized.disabled = true;
@@ -3203,6 +3305,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Template verarbeiten
     processBtn.addEventListener('click', async () => {
+        // Modus: Original wiederherstellen
+        if (isProcessed) {
+            const confirmed = confirm(
+                'Original wiederherstellen?\n\n' +
+                'Alle bisherigen Änderungen (Inspector, Tracking, Bilder etc.) gehen verloren.\n\n' +
+                'Das Template wird komplett neu verarbeitet.'
+            );
+            if (!confirmed) return;
+            
+            // Reset auf Ausgangszustand – aber Datei beibehalten
+            isProcessed = false;
+            processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
+            currentWorkingHtml = null;
+            processingResult = null;
+            resultsSection.style.display = 'none';
+            const updateWrapperRestore = document.getElementById('updateTitlePreheaderWrapper');
+            if (updateWrapperRestore) updateWrapperRestore.style.display = 'none';
+            const inspectorSection = document.getElementById('inspectorSection');
+            if (inspectorSection) inspectorSection.style.display = 'none';
+            if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = ''; }
+            if (showDiffBtn) showDiffBtn.disabled = true;
+            if (showTagReviewBtn) showTagReviewBtn.disabled = true;
+            if (showAssetReviewBtn) showAssetReviewBtn.disabled = true;
+            if (showInspectorBtn) showInspectorBtn.disabled = true;
+            
+            showInspectorToast('🔄 Original wiederhergestellt – klicke "Template verarbeiten" um neu zu starten.');
+            return;
+        }
+        
         // Single Source of Truth: selectedHtml
         console.log('PROCESS_CLICK', 'selectedHtml=', selectedHtml ? selectedHtml.length + ' chars' : 'null', 'disabled=', processBtn.disabled);
         
@@ -3263,6 +3394,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Ergebnisse anzeigen
             resultsSection.style.display = 'block';
+            
+            // Aktualisieren-Button einblenden
+            const updateWrapper = document.getElementById('updateTitlePreheaderWrapper');
+            if (updateWrapper) updateWrapper.style.display = 'flex';
             
             // Status Badge
             statusBadge.className = `status-badge ${processingResult.status}`;
@@ -3336,8 +3471,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             showInspectorToast('❌ Fehler bei der Verarbeitung: ' + error.message);
         } finally {
-            processBtn.disabled = false;
-            processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
+            if (processingResult) {
+                // Erfolgreich verarbeitet → Button wird "Original wiederherstellen"
+                isProcessed = true;
+                processBtn.disabled = false;
+                processBtn.innerHTML = '<span class="btn-icon">🔄</span> Original wiederherstellen';
+            } else {
+                // Fehler → Button bleibt "Template verarbeiten"
+                processBtn.disabled = false;
+                processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
+            }
         }
     });
 
@@ -3468,6 +3611,85 @@ document.addEventListener('DOMContentLoaded', () => {
             downloadFile(currentWorkingHtml, newName, 'text/html');
             
             console.log('[FINAL OUTPUT] Downloaded committed stand:', newName);
+        });
+    }
+
+    // Title / Pre-Header Aktualisieren-Button
+    const updateTitlePreheaderBtn = document.getElementById('updateTitlePreheaderBtn');
+    if (updateTitlePreheaderBtn) {
+        updateTitlePreheaderBtn.addEventListener('click', () => {
+            if (!currentWorkingHtml) {
+                showInspectorToast('⚠️ Bitte erst ein Template verarbeiten.');
+                return;
+            }
+            
+            const titleInput = document.getElementById('titleText');
+            const preheaderInput = document.getElementById('preheaderText');
+            const newTitle = titleInput ? titleInput.value.trim() : '';
+            const newPreheader = preheaderInput ? preheaderInput.value.trim() : '';
+            
+            const changes = [];
+            let html = currentWorkingHtml;
+            
+            // Title aktualisieren
+            if (newTitle) {
+                const titleRegex = /<title[^>]*>[\s\S]*?<\/title>/i;
+                const titleMatch = html.match(titleRegex);
+                if (titleMatch) {
+                    const oldTitle = (titleMatch[0].match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+                    if (oldTitle.trim() !== newTitle) {
+                        html = html.replace(titleRegex, '<title>' + newTitle + '</title>');
+                        changes.push('Title → "' + newTitle + '"');
+                    }
+                } else {
+                    // Kein <title> vorhanden – einfügen nach <head...>
+                    const headPos = html.search(/<head[^>]*>/i);
+                    if (headPos >= 0) {
+                        const headTag = html.match(/<head[^>]*>/i)[0];
+                        html = html.replace(headTag, headTag + '\n    <title>' + newTitle + '</title>');
+                        changes.push('Title eingefügt → "' + newTitle + '"');
+                    }
+                }
+            }
+            
+            // Preheader aktualisieren
+            if (newPreheader) {
+                // Preheader-Div erkennen (verstecktes Div direkt nach <body>)
+                const preheaderRegex = /<div\s+style="[^"]*(?:display:\s*none|max-height:\s*0|mso-hide:\s*all)[^"]*"[^>]*>[\s\S]*?<\/div>/i;
+                const preheaderMatch = html.match(preheaderRegex);
+                
+                // Neuen Preheader bauen (gleiche Logik wie _buildPreheaderHtml)
+                const targetLength = 300;
+                const spacerCount = Math.max(30, Math.ceil((targetLength - newPreheader.length) / 2));
+                const spacer = '&zwnj;&nbsp;&#847;'.repeat(spacerCount);
+                const newPreheaderHtml = '<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;">' + newPreheader + spacer + '</div>';
+                
+                if (preheaderMatch) {
+                    html = html.replace(preheaderMatch[0], newPreheaderHtml);
+                    changes.push('Pre-Header → "' + newPreheader + '"');
+                } else {
+                    // Kein Preheader vorhanden – nach <body...> einfügen
+                    const bodyMatch = html.match(/<body[^>]*>/i);
+                    if (bodyMatch) {
+                        html = html.replace(bodyMatch[0], bodyMatch[0] + '\n' + newPreheaderHtml);
+                        changes.push('Pre-Header eingefügt → "' + newPreheader + '"');
+                    }
+                }
+            }
+            
+            if (changes.length === 0) {
+                showInspectorToast('ℹ️ Keine Änderungen – Title und Pre-Header sind bereits aktuell (oder Felder sind leer).');
+                return;
+            }
+            
+            // HTML aktualisieren
+            currentWorkingHtml = html;
+            if (processingResult) {
+                processingResult.optimizedHtml = html;
+            }
+            
+            showInspectorToast('✅ Aktualisiert: ' + changes.join(', '));
+            console.log('[UPDATE] Title/Preheader updated:', changes);
         });
     }
 
@@ -4872,6 +5094,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Zeige Inspector Section
             inspectorSection.style.display = 'block';
             
+            // Orange Download-Button ausblenden (grüner im Inspector übernimmt)
+            if (downloadOptimized) downloadOptimized.style.display = 'none';
+            
             // Scroll zu Inspector
             inspectorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             
@@ -5121,7 +5346,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (updatedEl) {
                         // Übertrage den neuen innerHTML (ohne qa-node-id Manipulationen)
                         r.element.innerHTML = updatedEl.innerHTML;
-                        editorTabHtml = '<!DOCTYPE html>\n' + r.doc.documentElement.outerHTML;
+                        editorTabHtml = XHTML_DOCTYPE + '\n' + r.doc.documentElement.outerHTML;
                     }
                 }
                 setEditorPending(true);
@@ -6314,7 +6539,7 @@ td[width] { width: auto !important; }
         }
         
         // Serialisiere zurück zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
-        const annotatedHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+        const annotatedHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
         
         // Debug-Guard: Prüfe ob Script escaped wurde
         const _scriptMatch2 = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
@@ -7160,7 +7385,7 @@ td[width] { width: auto !important; }
         
         // Serialisiere zurück
         // BUG #4 FIX: outerHTML statt XMLSerializer
-        trackingTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+        trackingTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
         
         // Check Pending (Phase 10)
         checkTrackingPending();
@@ -7973,7 +8198,7 @@ td[width] { width: auto !important; }
             
             // Serialisiere zurück
             // BUG #4 FIX: outerHTML statt XMLSerializer
-            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            imagesTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -8014,7 +8239,7 @@ td[width] { width: auto !important; }
             
             // Serialisiere zurück
             // BUG #4 FIX: outerHTML statt XMLSerializer
-            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            imagesTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -8054,7 +8279,7 @@ td[width] { width: auto !important; }
             img.setAttribute('alt', newAlt);
             
             // Serialisiere zurück
-            imagesTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            imagesTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
             
             // Check Pending
             checkImagesPending();
@@ -11822,7 +12047,7 @@ td[width] { width: auto !important; }
                 el.setAttribute('data-qa-node-id', 'N' + String(counter).padStart(4, '0'));
             });
         });
-        return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+        return XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
     }
 
     // Entferne data-qa-node-id vor Commit (kommen nicht ins finale HTML)
@@ -12069,7 +12294,7 @@ td[width] { width: auto !important; }
             element.innerHTML = data.html;
             
             // Serialize back to HTML
-            editorTabHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
             
             // Mark as pending
             setEditorPending(true);
@@ -12187,7 +12412,7 @@ td[width] { width: auto !important; }
         const _el7 = _doc7.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el7) {
             _el7.parentNode.removeChild(_el7);
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc7.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc7.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement = null;
             updateInspectorPreview();
@@ -12219,7 +12444,7 @@ td[width] { width: auto !important; }
         const _el1 = _doc1.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el1 && _el1.tagName.toLowerCase() === 'a') {
             _el1.setAttribute('href', newUrl);
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc1.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc1.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement.href = newUrl;
             showEditorTab(document.getElementById('editorContent'));
@@ -12235,7 +12460,7 @@ td[width] { width: auto !important; }
         const _el2 = _doc2.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el2 && _el2.tagName.toLowerCase() === 'a') {
             _el2.setAttribute('href', '');
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc2.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc2.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement.href = '';
             showEditorTab(document.getElementById('editorContent'));
@@ -12250,7 +12475,7 @@ td[width] { width: auto !important; }
         const _el3 = _doc3.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el3 && _el3.tagName.toLowerCase() === 'a') {
             _el3.parentNode.replaceChild(_doc3.createTextNode(_el3.textContent), _el3);
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc3.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc3.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement = null;
             showEditorTab(document.getElementById('editorContent'));
@@ -12277,7 +12502,7 @@ td[width] { width: auto !important; }
         const _el4 = _doc4.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el4 && _el4.tagName.toLowerCase() === 'img') {
             _el4.setAttribute('src', newSrc);
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc4.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc4.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement.src = newSrc;
             showEditorTab(document.getElementById('editorContent'));
@@ -12293,7 +12518,7 @@ td[width] { width: auto !important; }
         const _el5 = _doc5.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el5 && _el5.tagName.toLowerCase() === 'img') {
             _el5.parentNode.removeChild(_el5);
-            editorTabHtml = '<!DOCTYPE html>\n' + _doc5.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc5.documentElement.outerHTML;
             setEditorPending(true);
             editorSelectedElement = null;
             showEditorTab(document.getElementById('editorContent'));
