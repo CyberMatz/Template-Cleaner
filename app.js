@@ -190,6 +190,18 @@ class TemplateProcessor {
         }
     }
 
+    // Preheader-HTML mit Spacer generieren
+    // Der Spacer füllt die Vorschauzeile mit unsichtbaren Zeichen,
+    // damit E-Mail-Clients keinen Body-Text nach dem Preheader anzeigen.
+    _buildPreheaderHtml(text) {
+        // Spacer direkt nach dem Text im GLEICHEN Div – verhindert dass GMX/Web.de
+        // nach kurzem Preheader sichtbaren Body-Text in die Vorschau zieht.
+        // &#847; = Combining Grapheme Joiner, &zwnj; = Zero-Width Non-Joiner, 
+        // &nbsp; = geschütztes Leerzeichen → zusammen unsichtbar aber füllen die Vorschauzeile
+        const spacer = '&zwnj;&nbsp;&#847;'.repeat(80);
+        return `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;">${text}${spacer}</div>`;
+    }
+
     // P03/P04: Pre-Header
     checkPreheader() {
         const id = this.checklistType === 'dpl' ? 'P03_PREHEADER' : 'P04_PREHEADER';
@@ -251,7 +263,7 @@ class TemplateProcessor {
         if (preheaderCount === 1) {
             if (this.preheaderText) {
                 const original = candidates[0].match;
-                this.html = this.html.replace(original, `<div style="display: none;">${this.preheaderText}</div>`);
+                this.html = this.html.replace(original, this._buildPreheaderHtml(this.preheaderText));
                 this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt');
             } else {
                 this.addCheck(id, 'PASS', 'Pre-Header korrekt');
@@ -263,13 +275,13 @@ class TemplateProcessor {
                 this.html = this.html.replace(candidates[i].match, '');
             }
             if (this.preheaderText) {
-                this.html = this.html.replace(candidates[0].match, `<div style="display: none;">${this.preheaderText}</div>`);
+                this.html = this.html.replace(candidates[0].match, this._buildPreheaderHtml(this.preheaderText));
             }
             this.addCheck(id, 'FIXED', `Pre-Header reduziert (${preheaderCount} → 1)`);
         } else if (preheaderCount === 0) {
             if (this.preheaderText) {
                 const insertPos = bodyEndPos;
-                this.html = this.html.slice(0, insertPos) + '\n' + `<div style="display: none;">${this.preheaderText}</div>` + '\n' + this.html.slice(insertPos);
+                this.html = this.html.slice(0, insertPos) + '\n' + this._buildPreheaderHtml(this.preheaderText) + '\n' + this.html.slice(insertPos);
                 this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (Preheader-Text angegeben)');
             } else {
                 this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional, kein Text angegeben)');
