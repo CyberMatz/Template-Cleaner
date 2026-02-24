@@ -2267,6 +2267,133 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Datei-Upload Handler (change + input für Browser-Kompatibilität)
+    
+    // === "Neues Template" Button dynamisch erstellen ===
+    const resetBtn = document.createElement('button');
+    resetBtn.id = 'resetBtn';
+    resetBtn.className = 'btn-reset';
+    resetBtn.innerHTML = '🔄 Neues Template';
+    resetBtn.title = 'Alles zurücksetzen und neues Template laden';
+    resetBtn.style.display = 'none';
+    // Einfügen neben processBtn
+    const controlActions = processBtn.parentElement;
+    if (controlActions) {
+        controlActions.appendChild(resetBtn);
+    }
+    
+    // Reset-Funktion: Setzt alles sauber auf Anfangszustand zurück
+    function resetForNewTemplate() {
+        // Pending-Check
+        const anyPending = trackingPending || imagesPending || editorPending || buttonsPending || placementPending;
+        if (anyPending) {
+            const discard = confirm(
+                '⚠️ Es gibt nicht übernommene Änderungen.\n\n' +
+                'Alle nicht übernommenen Änderungen gehen verloren.\n\nFortfahren?'
+            );
+            if (!discard) return;
+        }
+        
+        // State zurücksetzen
+        processingResult = null;
+        selectedHtml = null;
+        selectedFilename = null;
+        currentWorkingHtml = null;
+        
+        // Asset Review State
+        assetReviewOriginalHtml = null;
+        assetReviewStagedHtml = null;
+        assetReviewHistory = [];
+        assetReviewActionLog = [];
+        assetReviewDirty = false;
+        assetImages = [];
+        assetPixels = [];
+        
+        // Inspector Tab States
+        editorTabHtml = null;
+        editorHistory = [];
+        editorSelectedElement = null;
+        editorPending = false;
+        
+        trackingTabHtml = null;
+        trackingHistory = [];
+        trackingPending = false;
+        trackingInsertMode = false;
+        trackingSelectedElement = null;
+        
+        imagesTabHtml = null;
+        imagesHistory = [];
+        imagesPending = false;
+        lastUploadResults = null;
+        lastUploadFolder = '';
+        currentBrowsingFolder = '';
+        
+        buttonsTabHtml = null;
+        placementTabHtml = null;
+        placementPending = false;
+        buttonsHistory = [];
+        buttonsPending = false;
+        manuallyMarkedButtons = [];
+        
+        globalCommitLog = [];
+        trackingCommitStats = { linksReplaced: 0, pixelReplaced: 0, pixelInserted: 0, linkInserts: 0 };
+        imagesCommitStats = { srcReplaced: 0, imagesRemoved: 0 };
+        editorCommitStats = { blocksDeleted: 0, blocksReplaced: 0 };
+        
+        previewReady = false;
+        pendingPreviewMessages = [];
+        selectedClientSim = 'original';
+        
+        // File Input zurücksetzen
+        fileInput.value = '';
+        
+        // UI zurücksetzen
+        if (fileNameDisplay) fileNameDisplay.textContent = '';
+        
+        // Preheader-Feld leeren
+        const preheaderInput = document.getElementById('preheaderText');
+        if (preheaderInput) preheaderInput.value = '';
+        
+        // Buttons deaktivieren
+        processBtn.disabled = true;
+        processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
+        if (downloadOptimized) { downloadOptimized.disabled = true; }
+        if (showDiffBtn) { showDiffBtn.disabled = true; }
+        if (showTagReviewBtn) { showTagReviewBtn.disabled = true; }
+        if (showAssetReviewBtn) { showAssetReviewBtn.disabled = true; }
+        if (showInspectorBtn) { showInspectorBtn.disabled = true; }
+        
+        // Results & Inspector ausblenden
+        resultsSection.style.display = 'none';
+        const inspectorSection = document.getElementById('inspectorSection');
+        if (inspectorSection) inspectorSection.style.display = 'none';
+        
+        // Confidence Score entfernen
+        const confEl = document.getElementById('confidenceScore');
+        if (confEl) confEl.innerHTML = '';
+        
+        // Status-Chips zurücksetzen
+        [trackingStatusChip, imagesStatusChip, tagreviewStatusChip, editorStatusChip, buttonsStatusChip].forEach(chip => {
+            if (chip) { chip.textContent = ''; chip.className = ''; }
+        });
+        
+        // Pending Warning ausblenden
+        if (pendingWarning) pendingWarning.style.display = 'none';
+        
+        // Report Preview leeren
+        if (reportPreview) reportPreview.textContent = '';
+        
+        // Reset-Button wieder verstecken
+        resetBtn.style.display = 'none';
+        
+        console.log('[RESET] Alles zurückgesetzt – bereit für neues Template');
+        showInspectorToast('🔄 Zurückgesetzt – bitte neues Template hochladen');
+        
+        // Scroll nach oben
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    resetBtn.addEventListener('click', resetForNewTemplate);
+    
     const handleFileSelect = () => {
         const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (file) {
@@ -2470,6 +2597,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Scroll zu Ergebnissen
             resultsSection.scrollIntoView({ behavior: 'smooth' });
+            
+            // Reset-Button anzeigen
+            resetBtn.style.display = '';
 
         } catch (error) {
             showInspectorToast('❌ Fehler bei der Verarbeitung: ' + error.message);

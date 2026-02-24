@@ -3492,3 +3492,25 @@ body {
     padding: 3px 0;
     line-height: 1.4;
 }
+
+/* === Neues Template Reset Button === */
+.btn-reset {
+    padding: 10px 20px;
+    border: 2px solid #78909c;
+    border-radius: 8px;
+    background: #fff;
+    color: #546e7a;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-reset:hover {
+    background: #546e7a;
+    color: #fff;
+    border-color: #546e7a;
+}
