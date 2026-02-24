@@ -3694,8 +3694,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Download-Hilfsfunktion
+    // Utility: CMS-Editor-Reste aus HTML entfernen
+    // Wird vor dem Download aufgerufen, da Inspector-Tabs diese Attribute beim DOM-Rebuild wieder einführen
+    function stripCmsArtifacts(html) {
+        let result = html;
+        // contenteditable Attribut
+        result = result.replace(/\s+contenteditable="[^"]*"/gi, '');
+        // data-qa-* Attribute (Test/QA vom CMS)
+        result = result.replace(/\s+data-qa-[a-z-]+="[^"]*"/gi, '');
+        // data-editor-* Attribute
+        result = result.replace(/\s+data-editor-[a-z-]+="[^"]*"/gi, '');
+        // Editor-spezifische Inline-Styles entfernen
+        result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            const props = styleContent.split(';').map(p => p.trim()).filter(p => p.length > 0);
+            const cleanedProps = props.filter(prop => {
+                const lower = prop.toLowerCase();
+                if (lower.startsWith('cursor:') && lower.includes('text')) return false;
+                if (lower.startsWith('outline:') && lower.includes('dashed')) return false;
+                if (lower.startsWith('min-height:') && lower.includes('1em')) return false;
+                return true;
+            });
+            if (cleanedProps.length < props.length) {
+                if (cleanedProps.length === 0) return '';
+                return 'style="' + cleanedProps.join('; ') + ';"';
+            }
+            return match;
+        });
+        return result;
+    }
+
     function downloadFile(content, filename, mimeType) {
-        const blob = new Blob([content], { type: mimeType });
+        // Bei HTML-Downloads: CMS-Editor-Reste final entfernen
+        let finalContent = content;
+        if (mimeType === 'text/html') {
+            finalContent = stripCmsArtifacts(content);
+        }
+        const blob = new Blob([finalContent], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
