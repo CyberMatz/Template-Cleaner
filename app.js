@@ -625,6 +625,109 @@ class TemplateProcessor {
         if (fixes.length > 0) {
             this.addCheck('S03_DUPLICATE_STRUCTURE', 'FIXED', 'Doppelte Dokument-Struktur bereinigt: ' + fixes.join('; '));
         }
+
+        // S03b: Doppelte <title>-Tags bereinigen (behalte den ersten nicht-generischen)
+        const titleMatches = this.html.match(/<title[^>]*>[\s\S]*?<\/title>/gi) || [];
+        if (titleMatches.length > 1) {
+            // Bewerte welcher Title "besser" ist (nicht-generisch bevorzugt)
+            const genericTitles = ['home', 'untitled', 'document', 'test mail', '', 'newsletter in browser'];
+            let bestIndex = 0;
+            
+            for (let i = 0; i < titleMatches.length; i++) {
+                const content = (titleMatches[i].match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+                const trimmed = content.trim().toLowerCase();
+                if (!genericTitles.includes(trimmed) && trimmed.length > 0) {
+                    bestIndex = i;
+                    break; // Erster nicht-generischer gewinnt
+                }
+            }
+            
+            // Entferne alle Title-Tags außer dem besten
+            let titleCount = 0;
+            this.html = this.html.replace(/<title[^>]*>[\s\S]*?<\/title>/gi, (match) => {
+                const currentIndex = titleCount++;
+                return currentIndex === bestIndex ? match : '';
+            });
+            
+            const keptTitle = (titleMatches[bestIndex].match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+            this.addCheck('S03b_DUP_TITLE', 'FIXED', 'Doppelte <title>-Tags bereinigt (' + titleMatches.length + ' → 1, behalten: "' + keptTitle.trim().substring(0, 50) + '")');
+        }
+
+        // S03c: Doppelte <meta charset> / <meta Content-Type> bereinigen
+        // Bei Konflikten (z.B. UTF-8 und ISO-8859-1): Behalte UTF-8, entferne den Rest
+        this.fixDuplicateMetaCharset();
+    }
+
+    // S03c: Doppelte/widersprüchliche Meta-Charset-Tags bereinigen
+    fixDuplicateMetaCharset() {
+        // Sammle alle charset-relevanten Meta-Tags
+        const metaTags = [];
+        
+        // Pattern 1: <meta charset="...">
+        const charsetRegex = /<meta[^>]*charset\s*=\s*["']?([^"'\s;>]+)[^>]*>/gi;
+        let match;
+        while ((match = charsetRegex.exec(this.html)) !== null) {
+            metaTags.push({
+                fullMatch: match[0],
+                charset: match[1].toLowerCase(),
+                index: match.index
+            });
+        }
+        
+        // Pattern 2: <meta http-equiv="Content-Type" content="...charset=...">
+        const contentTypeRegex = /<meta[^>]*http-equiv\s*=\s*["']Content-Type["'][^>]*content\s*=\s*["'][^"']*charset\s*=\s*([^"'\s;]+)[^>]*>/gi;
+        while ((match = contentTypeRegex.exec(this.html)) !== null) {
+            // Nicht doppelt erfassen wenn schon durch charset-Regex gefunden
+            const alreadyFound = metaTags.some(m => Math.abs(m.index - match.index) < 5);
+            if (!alreadyFound) {
+                metaTags.push({
+                    fullMatch: match[0],
+                    charset: match[1].toLowerCase(),
+                    index: match.index
+                });
+            }
+        }
+        
+        // Auch umgekehrte Reihenfolge: content="..." http-equiv="Content-Type"
+        const contentTypeRegex2 = /<meta[^>]*content\s*=\s*["'][^"']*charset\s*=\s*([^"'\s;]+)[^"']*["'][^>]*http-equiv\s*=\s*["']Content-Type["'][^>]*>/gi;
+        while ((match = contentTypeRegex2.exec(this.html)) !== null) {
+            const alreadyFound = metaTags.some(m => Math.abs(m.index - match.index) < 5);
+            if (!alreadyFound) {
+                metaTags.push({
+                    fullMatch: match[0],
+                    charset: match[1].toLowerCase(),
+                    index: match.index
+                });
+            }
+        }
+        
+        if (metaTags.length <= 1) return; // Kein Duplikat
+        
+        // Finde verschiedene Charsets
+        const uniqueCharsets = [...new Set(metaTags.map(m => m.charset))];
+        
+        // Strategie: Behalte EIN Meta-Tag mit UTF-8 (oder das erste, falls kein UTF-8)
+        const preferredCharset = uniqueCharsets.includes('utf-8') ? 'utf-8' : metaTags[0].charset;
+        
+        // Finde das Tag das wir behalten wollen (erstes mit bevorzugtem Charset)
+        const keepIndex = metaTags.findIndex(m => m.charset === preferredCharset);
+        
+        // Entferne alle anderen
+        let removedCount = 0;
+        for (let i = metaTags.length - 1; i >= 0; i--) {
+            if (i !== keepIndex) {
+                this.html = this.html.replace(metaTags[i].fullMatch, '');
+                removedCount++;
+            }
+        }
+        
+        if (removedCount > 0) {
+            if (uniqueCharsets.length > 1) {
+                this.addCheck('S03c_DUP_CHARSET', 'FIXED', 'Charset-Konflikt bereinigt: ' + uniqueCharsets.join(' vs ') + ' → ' + preferredCharset + ' beibehalten (' + removedCount + ' Meta-Tag(s) entfernt)');
+            } else {
+                this.addCheck('S03c_DUP_CHARSET', 'FIXED', 'Doppelte Charset-Deklaration bereinigt (' + (removedCount + 1) + ' → 1)');
+            }
+        }
     }
     
     // S05: Doppelte style-Attribute zusammenführen
@@ -2461,7 +2564,7 @@ class TemplateProcessor {
         }
     }
 
-    // W04: Charset-Konflikte
+    // W04: Charset-Konflikte (falls nach S03c noch welche übrig sind)
     checkCharsetConflicts() {
         const id = 'W04_CHARSET';
         
@@ -2482,13 +2585,14 @@ class TemplateProcessor {
             if (val) charsets.add(val.toLowerCase());
         });
         
+        // S03c hat Duplikate/Konflikte bereits bereinigt – hier nur noch prüfen ob Rest OK ist
         if (charsets.size > 1) {
-            this.addCheck(id, 'WARN', 'Mehrere verschiedene Charset-Deklarationen gefunden: ' + [...charsets].join(', ') + ' → kann Zeichenfehler verursachen. Empfehlung: einheitlich UTF-8');
+            // Sollte nach S03c nicht mehr vorkommen, aber als Sicherheitsnetz
+            this.addCheck(id, 'WARN', 'Mehrere verschiedene Charset-Deklarationen gefunden: ' + [...charsets].join(', ') + ' → kann Zeichenfehler verursachen');
         } else if (charsets.size === 1 && !charsets.has('utf-8')) {
             this.addCheck(id, 'WARN', 'Charset ist ' + [...charsets][0] + ' – Empfehlung: UTF-8 für beste Kompatibilität');
-        } else {
-            // Entweder UTF-8 oder gar kein Charset (wird später ggf. ergänzt)
         }
+        // Kein Check-Eintrag wenn alles OK (UTF-8 oder wurde bereits durch S03c bereinigt)
     }
 
     // Check hinzufügen
