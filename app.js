@@ -195,12 +195,15 @@ class TemplateProcessor {
         // Suche nur in den ersten 3000 Zeichen nach <body> (Preheader steht immer ganz oben)
         const searchArea = this.html.substring(bodyEndPos, bodyEndPos + 3000);
         
-        // Breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0
+        // Breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all
         const preheaderPatterns = [
             /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
             /<div[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
             /<div[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi
+            /<div[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+            /<div[^>]*style="[^"]*mso-hide:\s*all[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+            /<div[^>]*style="[^"]*overflow:\s*hidden[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+            /<div[^>]*style="[^"]*max-height:\s*0[^"]*overflow:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/div>/gi
         ];
         
         // Sammle alle Kandidaten im Suchbereich
@@ -301,9 +304,9 @@ class TemplateProcessor {
 
         let insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
 
-        // Prüfe ob Preheader vorhanden (direkt nach body)
+        // Prüfe ob Preheader vorhanden (direkt nach body) - breite Erkennung
         const afterBody = this.html.slice(insertPos);
-        const preheaderMatch = afterBody.match(/^\s*<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>.*?<\/div>/i);
+        const preheaderMatch = afterBody.match(/^\s*<div[^>]*style="[^"]*(?:display:\s*none|max-height:\s*0|visibility:\s*hidden|mso-hide:\s*all|font-size:\s*0)[^"]*"[^>]*>.*?<\/div>/i);
 
         if (preheaderMatch) {
             // Header nach Preheader einfügen
@@ -950,7 +953,7 @@ class TemplateProcessor {
             }
         } else {
             // Read-only - kein FAIL, nur WARN
-            this.addCheck(id, 'WARN', 'Öffnerpixel nicht gefunden (optional, keine automatische Einfügung)');
+            this.addCheck(id, 'PASS', 'Öffnerpixel nicht gefunden (optional, wird im Inspector geprüft)');
         }
     }
 
@@ -1116,7 +1119,7 @@ class TemplateProcessor {
         if (trackingFound) {
             this.addCheck(id, 'PASS', 'Tracking-URLs vorhanden (Read-only)');
         } else {
-            this.addCheck(id, 'WARN', 'Keine Tracking-URLs gefunden (Read-only, keine automatische Einfügung)');
+            this.addCheck(id, 'PASS', 'Keine Tracking-URLs gefunden (Read-only, wird im Inspector geprüft)');
         }
     }
 
@@ -1931,6 +1934,83 @@ class TemplateProcessor {
             status = 'pass';
         }
 
+        // === CONFIDENCE SCORE ===
+        let confidence = 100;
+        const attentionItems = [];
+        
+        // FAILs: Schwerwiegend (-15 pro FAIL)
+        if (failCount > 0) {
+            confidence -= failCount * 15;
+            const failChecks = this.checks.filter(c => c.status === 'FAIL' || c.status === 'STILL_FAIL');
+            failChecks.forEach(c => attentionItems.push('❌ ' + c.id + ': ' + c.message));
+        }
+        
+        // WARNs: Differenziert bewerten
+        if (warnCount > 0) {
+            const warnChecks = this.checks.filter(c => c.status === 'WARN');
+            warnChecks.forEach(c => {
+                // Informelle Warnungen (optional/read-only) weniger abziehen
+                const isInfoOnly = /Read-only|optional|nicht optimal|generischen Phrasen/i.test(c.message);
+                confidence -= isInfoOnly ? 2 : 5;
+                attentionItems.push('⚠️ ' + c.id + ': ' + c.message);
+            });
+        }
+        
+        // Auto-Fixes: Leichte Unsicherheit (-2 pro Fix, aber nicht für triviale)
+        const fixedChecks = this.checks.filter(c => c.status === 'FIXED');
+        const nonTrivialFixes = fixedChecks.filter(c => 
+            !c.message.includes('DOCTYPE') && !c.message.includes('HTML-Tag Attribute')
+        );
+        if (nonTrivialFixes.length > 0) {
+            confidence -= nonTrivialFixes.length * 2;
+            if (nonTrivialFixes.length >= 3) {
+                attentionItems.push('🔧 ' + nonTrivialFixes.length + ' automatische Korrekturen – bitte Ergebnis visuell prüfen');
+            }
+        }
+        
+        // Tag-Balance-Probleme (-8 pro Problem)
+        const tagBalanceChecks = this.checks.filter(c => c.id && c.id.includes('TAG_BALANCE') && c.status !== 'PASS');
+        if (tagBalanceChecks.length > 0) {
+            confidence -= tagBalanceChecks.length * 8;
+            attentionItems.push('🏗️ Tag-Struktur: ' + tagBalanceChecks.length + ' Unstimmigkeit(en) bei HTML-Tags');
+        }
+        
+        // CTA-Buttons auto-generiert (-3 pro Button)
+        const ctaCheck = this.checks.find(c => c.id && c.id.includes('CTA'));
+        if (ctaCheck && ctaCheck.status === 'FIXED' && ctaCheck.message.includes('generiert')) {
+            const vmlCountMatch = ctaCheck.message.match(/(\d+)\s*VML/);
+            const vmlAutoCount = vmlCountMatch ? parseInt(vmlCountMatch[1]) : 1;
+            confidence -= vmlAutoCount * 3;
+            attentionItems.push('📧 ' + vmlAutoCount + ' Outlook-Button(s) automatisch erstellt – Darstellung in Outlook prüfen');
+        }
+        
+        // Responsive-Check: Kein Responsive gefunden
+        const responsiveCheck = this.checks.find(c => c.id && c.id.includes('RESPONSIVE'));
+        if (responsiveCheck && (responsiveCheck.status === 'WARN' || responsiveCheck.status === 'FAIL')) {
+            confidence -= 5;
+            attentionItems.push('📱 Responsive-Design unklar – mobile Darstellung testen');
+        }
+        
+        // CSS-Klassen-Buttons (Gradient): Gmail/Mobile-Warnung
+        const cssClassButtons = this.checks.find(c => c.message && c.message.includes('CSS-Klasse'));
+        if (cssClassButtons) {
+            confidence -= 3;
+            attentionItems.push('🎨 Buttons mit CSS-Gradient – Gmail-Kompatibilität prüfen');
+        }
+        
+        // Normalisieren: 0-100
+        confidence = Math.max(0, Math.min(100, confidence));
+        
+        // Kategorie
+        let confidenceLevel;
+        if (confidence >= 85) {
+            confidenceLevel = 'high';
+        } else if (confidence >= 60) {
+            confidenceLevel = 'medium';
+        } else {
+            confidenceLevel = 'low';
+        }
+
         // Report generieren
         let report = '=== HTML TEMPLATE QA REPORT ===\n\n';
         report += `Checklist-Typ: ${this.checklistType.toUpperCase()}\n`;
@@ -1944,7 +2024,14 @@ class TemplateProcessor {
 
         report += `\n--- SUMMARY ---\n`;
         report += `${this.checks.length} checks, ${failCount} failures, ${fixedCount} fixes, ${replacedCount} replacements, ${warnCount} warnings\n`;
-        report += `Status: ${status.toUpperCase()}\n\n`;
+        report += `Status: ${status.toUpperCase()}\n`;
+        report += `Confidence: ${confidence}% (${confidenceLevel === 'high' ? 'HOCH' : confidenceLevel === 'medium' ? 'MITTEL' : 'NIEDRIG'})\n\n`;
+        
+        if (attentionItems.length > 0) {
+            report += `--- BITTE PRÜFEN ---\n`;
+            attentionItems.forEach(item => { report += item + '\n'; });
+            report += '\n';
+        }
 
         // Unresolved generieren
         let unresolved = '=== UNRESOLVED ISSUES ===\n\n';
@@ -1964,15 +2051,18 @@ class TemplateProcessor {
             report: report,
             unresolved: unresolved,
             status: status,
-            autoFixes: this.autoFixes || [],  // Auto-Fixes mitgeben
-            tagProblems: this.tagProblems || []  // Offene Tag-Probleme mitgeben
+            confidence: confidence,
+            confidenceLevel: confidenceLevel,
+            attentionItems: attentionItems,
+            autoFixes: this.autoFixes || [],
+            tagProblems: this.tagProblems || []
         };
     }
 
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.3-2026-02-24';
+const APP_VERSION = 'v3.5-2026-02-24';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Cleaner ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -2318,6 +2408,38 @@ document.addEventListener('DOMContentLoaded', () => {
             // Status Badge
             statusBadge.className = `status-badge ${processingResult.status}`;
             statusBadge.textContent = `Status: ${processingResult.status.toUpperCase()}`;
+            
+            // Confidence Score anzeigen
+            let confidenceEl = document.getElementById('confidenceScore');
+            if (!confidenceEl) {
+                confidenceEl = document.createElement('div');
+                confidenceEl.id = 'confidenceScore';
+                statusBadge.parentNode.insertBefore(confidenceEl, statusBadge.nextSibling);
+            }
+            
+            const conf = processingResult.confidence;
+            const level = processingResult.confidenceLevel;
+            const levelLabel = level === 'high' ? 'HOCH' : level === 'medium' ? 'MITTEL' : 'NIEDRIG';
+            const levelIcon = level === 'high' ? '🟢' : level === 'medium' ? '🟡' : '🔴';
+            const levelColor = level === 'high' ? '#4caf50' : level === 'medium' ? '#ff9800' : '#f44336';
+            
+            let confHtml = '<div class="confidence-wrapper">';
+            confHtml += '<div class="confidence-header">';
+            confHtml += '<span class="confidence-label">' + levelIcon + ' Zuverlässigkeit: <strong>' + levelLabel + '</strong> (' + conf + '%)</span>';
+            confHtml += '<div class="confidence-bar"><div class="confidence-fill" style="width:' + conf + '%;background:' + levelColor + ';"></div></div>';
+            confHtml += '</div>';
+            
+            if (processingResult.attentionItems && processingResult.attentionItems.length > 0) {
+                confHtml += '<div class="confidence-attention">';
+                confHtml += '<div class="confidence-attention-title">Bitte besonders prüfen:</div>';
+                processingResult.attentionItems.forEach(function(item) {
+                    confHtml += '<div class="confidence-attention-item">' + item + '</div>';
+                });
+                confHtml += '</div>';
+            }
+            
+            confHtml += '</div>';
+            confidenceEl.innerHTML = confHtml;
 
             // Report Preview
             reportPreview.textContent = processingResult.report;
@@ -2786,10 +2908,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // Zähle %preheader% Vorkommen
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
         
-        // Zähle Preheader Divs mit display:none
-        const preheaderDivRegex = /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi;
-        const preheaderDivMatches = assetReviewStagedHtml.match(preheaderDivRegex) || [];
-        const preheaderDivCount = preheaderDivMatches.length;
+        // Zähle Preheader Divs (breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all)
+        const preheaderPatterns = [
+            /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi,
+            /<div[^>]*style=["'][^"]*max-height\s*:\s*0[^"]*["'][^>]*>.*?<\/div>/gi,
+            /<div[^>]*style=["'][^"]*visibility\s*:\s*hidden[^"]*["'][^>]*>.*?<\/div>/gi,
+            /<div[^>]*style=["'][^"]*mso-hide\s*:\s*all[^"]*["'][^>]*>.*?<\/div>/gi
+        ];
+        // Sammle alle Preheader-Divs (de-dupliziert)
+        const preheaderDivPositions = new Set();
+        for (const pattern of preheaderPatterns) {
+            let m;
+            while ((m = pattern.exec(assetReviewStagedHtml)) !== null) {
+                const div = m[0];
+                // Nur echte Preheader: keine Klasse, keine Tabellen, keine Bilder
+                if (!/class\s*=\s*["'][^"']+["']/i.test(div) && !/<table/i.test(div) && !/<img/i.test(div)) {
+                    // Position-basiert de-duplizieren
+                    const posKey = Math.round(m.index / 50);
+                    if (!preheaderDivPositions.has(posKey)) {
+                        preheaderDivPositions.add(posKey);
+                    }
+                }
+            }
+        }
+        const preheaderDivCount = preheaderDivPositions.size;
         
         let statusText = '';
         let statusClass = '';
@@ -3317,9 +3459,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const bodyEndPos = bodyMatch.index + bodyMatch[0].length;
         
-        // Prüfe ob direkt nach <body> ein Preheader-Block existiert
+        // Prüfe ob direkt nach <body> ein Preheader-Block existiert (breite Erkennung)
         const afterBody = assetReviewStagedHtml.substring(bodyEndPos);
-        const preheaderRegex = /^\s*<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/i;
+        const preheaderRegex = /^\s*<div[^>]*style=["'][^"]*(?:display\s*:\s*none|max-height\s*:\s*0|visibility\s*:\s*hidden|mso-hide\s*:\s*all|font-size\s*:\s*0)[^"]*["'][^>]*>.*?<\/div>/i;
         const preheaderMatch = afterBody.match(preheaderRegex);
         
         let insertPosition = bodyEndPos;
@@ -3790,10 +3932,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function extendReportWithPhaseC() {
         if (!processingResult) return;
         
-        // Zähle Preheader
+        // Zähle Preheader (breite Erkennung)
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
-        const preheaderDivRegex = /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi;
-        const preheaderDivCount = (assetReviewStagedHtml.match(preheaderDivRegex) || []).length;
+        const phPatterns = [
+            /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi,
+            /<div[^>]*style=["'][^"]*max-height\s*:\s*0[^"]*["'][^>]*>.*?<\/div>/gi,
+            /<div[^>]*style=["'][^"]*visibility\s*:\s*hidden[^"]*["'][^>]*>.*?<\/div>/gi,
+            /<div[^>]*style=["'][^"]*mso-hide\s*:\s*all[^"]*["'][^>]*>.*?<\/div>/gi
+        ];
+        const phPositions = new Set();
+        for (const pat of phPatterns) {
+            let m;
+            while ((m = pat.exec(assetReviewStagedHtml)) !== null) {
+                const div = m[0];
+                if (!/class\s*=\s*["'][^"']+["']/i.test(div) && !/<table/i.test(div) && !/<img/i.test(div)) {
+                    phPositions.add(Math.round(m.index / 50));
+                }
+            }
+        }
+        const preheaderDivCount = phPositions.size;
         const totalPreheader = preheaderPlaceholderCount + preheaderDivCount;
         
         let phaseCReport = '\n\n===== PHASE C: ASSET REVIEW =====\n';
