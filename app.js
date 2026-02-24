@@ -1,4 +1,4 @@
-// HTML Template QA Tool - Client-Side Processing
+// PW Template QA - Client-Side Processing
 // Keine Server-Komponenten - Alles läuft im Browser
 
 // Phase 13 P6: DEV_MODE Schalter (false = Produktion, true = Debug Logs)
@@ -2291,7 +2291,7 @@ class TemplateProcessor {
 // UI-Logik
 const APP_VERSION = 'v3.5-2026-02-24';
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('%c[APP] Template Cleaner ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
+    console.log('%c[APP] PW Template QA ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
     // Sichtbare Versionsanzeige: Versuche mehrere Methoden
     try {
@@ -2304,7 +2304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Methode 2: Auch als Titel auf den Verarbeiten-Button
         const processBtn2 = document.getElementById('processBtn');
-        if (processBtn2) processBtn2.title = 'Template Cleaner ' + APP_VERSION;
+        if (processBtn2) processBtn2.title = 'PW Template QA ' + APP_VERSION;
     } catch(e) {
         console.warn('[VERSION] Badge konnte nicht erstellt werden:', e);
     }
