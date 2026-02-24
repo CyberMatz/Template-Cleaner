@@ -28,7 +28,14 @@ class TemplateProcessor {
     phaseA_SafeFix() {
         // === PHASE A0: Sanitize (Struktur-Reparatur ZUERST) ===
         
-        // Zeilenumbrüche normalisieren: \r\n → \n (Windows → Unix)
+        // S01: BOM-Zeichen entfernen (unsichtbares Byte-Order-Mark am Dateianfang)
+        // Kann DOCTYPE-Erkennung und XML-Parsing stören
+        if (this.html.charCodeAt(0) === 0xFEFF || this.html.startsWith('\uFEFF')) {
+            this.html = this.html.replace(/^\uFEFF/, '');
+            this.addCheck('S01_BOM', 'FIXED', 'BOM-Zeichen (Byte Order Mark) am Dateianfang entfernt');
+        }
+        
+        // S02: Zeilenumbrüche normalisieren: \r\n → \n (Windows → Unix)
         // Muss als allererster Schritt passieren, damit alle Regex-Patterns
         // und Position-Berechnungen konsistent arbeiten
         const crlfCount = (this.html.match(/\r\n/g) || []).length;
@@ -38,7 +45,23 @@ class TemplateProcessor {
             this.html = this.html.replace(/\r/g, '\n');
             console.log('[SANITIZE] Zeilenumbrüche normalisiert: ' + crlfCount + '× \\r\\n → \\n');
         }
+
+        // S03: Doppelte Dokument-Strukturen reparieren
+        // Manche Templates (z.B. EVO Heizungen) haben zwei verschachtelte HTML-Dokumente
+        // mit doppeltem <html>, <head>, <body> – das muss VOR allem anderen bereinigt werden
+        this.fixDuplicateDocumentStructure();
         
+        // S04: </br> zu <br /> korrigieren (falsches Closing-Tag)
+        const brCloseCount = (this.html.match(/<\/br\s*>/gi) || []).length;
+        if (brCloseCount > 0) {
+            this.html = this.html.replace(/<\/br\s*>/gi, '<br />');
+            this.addCheck('S04_BR_FIX', 'FIXED', brCloseCount + '× </br> zu <br /> korrigiert');
+        }
+
+        // S05: Doppelte style-Attribute auf Elementen entfernen (zweites wird ignoriert)
+        // z.B. <body style="..." style="..."> → zusammenführen
+        this.fixDuplicateStyleAttributes();
+
         // P01: DOCTYPE
         this.checkDoctype();
 
@@ -125,6 +148,20 @@ class TemplateProcessor {
 
         // P21: Title-Tag
         this.checkTitleTag();
+        
+        // === PHASE A4: Zusätzliche Qualitäts-Checks (aus Template-Analyse) ===
+        
+        // W01: Relative Bildpfade erkennen (funktionieren nicht in E-Mails)
+        this.checkRelativeImagePaths();
+        
+        // W02: HTTP statt HTTPS bei Bild-/Tracking-URLs
+        this.checkInsecureUrls();
+        
+        // W03: Favicon/Icon-Links in E-Mails (überflüssig)
+        this.checkFaviconLinks();
+        
+        // W04: Charset-Konflikte erkennen
+        this.checkCharsetConflicts();
     }
 
     // P01: DOCTYPE Check
@@ -137,12 +174,22 @@ class TemplateProcessor {
 
         if (doctypeMatches && doctypeMatches.length > 0) {
             const count = doctypeMatches.length;
-            const hasCorrectDoctype = doctypeMatches.some(dt => 
-                dt.toLowerCase().includes('xhtml 1.0 transitional')
-            );
+            const hasCorrectDoctype = doctypeMatches.some(dt => {
+                const lower = dt.toLowerCase();
+                // Korrekt: XHTML 1.0 Transitional (auch mit Extra-Leerzeichen wie "Transitional //EN")
+                return lower.includes('xhtml 1.0 transitional');
+            });
 
             if (count === 1 && hasCorrectDoctype) {
-                this.addCheck(id, 'PASS', 'DOCTYPE korrekt');
+                // Prüfe auf Extra-Leerzeichen im DOCTYPE (z.B. "Transitional //EN" statt "Transitional//EN")
+                const currentDoctype = doctypeMatches[0];
+                if (/Transitional\s+\/\/EN/i.test(currentDoctype) && !/Transitional\/\/EN/i.test(currentDoctype)) {
+                    // Extra-Leerzeichen korrigieren
+                    this.html = this.html.replace(currentDoctype, correctDoctype);
+                    this.addCheck(id, 'FIXED', 'DOCTYPE korrigiert (Extra-Leerzeichen entfernt)');
+                } else {
+                    this.addCheck(id, 'PASS', 'DOCTYPE korrekt');
+                }
                 return;
             }
 
@@ -154,7 +201,13 @@ class TemplateProcessor {
             if (count > 1) {
                 this.addCheck(id, 'FIXED', `DOCTYPE-Duplikate entfernt (${count} → 1)`);
             } else {
-                this.addCheck(id, 'FIXED', 'DOCTYPE korrigiert');
+                // Spezifische Info welcher DOCTYPE ersetzt wurde
+                const oldDt = doctypeMatches[0].toLowerCase();
+                let detail = '';
+                if (oldDt.includes('html 4.01')) detail = ' (war: HTML 4.01)';
+                else if (oldDt.includes('xhtml 1.0 strict')) detail = ' (war: XHTML 1.0 Strict)';
+                else if (oldDt === '<!doctype html>') detail = ' (war: HTML5)';
+                this.addCheck(id, 'FIXED', 'DOCTYPE korrigiert → XHTML 1.0 Transitional' + detail);
             }
         } else {
             // Kein DOCTYPE gefunden
@@ -166,14 +219,13 @@ class TemplateProcessor {
     // P02: HTML-Tag Attribute
     checkHtmlAttributes() {
         const id = 'P02_HTML_TAG_ATTR';
-        const correctAttrs = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"';
         
         const htmlTagMatch = this.html.match(/<html[^>]*>/i);
         
         if (htmlTagMatch) {
             const htmlTag = htmlTagMatch[0];
             
-            // Prüfe ob alle Attribute vorhanden sind
+            // Prüfe ob alle erforderlichen xmlns-Attribute vorhanden sind
             const hasXmlns = htmlTag.includes('xmlns="http://www.w3.org/1999/xhtml"');
             const hasV = htmlTag.includes('xmlns:v=');
             const hasO = htmlTag.includes('xmlns:o=');
@@ -181,9 +233,26 @@ class TemplateProcessor {
             if (hasXmlns && hasV && hasO) {
                 this.addCheck(id, 'PASS', 'HTML-Tag Attribute korrekt');
             } else {
-                // Ersetze HTML-Tag
-                this.html = this.html.replace(/<html[^>]*>/i, `<html ${correctAttrs}>`);
-                this.addCheck(id, 'FIXED', 'HTML-Tag Attribute ergänzt');
+                // Bestehende Attribute die erhalten bleiben sollen extrahieren
+                const langMatch = htmlTag.match(/\blang\s*=\s*["'][^"']*["']/i);
+                const dirMatch = htmlTag.match(/\bdir\s*=\s*["'][^"']*["']/i);
+                
+                // Weitere custom Attribute die beibehalten werden sollen
+                const preserveAttrs = [];
+                // e-locale, e-is-multilanguage (Episerver/Optimizely)
+                const eLocale = htmlTag.match(/\be-locale\s*=\s*["'][^"']*["']/i);
+                const eMulti = htmlTag.match(/\be-is-multilanguage\s*=\s*["'][^"']*["']/i);
+                
+                if (langMatch) preserveAttrs.push(langMatch[0]);
+                if (dirMatch) preserveAttrs.push(dirMatch[0]);
+                if (eLocale) preserveAttrs.push(eLocale[0]);
+                if (eMulti) preserveAttrs.push(eMulti[0]);
+                
+                const requiredAttrs = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"';
+                const allAttrs = [requiredAttrs, ...preserveAttrs].join(' ');
+                
+                this.html = this.html.replace(/<html[^>]*>/i, `<html ${allAttrs}>`);
+                this.addCheck(id, 'FIXED', 'HTML-Tag xmlns-Attribute ergänzt' + (preserveAttrs.length > 0 ? ' (bestehende Attribute beibehalten)' : ''));
             }
         } else {
             this.addCheck(id, 'FAIL', 'HTML-Tag nicht gefunden');
@@ -441,6 +510,143 @@ class TemplateProcessor {
 
         if (fixes.length > 0) {
             this.addCheck('P_DOC_STRUCTURE', 'FIXED', 'Fehlende Schließ-Tags ergänzt: ' + fixes.join(', '));
+        }
+    }
+
+    // S03: Doppelte Dokument-Strukturen reparieren
+    // Templates wie EVO Heizungen haben zwei verschachtelte HTML-Dokumente:
+    // <!DOCTYPE...><html><head>...</head><!DOCTYPE...><html><head>...</head></head><body>...</body></html></html>
+    fixDuplicateDocumentStructure() {
+        const fixes = [];
+        
+        // Zähle HTML-Tags
+        const htmlOpenCount = (this.html.match(/<html[\s>]/gi) || []).length;
+        const headOpenCount = (this.html.match(/<head[\s>]/gi) || []).length;
+        const bodyOpenCount = (this.html.match(/<body[\s>]/gi) || []).length;
+        const htmlCloseCount = (this.html.match(/<\/html>/gi) || []).length;
+        const headCloseCount = (this.html.match(/<\/head>/gi) || []).length;
+        const bodyCloseCount = (this.html.match(/<\/body>/gi) || []).length;
+        
+        // Nur eingreifen wenn tatsächlich Duplikate vorhanden
+        if (htmlOpenCount <= 1 && headOpenCount <= 1 && bodyOpenCount <= 1 &&
+            htmlCloseCount <= 1 && headCloseCount <= 1 && bodyCloseCount <= 1) {
+            return; // Alles normal, nichts zu tun
+        }
+        
+        // Doppelte DOCTYPE innerhalb des Dokuments entfernen (nicht den ersten!)
+        // Der erste DOCTYPE wird von checkDoctype() behandelt
+        const innerDoctypeRegex = /(<head[\s>][\s\S]*?)<!DOCTYPE[^>]*>/gi;
+        if (innerDoctypeRegex.test(this.html)) {
+            this.html = this.html.replace(/(<head[\s>][\s\S]*?)<!DOCTYPE[^>]*>/gi, '$1');
+            fixes.push('innerer DOCTYPE');
+        }
+        
+        // Doppelte <html> Tags entfernen (behalte das erste)
+        if (htmlOpenCount > 1) {
+            let count = 0;
+            this.html = this.html.replace(/<html[\s>][^>]*>/gi, (match) => {
+                count++;
+                return count === 1 ? match : '';
+            });
+            fixes.push('<html> ×' + htmlOpenCount);
+        }
+        
+        // Doppelte <head> Tags entfernen (behalte das erste)
+        if (headOpenCount > 1) {
+            let count = 0;
+            this.html = this.html.replace(/<head[\s>][^>]*>|<head>/gi, (match) => {
+                count++;
+                return count === 1 ? match : '';
+            });
+            fixes.push('<head> ×' + headOpenCount);
+        }
+        
+        // Doppelte </head> auf 1 reduzieren (behalte das letzte vor <body>)
+        if (headCloseCount > 1) {
+            // Entferne alle </head> außer dem letzten
+            const parts = this.html.split(/<\/head>/i);
+            if (parts.length > 2) {
+                // Füge alle Teile ohne </head> zusammen, außer vor dem letzten
+                this.html = parts.slice(0, -1).join('') + '</head>' + parts[parts.length - 1];
+                fixes.push('</head> ×' + headCloseCount);
+            }
+        }
+        
+        // Doppelte <body> Tags: Attribute vom ersten behalten, Rest entfernen
+        if (bodyOpenCount > 1) {
+            let count = 0;
+            this.html = this.html.replace(/<body[^>]*>/gi, (match) => {
+                count++;
+                return count === 1 ? match : '';
+            });
+            fixes.push('<body> ×' + bodyOpenCount);
+        }
+        
+        // Doppelte </body> auf 1 reduzieren
+        if (bodyCloseCount > 1) {
+            let count = 0;
+            this.html = this.html.replace(/<\/body>/gi, (match) => {
+                count++;
+                return count === 1 ? match : '';
+            });
+            fixes.push('</body> ×' + bodyCloseCount);
+        }
+        
+        // Doppelte </html> auf 1 reduzieren
+        if (htmlCloseCount > 1) {
+            let count = 0;
+            this.html = this.html.replace(/<\/html>/gi, (match) => {
+                count++;
+                return count === 1 ? match : '';
+            });
+            fixes.push('</html> ×' + htmlCloseCount);
+        }
+
+        // Großgeschriebene Struktur-Tags normalisieren: <HTML> → <html>, </BODY> → </body>
+        const upperTagFixes = [];
+        const upperTags = [
+            { regex: /<HTML([\s>])/g, replacement: '<html$1', tag: '<HTML>' },
+            { regex: /<\/HTML>/g, replacement: '</html>', tag: '</HTML>' },
+            { regex: /<HEAD([\s>])/g, replacement: '<head$1', tag: '<HEAD>' },
+            { regex: /<\/HEAD>/g, replacement: '</head>', tag: '</HEAD>' },
+            { regex: /<BODY([\s>])/g, replacement: '<body$1', tag: '<BODY>' },
+            { regex: /<\/BODY>/g, replacement: '</body>', tag: '</BODY>' },
+        ];
+        for (const ut of upperTags) {
+            if (ut.regex.test(this.html)) {
+                this.html = this.html.replace(ut.regex, ut.replacement);
+                upperTagFixes.push(ut.tag);
+            }
+        }
+        if (upperTagFixes.length > 0) {
+            fixes.push('Großbuchstaben-Tags: ' + upperTagFixes.join(', '));
+        }
+        
+        if (fixes.length > 0) {
+            this.addCheck('S03_DUPLICATE_STRUCTURE', 'FIXED', 'Doppelte Dokument-Struktur bereinigt: ' + fixes.join('; '));
+        }
+    }
+    
+    // S05: Doppelte style-Attribute zusammenführen
+    // z.B. <body style="text-align:center;" style="margin:0;"> → <body style="text-align:center; margin:0;">
+    fixDuplicateStyleAttributes() {
+        const dupStyleRegex = /(<[a-z][a-z0-9]*\b[^>]*?)style="([^"]*)"([^>]*?)style="([^"]*)"([^>]*>)/gi;
+        let fixCount = 0;
+        
+        let prevHtml;
+        // Mehrfach durchlaufen falls mehr als 2 style-Attribute vorhanden
+        do {
+            prevHtml = this.html;
+            this.html = this.html.replace(dupStyleRegex, (match, before, style1, mid, style2, after) => {
+                fixCount++;
+                // Styles zusammenführen mit Semikolon-Trennung
+                const combined = style1.replace(/;?\s*$/, '') + '; ' + style2;
+                return before + 'style="' + combined + '"' + mid + after;
+            });
+        } while (this.html !== prevHtml);
+        
+        if (fixCount > 0) {
+            this.addCheck('S05_DUP_STYLE', 'FIXED', fixCount + '× doppelte style-Attribute zusammengeführt');
         }
     }
 
@@ -1317,33 +1523,63 @@ class TemplateProcessor {
         }
 
         let removed = 0;
+        const details = [];
 
-        // Google Fonts <link>
-        const linkRegex = /<link[^>]*href="[^"]*fonts\.googleapis\.com[^"]*"[^>]*>/gi;
-        const linkMatches = this.html.match(linkRegex);
-        if (linkMatches) {
-            removed += linkMatches.length;
-            this.html = this.html.replace(linkRegex, '');
+        // 1. Google Fonts <link> (auch innerhalb von Conditional Comments)
+        const linkGoogleRegex = /<link[^>]*href="[^"]*fonts\.googleapis\.com[^"]*"[^>]*\/?>/gi;
+        const linkGoogleMatches = this.html.match(linkGoogleRegex);
+        if (linkGoogleMatches) {
+            removed += linkGoogleMatches.length;
+            this.html = this.html.replace(linkGoogleRegex, '');
+            details.push(linkGoogleMatches.length + '× Google Fonts <link>');
         }
 
-        // @import
-        const importRegex = /@import\s+url\([^)]*fonts\.googleapis\.com[^)]*\);?/gi;
+        // 2. Andere externe Font <link> Tags (z.B. Adobe Typekit, custom font CDNs)
+        // Erkennung: <link> mit href zu bekannten Font-CDNs oder mit "font" im Pfad
+        const linkFontRegex = /<link[^>]*href="[^"]*(?:fonts\.|typekit\.net|use\.fontawesome|font)[^"]*"[^>]*rel="stylesheet"[^>]*\/?>/gi;
+        const linkFontRegex2 = /<link[^>]*rel="stylesheet"[^>]*href="[^"]*(?:fonts\.|typekit\.net|use\.fontawesome|font)[^"]*"[^>]*\/?>/gi;
+        for (const regex of [linkFontRegex, linkFontRegex2]) {
+            const matches = this.html.match(regex);
+            if (matches) {
+                // Nicht doppelt zählen wenn schon durch Google-Regex entfernt
+                const remaining = matches.filter(m => this.html.includes(m));
+                if (remaining.length > 0) {
+                    removed += remaining.length;
+                    for (const m of remaining) {
+                        this.html = this.html.replace(m, '');
+                    }
+                    details.push(remaining.length + '× externe Font <link>');
+                }
+            }
+        }
+
+        // 3. @import url() – alle Varianten (Google Fonts, andere)
+        const importRegex = /@import\s+url\(\s*['"]?[^)]*fonts[^)]*['"]?\s*\)\s*;?/gi;
         const importMatches = this.html.match(importRegex);
         if (importMatches) {
             removed += importMatches.length;
             this.html = this.html.replace(importRegex, '');
+            details.push(importMatches.length + '× @import url()');
         }
 
-        // @font-face
+        // 4. @font-face Blöcke (externe Fonts per CSS eingebettet)
         const fontFaceRegex = /@font-face\s*\{[^}]*\}/gi;
         const fontFaceMatches = this.html.match(fontFaceRegex);
         if (fontFaceMatches) {
             removed += fontFaceMatches.length;
             this.html = this.html.replace(fontFaceRegex, '');
+            details.push(fontFaceMatches.length + '× @font-face');
         }
 
+        // 5. Leere Conditional Comments aufräumen die nur Font-Links enthielten
+        // <!--[if !mso]><!--> ... <!--<![endif]--> die jetzt leer sind
+        this.html = this.html.replace(/<!--\[if !mso\]><!-->\s*<!--<!\[endif\]-->/gi, '');
+
+        // 6. Leere <style> Blöcke aufräumen die nach Font-Entfernung übrig bleiben
+        this.html = this.html.replace(/<style[^>]*>\s*<\/style>/gi, '');
+
         if (removed > 0) {
-            this.addCheck(id, 'FIXED', `Externe Fonts entfernt (${removed} removed)`);
+            this.addCheck(id, 'FIXED', `Externe Fonts entfernt (${details.join(', ')})`);
         } else {
             this.addCheck(id, 'PASS', 'Keine externen Fonts gefunden');
         }
@@ -1956,16 +2192,33 @@ class TemplateProcessor {
         let match;
         const brokenLinks = [];
         
+        // Template-Variablen-Patterns die als gültig gelten (wird vor Versand ersetzt)
+        const templateVarPatterns = [
+            /%[a-zA-Z_][a-zA-Z0-9_]*%/,         // %header%, %footer%, %unsubscribe%
+            /\{\{[^}]+\}\}/,                      // {{ unsubscribe }}, {{variable}}
+            /\{[a-zA-Z_][^}]*\}/,                // {unsubscribe}, {tracking_url}
+            /\[\[[^\]]+\]\]/,                     // [[UNSUB_LINK_DE]], [[variable]]
+            /\[@[^\]]+\]/,                        // [@emailanrede1]
+            /\[%[^\]]+%\]/,                       // [%url:unique-count; "..."]
+            /##[a-zA-Z_][a-zA-Z0-9_]*##/,        // ##IMPRESSUM##, ##VARIABLE##
+            /\$[a-zA-Z_][a-zA-Z0-9_]*\$/,        // $uid$, $variable$
+            /\$\{[^}]+\}/,                        // ${variable}
+            /<%[^%]+%>/,                          // <%variable%> (ASP style)
+            /#\{[^}]+\}/,                         // #{variable} (Ruby style)
+        ];
+        
+        const isTemplateVariable = (str) => {
+            return templateVarPatterns.some(pattern => pattern.test(str));
+        };
+        
         while ((match = linkRegex.exec(this.html)) !== null) {
             const href = match[1].trim();
             const text = match[2].replace(/<[^>]*>/g, '').trim();
             
             // Platzhalter-Links die vergessen wurden
             if (href === '#' || href === '' || href === 'javascript:void(0)' || href === 'javascript:;') {
-                // Ausnahme: %...% Platzhalter im Text → ist ok (wird später ersetzt)
-                if (/%\w+%/.test(href) || /%\w+%/.test(text)) continue;
-                // Ausnahme: Tracking-Platzhalter
-                if (/\{[^}]+\}/.test(href)) continue;
+                // Ausnahme: Template-Variablen im href oder Text → wird vor Versand ersetzt
+                if (isTemplateVariable(href) || isTemplateVariable(text)) continue;
                 brokenLinks.push({ href: href || '(leer)', text: text || '(ohne Text)' });
             }
         }
@@ -2046,11 +2299,14 @@ class TemplateProcessor {
     checkLinkCount() {
         const id = 'P19_LINK_COUNT';
         
+        // Template-Variablen-Erkennung
+        const isTemplateVar = (href) => /^(%|{{|\[\[|\[@|\[%|##|\$\{|<%|#\{|\$[a-zA-Z])/.test(href);
+        
         // Alle <a href="..."> zählen (nur echte Links, nicht # oder leer)
         const allLinks = this.html.match(/<a\b[^>]*href\s*=\s*["'][^"']+["'][^>]*>/gi) || [];
         const realLinks = allLinks.filter(link => {
             const href = (link.match(/href\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
-            return href !== '#' && href !== '' && !href.startsWith('javascript:');
+            return href !== '#' && href !== '' && !href.startsWith('javascript:') && !isTemplateVar(href);
         });
         
         // Unique Domains zählen
@@ -2115,6 +2371,123 @@ class TemplateProcessor {
             } else {
                 this.addCheck(id, 'PASS', 'Title-Tag vorhanden: "' + existingTitle.substring(0, 60) + '"');
             }
+        }
+    }
+
+    // === PHASE A4: Zusätzliche Qualitäts-Checks ===
+
+    // W01: Relative Bildpfade erkennen
+    checkRelativeImagePaths() {
+        const id = 'W01_RELATIVE_IMAGES';
+        
+        const imgRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+        let match;
+        const relativeImages = [];
+        
+        // Template-Variablen-Patterns die OK sind
+        const templateVarRegex = /^(%|{{|\[\[|\[@|\[%|##|\$\{|<%|#\{|\$[a-zA-Z])/;
+        
+        while ((match = imgRegex.exec(this.html)) !== null) {
+            const src = match[1].trim();
+            // Überspringe Template-Variablen (werden vor Versand ersetzt)
+            if (templateVarRegex.test(src)) continue;
+            // Überspringe data: URIs
+            if (src.startsWith('data:')) continue;
+            // Überspringe leere/Platzhalter
+            if (src === '' || src === '#') continue;
+            
+            // Relative Pfade: kein http/https am Anfang und kein // (protocol-relative)
+            if (!src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('//')) {
+                relativeImages.push(src.substring(0, 50));
+            }
+        }
+        
+        if (relativeImages.length > 0) {
+            const examples = relativeImages.slice(0, 3).map(s => '"' + s + '"').join(', ');
+            const more = relativeImages.length > 3 ? ' und ' + (relativeImages.length - 3) + ' weitere' : '';
+            this.addCheck(id, 'WARN', relativeImages.length + ' Bilder mit relativem Pfad (funktioniert nicht in E-Mails): ' + examples + more + ' → vollständige URL (https://...) benötigt');
+        } else {
+            this.addCheck(id, 'PASS', 'Alle Bildpfade sind vollständige URLs');
+        }
+    }
+
+    // W02: HTTP statt HTTPS bei Bild-URLs
+    checkInsecureUrls() {
+        const id = 'W02_INSECURE_URLS';
+        
+        // Suche nach http:// in src-Attributen (Bilder)
+        const httpImgRegex = /<img[^>]*src\s*=\s*["']http:\/\/[^"']+["'][^>]*>/gi;
+        const httpImgMatches = this.html.match(httpImgRegex) || [];
+        
+        // Tracking-Pixel (1x1) separat zählen
+        let trackingPixels = 0;
+        let contentImages = 0;
+        
+        for (const img of httpImgMatches) {
+            const w = (img.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
+            const h = (img.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
+            if ((w === '1' || w === '0' || w === '2') && (h === '1' || h === '0' || h === '2')) {
+                trackingPixels++;
+            } else {
+                contentImages++;
+            }
+        }
+        
+        if (contentImages > 0 || trackingPixels > 0) {
+            let msg = '';
+            if (contentImages > 0) {
+                msg += contentImages + ' Bild(er) nutzen HTTP statt HTTPS – wird in vielen E-Mail-Clients blockiert oder als unsicher markiert';
+            }
+            if (trackingPixels > 0) {
+                msg += (msg ? '. Zusätzlich: ' : '') + trackingPixels + ' Tracking-Pixel mit HTTP';
+            }
+            this.addCheck(id, 'WARN', msg);
+        } else {
+            this.addCheck(id, 'PASS', 'Alle Bild-URLs nutzen HTTPS');
+        }
+    }
+
+    // W03: Favicon/Icon-Links in E-Mails
+    checkFaviconLinks() {
+        const id = 'W03_FAVICON';
+        
+        const faviconRegex = /<link[^>]*rel\s*=\s*["'](?:icon|shortcut icon|apple-touch-icon)[^"']*["'][^>]*>/gi;
+        const matches = this.html.match(faviconRegex);
+        
+        if (matches && matches.length > 0) {
+            // Entfernen – Favicons haben in E-Mails keine Funktion
+            this.html = this.html.replace(faviconRegex, '');
+            this.addCheck(id, 'FIXED', matches.length + '× Favicon/Icon-Link entfernt (hat in E-Mails keine Funktion)');
+        }
+    }
+
+    // W04: Charset-Konflikte
+    checkCharsetConflicts() {
+        const id = 'W04_CHARSET';
+        
+        // Alle charset-Deklarationen sammeln
+        const charsets = new Set();
+        
+        // <meta charset="...">
+        const metaCharset = this.html.match(/<meta[^>]*charset\s*=\s*["']?([^"'\s;>]+)/gi) || [];
+        metaCharset.forEach(m => {
+            const val = (m.match(/charset\s*=\s*["']?([^"'\s;>]+)/i) || [])[1];
+            if (val) charsets.add(val.toLowerCase());
+        });
+        
+        // <meta http-equiv="Content-Type" content="...charset=...">
+        const metaContentType = this.html.match(/<meta[^>]*content\s*=\s*["'][^"']*charset\s*=\s*([^"'\s;]+)/gi) || [];
+        metaContentType.forEach(m => {
+            const val = (m.match(/charset\s*=\s*([^"'\s;]+)/i) || [])[1];
+            if (val) charsets.add(val.toLowerCase());
+        });
+        
+        if (charsets.size > 1) {
+            this.addCheck(id, 'WARN', 'Mehrere verschiedene Charset-Deklarationen gefunden: ' + [...charsets].join(', ') + ' → kann Zeichenfehler verursachen. Empfehlung: einheitlich UTF-8');
+        } else if (charsets.size === 1 && !charsets.has('utf-8')) {
+            this.addCheck(id, 'WARN', 'Charset ist ' + [...charsets][0] + ' – Empfehlung: UTF-8 für beste Kompatibilität');
+        } else {
+            // Entweder UTF-8 oder gar kein Charset (wird später ggf. ergänzt)
         }
     }
 
