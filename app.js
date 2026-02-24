@@ -9003,39 +9003,51 @@ td[width] { width: auto !important; }
                 const id = 'B' + String(btnIndex).padStart(3, '0');
                 
                 const tdAttrs = tdMatch[1];
-                const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
-                const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
+                const tdStyle = extractStyle('<td ' + tdAttrs + '>');
+                const linkStyleStr = extractStyle(tdInner.match(/<a[^>]*>/i)?.[0] || '');
                 
                 // Farben: Aus CSS-Klasse oder Inline
                 const bgColor = normalizeHex(cssInfo.bgColor);
                 const tcInline = linkStyleStr.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
                 const textColor = normalizeHex(tcInline ? tcInline[1] : (cssInfo.textColor || 'ffffff'));
                 
-                // Dimensionen
-                const padMatch = tdStyle.match(/padding\s*:\s*(\d+)px\s+(\d+)px/i);
-                const padTop = padMatch ? parseInt(padMatch[1]) : parseInt((tdStyle.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12');
-                const padSide = padMatch ? parseInt(padMatch[2]) : 20;
-                const height = padTop * 2 + 20;
+                // Dimensionen - aus td style + link style
+                const combinedStyle = tdStyle + ';' + linkStyleStr;
+                const padMatch = combinedStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)px\s+(\d+)px/i);
+                const padTop = padMatch ? parseInt(padMatch[1]) : parseInt((combinedStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)/i) || [])[1] || '12');
+                const fontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                let height = padTop * 2 + 20;
                 
-                // Width: Aus parent table oder max-width
+                // Mindesthöhe basierend auf Textlänge
+                const charWidth = fontSize * 0.6;
+                
+                // Width: max-width bevorzugen, %-Werte ignorieren
                 let width = 250;
-                const maxWidthMatch = (tdStyle + ' ' + (tdInner.match(/max-width\s*:\s*(\d+)/i) || ['',''])[0]).match(/max-width\s*:\s*(\d+)/i);
+                const maxWidthMatch = combinedStyle.match(/max-width\s*:\s*(\d+)px/i);
+                const widthPxMatch = combinedStyle.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i);
                 if (maxWidthMatch) {
                     width = parseInt(maxWidthMatch[1]);
+                } else if (widthPxMatch) {
+                    width = parseInt(widthPxMatch[1]);
                 } else {
                     const beforeTd = html.substring(Math.max(0, tdMatch.index - 1500), tdMatch.index);
-                    const allTableWidths = [...beforeTd.matchAll(/<table[^>]*(?:width\s*=\s*["']?(\d+)|max-width\s*:\s*(\d+))/gi)];
+                    const allTableWidths = [...beforeTd.matchAll(/<table[^>]*width\s*=\s*["']?(\d+%?)/gi)];
                     for (let tw = allTableWidths.length - 1; tw >= 0; tw--) {
-                        const val = allTableWidths[tw][1] || allTableWidths[tw][2];
-                        if (val && !String(val).includes('%')) {
-                            width = parseInt(val);
+                        if (allTableWidths[tw][1] && !allTableWidths[tw][1].includes('%')) {
+                            width = parseInt(allTableWidths[tw][1]);
                             break;
                         }
                     }
                 }
                 
-                const borderRadius = parseInt((tdStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
-                const fontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                const availWidth = width - 40;
+                const charsPerLine = Math.max(1, Math.floor(availWidth / charWidth));
+                const estimatedLines = Math.ceil(linkText.length / charsPerLine);
+                const minHeight = Math.ceil(estimatedLines * fontSize * 1.3 + padTop * 2);
+                if (minHeight > height) height = minHeight;
+                if (height < 36) height = 36;
+                
+                const borderRadius = parseInt((combinedStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
                 
                 const vml = checkVmlStatus(tdMatch.index, href, linkText);
                 const bgImageInfo = checkBackgroundImage(linkMatch[0]);
@@ -9072,16 +9084,48 @@ td[width] { width: auto !important; }
                 btnIndex++;
                 const id = 'B' + String(btnIndex).padStart(3, '0');
                 
-                const aStyle = (attrs.match(/style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
+                const aStyle = extractStyle('<a ' + attrs + '>');
                 const bgColor = normalizeHex(cssInfo.bgColor);
                 const tcInline = aStyle.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
                 const textColor = normalizeHex(tcInline ? tcInline[1] : (cssInfo.textColor || 'ffffff'));
                 
-                const width = parseInt((aStyle.match(/(?:max-)?width\s*:\s*(\d+)/i) || [])[1] || '250');
-                const padMatch = aStyle.match(/padding\s*:\s*(\d+)/i);
-                const height = padMatch ? parseInt(padMatch[1]) * 2 + 20 : 44;
-                const borderRadius = parseInt((aStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
+                // Width: max-width bevorzugen, %-Werte bei width ignorieren
+                let width = 250;
+                const maxWMatch = aStyle.match(/max-width\s*:\s*(\d+)px/i);
+                const wMatch = aStyle.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i); // Nur px, kein %
+                if (maxWMatch) {
+                    width = parseInt(maxWMatch[1]);
+                } else if (wMatch) {
+                    width = parseInt(wMatch[1]);
+                } else {
+                    // Fallback: Parent table width (nur echte Pixel)
+                    const beforeA = html.substring(Math.max(0, aMatch.index - 1500), aMatch.index);
+                    const allTW = [...beforeA.matchAll(/<table[^>]*width\s*=\s*["']?(\d+%?)/gi)];
+                    for (let tw = allTW.length - 1; tw >= 0; tw--) {
+                        if (allTW[tw][1] && !allTW[tw][1].includes('%')) {
+                            width = parseInt(allTW[tw][1]);
+                            break;
+                        }
+                    }
+                }
+                
+                // Height: Aus padding berechnen, aber Mindesthöhe für Text berücksichtigen
                 const fontSize = parseInt((aStyle.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                // padding:10px 0px → nur echtes padding matchen, nicht mso-padding-alt
+                const padExact = aStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)/i);
+                const padTop = padExact ? parseInt(padExact[1]) : 10;
+                let height = padTop * 2 + 20;
+                
+                // Mindesthöhe basierend auf Textlänge berechnen
+                const charWidth = fontSize * 0.6;
+                const availWidth = width - 40;
+                const charsPerLine = Math.max(1, Math.floor(availWidth / charWidth));
+                const estimatedLines = Math.ceil(linkText.length / charsPerLine);
+                const minHeight = Math.ceil(estimatedLines * fontSize * 1.3 + padTop * 2);
+                if (minHeight > height) height = minHeight;
+                if (height < 36) height = 36;
+                
+                const borderRadius = parseInt((aStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
                 
                 const vml = checkVmlStatus(aMatch.index, href, linkText);
                 const bgImageInfo = checkBackgroundImage(aMatch[0]);
