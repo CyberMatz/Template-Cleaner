@@ -5,12 +5,13 @@
 window.DEV_MODE = false;
 
 class TemplateProcessor {
-    constructor(html, checklistType, preheaderText = '', removeFonts = true) {
+    constructor(html, checklistType, preheaderText = '', removeFonts = true, titleText = '') {
         this.originalHtml = html;
         this.html = html;
         this.checklistType = checklistType;
         this.preheaderText = preheaderText;
         this.removeFonts = removeFonts;
+        this.titleText = titleText;
         this.checks = [];
     }
 
@@ -108,6 +109,22 @@ class TemplateProcessor {
 
         // P15: Inline Styles Check
         this.checkInlineStyles();
+
+        // === PHASE A3: Zustellbarkeit & Qualität ===
+        // P16: Broken/Platzhalter-Links
+        this.checkBrokenLinks();
+
+        // P17: Template-Größe (Gmail-Limit ~102KB)
+        this.checkTemplateSize();
+
+        // P18: Text-zu-Bild-Verhältnis
+        this.checkTextImageRatio();
+
+        // P19: Link-Anzahl
+        this.checkLinkCount();
+
+        // P21: Title-Tag
+        this.checkTitleTag();
     }
 
     // P01: DOCTYPE Check
@@ -1913,6 +1930,176 @@ class TemplateProcessor {
         }
     }
 
+    // P16: Broken/Placeholder Links prüfen
+    checkBrokenLinks() {
+        const id = 'P16_BROKEN_LINKS';
+        
+        const linkRegex = /<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        let match;
+        const brokenLinks = [];
+        
+        while ((match = linkRegex.exec(this.html)) !== null) {
+            const href = match[1].trim();
+            const text = match[2].replace(/<[^>]*>/g, '').trim();
+            
+            // Platzhalter-Links die vergessen wurden
+            if (href === '#' || href === '' || href === 'javascript:void(0)' || href === 'javascript:;') {
+                // Ausnahme: %...% Platzhalter im Text → ist ok (wird später ersetzt)
+                if (/%\w+%/.test(href) || /%\w+%/.test(text)) continue;
+                // Ausnahme: Tracking-Platzhalter
+                if (/\{[^}]+\}/.test(href)) continue;
+                brokenLinks.push({ href: href || '(leer)', text: text || '(ohne Text)' });
+            }
+        }
+        
+        if (brokenLinks.length === 0) {
+            this.addCheck(id, 'PASS', 'Alle Links haben gültige URLs');
+        } else if (brokenLinks.length <= 3) {
+            const details = brokenLinks.map(l => '"' + l.text.substring(0, 30) + '"').join(', ');
+            this.addCheck(id, 'WARN', brokenLinks.length + ' Link(s) noch ohne Ziel-URL: ' + details + ' → im Inspector (Tracking-Tab) die richtigen URLs eintragen');
+        } else {
+            this.addCheck(id, 'WARN', brokenLinks.length + ' Links noch ohne Ziel-URL (href="#" oder leer) → im Inspector (Tracking-Tab) die richtigen URLs eintragen');
+        }
+    }
+
+    // P17: Template-Größe prüfen (Gmail schneidet bei ~102KB ab)
+    checkTemplateSize() {
+        const id = 'P17_TEMPLATE_SIZE';
+        
+        const sizeBytes = new Blob([this.html]).size;
+        const sizeKB = Math.round(sizeBytes / 1024);
+        
+        if (sizeKB > 102) {
+            this.addCheck(id, 'WARN', 'Template ist ' + sizeKB + ' KB groß – Gmail schneidet E-Mails über ~102 KB ab! Inhalte am Ende werden möglicherweise nicht angezeigt.');
+        } else if (sizeKB > 80) {
+            this.addCheck(id, 'PASS', 'Template ist ' + sizeKB + ' KB (Achtung: Gmail-Grenze bei ~102 KB, noch ' + (102 - sizeKB) + ' KB Puffer)');
+        } else {
+            this.addCheck(id, 'PASS', 'Template-Größe OK (' + sizeKB + ' KB, Gmail-Grenze: ~102 KB)');
+        }
+    }
+
+    // P18: Text-zu-Bild-Verhältnis (Zustellbarkeit)
+    checkTextImageRatio() {
+        const id = 'P18_TEXT_IMAGE_RATIO';
+        
+        // Sichtbaren Text extrahieren (ohne Tags, Scripts, Styles, MSO-Comments, Preheader)
+        let visibleHtml = this.html;
+        // Entferne style/script Blöcke
+        visibleHtml = visibleHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        visibleHtml = visibleHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+        // Entferne MSO Conditional Comments
+        visibleHtml = visibleHtml.replace(/<!--\[if\s[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
+        // Entferne versteckte Elemente (Preheader etc.)
+        visibleHtml = visibleHtml.replace(/<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+        // Entferne alle HTML-Tags
+        const textOnly = visibleHtml.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+        
+        // Wörter zählen (mindestens 2 Zeichen)
+        const words = textOnly.split(/\s+/).filter(w => w.length >= 2);
+        const wordCount = words.length;
+        
+        // Bilder zählen (nur sichtbare, nicht Pixel/1px)
+        const imgRegex = /<img\b[^>]*>/gi;
+        let imgMatch;
+        let visibleImages = 0;
+        while ((imgMatch = imgRegex.exec(this.html)) !== null) {
+            const tag = imgMatch[0];
+            // Überspringe Tracking-Pixel (1x1, width=1, height=1)
+            const w = (tag.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
+            const h = (tag.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
+            if (w === '1' && h === '1') continue;
+            if (/display\s*:\s*none/i.test(tag)) continue;
+            visibleImages++;
+        }
+        
+        // Verhältnis bewerten
+        if (visibleImages === 0) {
+            this.addCheck(id, 'PASS', 'Keine Bilder im Template – reines Text-Template (' + wordCount + ' Wörter)');
+        } else if (wordCount < 50 && visibleImages >= 3) {
+            this.addCheck(id, 'WARN', 'Wenig Text im Verhältnis zu Bildern (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder) – Spamfilter bevorzugen ein Verhältnis von mindestens 60% Text zu 40% Bild');
+        } else if (wordCount < 20 && visibleImages >= 1) {
+            this.addCheck(id, 'WARN', 'Sehr wenig Text (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder) – „Image-only" E-Mails werden häufig als Spam eingestuft');
+        } else {
+            this.addCheck(id, 'PASS', 'Text-Bild-Verhältnis OK (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder)');
+        }
+    }
+
+    // P19: Link-Anzahl prüfen (Zustellbarkeit)
+    checkLinkCount() {
+        const id = 'P19_LINK_COUNT';
+        
+        // Alle <a href="..."> zählen (nur echte Links, nicht # oder leer)
+        const allLinks = this.html.match(/<a\b[^>]*href\s*=\s*["'][^"']+["'][^>]*>/gi) || [];
+        const realLinks = allLinks.filter(link => {
+            const href = (link.match(/href\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            return href !== '#' && href !== '' && !href.startsWith('javascript:');
+        });
+        
+        // Unique Domains zählen
+        const domains = new Set();
+        realLinks.forEach(link => {
+            const href = (link.match(/href\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            try {
+                const url = new URL(href);
+                domains.add(url.hostname);
+            } catch (e) { /* ungültige URL */ }
+        });
+        
+        if (realLinks.length > 30) {
+            this.addCheck(id, 'WARN', realLinks.length + ' Links im Template – sehr viele Links können Spamfilter auslösen (Empfehlung: unter 25). ' + domains.size + ' verschiedene Domain(s).');
+        } else if (realLinks.length > 20) {
+            this.addCheck(id, 'PASS', realLinks.length + ' Links im Template (viele, aber noch im Rahmen). ' + domains.size + ' Domain(s).');
+        } else {
+            this.addCheck(id, 'PASS', realLinks.length + ' Links im Template (' + domains.size + ' Domain(s)) – unproblematisch');
+        }
+    }
+
+    // P21: Title-Tag prüfen und ggf. setzen
+    checkTitleTag() {
+        const id = 'P21_TITLE_TAG';
+        
+        const titleMatch = this.html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const existingTitle = titleMatch ? titleMatch[1].trim() : '';
+        const isEmpty = !existingTitle || /^untitled$/i.test(existingTitle) || /^document$/i.test(existingTitle);
+        
+        if (this.titleText) {
+            // User hat Title-Text angegeben → einfügen oder ersetzen
+            if (titleMatch) {
+                if (existingTitle === this.titleText) {
+                    // Gleicher Text → nichts tun
+                    this.addCheck(id, 'PASS', 'Title-Tag korrekt: "' + existingTitle.substring(0, 60) + '"');
+                } else {
+                    // Abweichender Text → ersetzen
+                    this.html = this.html.replace(titleMatch[0], '<title>' + this.titleText + '</title>');
+                    if (isEmpty) {
+                        this.addCheck(id, 'FIXED', 'Title-Tag ersetzt: "' + this.titleText + '" (war: "' + (existingTitle || '(leer)') + '")');
+                    } else {
+                        this.addCheck(id, 'FIXED', 'Title-Tag geändert: "' + this.titleText + '" (war: "' + existingTitle.substring(0, 40) + '")');
+                    }
+                }
+            } else {
+                // Kein Title vorhanden → im <head> einfügen
+                const headMatch = this.html.match(/<head[^>]*>/i);
+                if (headMatch) {
+                    const insertPos = this.html.indexOf(headMatch[0]) + headMatch[0].length;
+                    this.html = this.html.slice(0, insertPos) + '\n    <title>' + this.titleText + '</title>' + this.html.slice(insertPos);
+                    this.addCheck(id, 'FIXED', 'Title-Tag eingefügt: "' + this.titleText + '"');
+                } else {
+                    this.addCheck(id, 'WARN', 'Title-Tag konnte nicht eingefügt werden (kein <head>-Tag gefunden)');
+                }
+            }
+        } else {
+            // Kein Title-Text angegeben → nur prüfen
+            if (!titleMatch) {
+                this.addCheck(id, 'PASS', 'Kein <title>-Tag vorhanden (optional – im Feld "Title-Tag" eintragen um einen zu setzen)');
+            } else if (isEmpty) {
+                this.addCheck(id, 'WARN', 'Title-Tag ist leer oder generisch ("' + (existingTitle || '(leer)') + '") – im Feld "Title-Tag" einen Markenname oder Betreffzeile eintragen');
+            } else {
+                this.addCheck(id, 'PASS', 'Title-Tag vorhanden: "' + existingTitle.substring(0, 60) + '"');
+            }
+        }
+    }
+
     // Check hinzufügen
     addCheck(id, status, message) {
         this.checks.push({ id, status, message });
@@ -1948,7 +2135,10 @@ class TemplateProcessor {
         // WARNs: Differenziert bewerten
         if (warnCount > 0) {
             const warnChecks = this.checks.filter(c => c.status === 'WARN');
+            // Deliverability-Checks werden separat behandelt
+            const deliverabilityIds = ['P16_BROKEN_LINKS', 'P17_TEMPLATE_SIZE', 'P18_TEXT_IMAGE_RATIO', 'P19_LINK_COUNT', 'P21_TITLE_TAG'];
             warnChecks.forEach(c => {
+                if (deliverabilityIds.includes(c.id)) return; // separat behandelt
                 // Informelle Warnungen (optional/read-only) weniger abziehen
                 const isInfoOnly = /Read-only|optional|nicht optimal|generischen Phrasen/i.test(c.message);
                 confidence -= isInfoOnly ? 2 : 5;
@@ -1998,6 +2188,24 @@ class TemplateProcessor {
             attentionItems.push('🎨 Buttons mit CSS-Gradient – Gmail-Kompatibilität prüfen');
         }
         
+        // === Zustellbarkeits-Checks (höherer Impact) ===
+        const sizeCheck = this.checks.find(c => c.id === 'P17_TEMPLATE_SIZE' && c.status === 'WARN');
+        if (sizeCheck) {
+            confidence -= 10; // Gmail-Clipping ist kritisch
+            attentionItems.push('📦 ' + sizeCheck.message);
+        }
+        
+        const textImgCheck = this.checks.find(c => c.id === 'P18_TEXT_IMAGE_RATIO' && c.status === 'WARN');
+        if (textImgCheck) {
+            confidence -= 5;
+            attentionItems.push('📊 Ungünstiges Text-Bild-Verhältnis – Spam-Risiko erhöht');
+        }
+        
+        const brokenLinkCheck = this.checks.find(c => c.id === 'P16_BROKEN_LINKS' && c.status === 'WARN');
+        if (brokenLinkCheck) {
+            attentionItems.push('🔗 Links ohne Ziel-URL → im Inspector (Tracking-Tab) URLs eintragen');
+        }
+        
         // Normalisieren: 0-100
         confidence = Math.max(0, Math.min(100, confidence));
         
@@ -2015,6 +2223,7 @@ class TemplateProcessor {
         let report = '=== HTML TEMPLATE QA REPORT ===\n\n';
         report += `Checklist-Typ: ${this.checklistType.toUpperCase()}\n`;
         report += `Preheader-Text: ${this.preheaderText || '(nicht angegeben)'}\n`;
+        report += `Title-Tag: ${this.titleText || '(nicht angegeben)'}\n`;
         report += `Externe Fonts entfernen: ${this.removeFonts ? 'Ja' : 'Nein'}\n\n`;
         report += '--- CHECKS ---\n\n';
 
@@ -2357,9 +2566,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // UI zurücksetzen
         if (fileName) fileName.textContent = '';
         
-        // Preheader-Feld leeren
+        // Preheader + Title leeren
         const preheaderInput = document.getElementById('preheaderText');
         if (preheaderInput) preheaderInput.value = '';
+        const titleInput = document.getElementById('titleText');
+        if (titleInput) titleInput.value = '';
         
         // Buttons deaktivieren
         processBtn.disabled = true;
@@ -2447,6 +2658,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Hinweistext ausblenden
                 uploadHint.style.display = 'none';
+                
+                // Title-Tag aus Template auslesen und ins Feld vorausfüllen
+                const titleInput = document.getElementById('titleText');
+                if (titleInput) {
+                    const existingTitle = (selectedHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1];
+                    const titleText = existingTitle ? existingTitle.trim() : '';
+                    if (titleText && !/^untitled$/i.test(titleText) && !/^document$/i.test(titleText)) {
+                        titleInput.value = titleText;
+                        titleInput.style.borderColor = '#4caf50';
+                        titleInput.title = 'Aus Template übernommen – bei Bedarf ändern';
+                        setTimeout(() => { titleInput.style.borderColor = ''; }, 2000);
+                    } else {
+                        titleInput.value = '';
+                        titleInput.placeholder = titleText ? 'Aktuell: "' + titleText + '" (leer/generisch)' : 'z.B. Markenname oder Betreffzeile (optional)';
+                    }
+                }
             };
             
             reader.onerror = () => {
@@ -2498,11 +2725,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const htmlContent = selectedHtml;
 
             // Processor erstellen und ausführen
+            const titleTextInput = document.getElementById('titleText');
             const processor = new TemplateProcessor(
                 htmlContent,
                 getChecklistType(),
                 preheaderText.value,
-                removeFonts.checked
+                removeFonts.checked,
+                titleTextInput ? titleTextInput.value.trim() : ''
             );
 
             processingResult = processor.process();
