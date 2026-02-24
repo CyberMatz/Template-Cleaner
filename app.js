@@ -1623,10 +1623,25 @@ class TemplateProcessor {
             const gradientMatch = rules.match(/background\s*:\s*linear-gradient\s*\([^)]*?(#[a-fA-F0-9]{3,6})/i);
             const simpleBgMatch = rules.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
             const bgColor = gradientMatch ? gradientMatch[1] : (simpleBgMatch ? simpleBgMatch[1] : null);
-            if (bgColor) bgClassesP[className] = bgColor;
+            if (bgColor) {
+                // Auch font-size, padding, line-height etc. aus CSS-Klasse parsen
+                const cssFontSize = (rules.match(/font-size\s*:\s*(\d+)/i) || [])[1];
+                const cssPadding = (rules.match(/padding\s*:\s*(\d+)/i) || [])[1];
+                const cssLineHeight = (rules.match(/line-height\s*:\s*([\d.]+)/i) || [])[1];
+                const cssFontWeight = (rules.match(/font-weight\s*:\s*(\w+)/i) || [])[1];
+                bgClassesP[className] = {
+                    bgColor: bgColor,
+                    fontSize: cssFontSize ? parseInt(cssFontSize) : null,
+                    padding: cssPadding ? parseInt(cssPadding) : null,
+                    lineHeight: cssLineHeight ? parseFloat(cssLineHeight) : null,
+                    fontWeight: cssFontWeight || null,
+                    hasGradient: !!gradientMatch
+                };
+            }
         }
         
-        for (const [className, bgColor] of Object.entries(bgClassesP)) {
+        for (const [className, cssInfo] of Object.entries(bgClassesP)) {
+            const bgColor = cssInfo.bgColor;
             const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             
             // <td> mit dieser Klasse
@@ -1654,7 +1669,8 @@ class TemplateProcessor {
                     href: linkMatch[1],
                     linkText: linkText,
                     bgColor: bgColor,
-                    cssClass: className
+                    cssClass: className,
+                    cssProps: cssInfo
                 });
             }
             
@@ -1697,7 +1713,8 @@ class TemplateProcessor {
                     href: hrefM[1],
                     linkText: linkText,
                     bgColor: bgColor,
-                    cssClass: className
+                    cssClass: className,
+                    cssProps: cssInfo
                 });
             }
         }
@@ -1769,21 +1786,29 @@ class TemplateProcessor {
             }
             
             // Höhe aus padding berechnen
+            // Bei CSS-Klassen-Buttons: CSS-Werte haben Vorrang über inline (da inline oft Fallback)
+            const cssP = cta.cssProps || {};
             const padTopMatch = combinedStyle.match(/padding-top\s*:\s*(\d+)/i);
             const padBotMatch = combinedStyle.match(/padding-bottom\s*:\s*(\d+)/i);
             const padGenMatch = combinedStyle.match(/padding\s*:\s*(\d+)/i);
-            const padTop = padTopMatch ? parseInt(padTopMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
-            const padBot = padBotMatch ? parseInt(padBotMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            let padTop = padTopMatch ? parseInt(padTopMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            let padBot = padBotMatch ? parseInt(padBotMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
+            // CSS-Klasse hat größeres Padding? → verwenden (z.B. CSS padding:20px vs inline padding:10px)
+            if (cssP.padding && cssP.padding > padTop) {
+                padTop = cssP.padding;
+                padBot = cssP.padding;
+            }
             props.height = padTop + padBot + 20;
             
             const radiusMatch = combinedStyle.match(/border-radius\s*:\s*(\d+)/i);
             props.borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
             
-            const fontSizeMatch = combinedStyle.match(/font-size\s*:\s*(\d+)/i);
-            props.fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
+            // font-size: CSS-Klasse hat Vorrang (oft größer/korrekter als inline)
+            const inlineFontSize = combinedStyle.match(/font-size\s*:\s*(\d+)/i);
+            props.fontSize = cssP.fontSize || (inlineFontSize ? parseInt(inlineFontSize[1]) : 16);
             
             props.fontFamily = 'Arial';
-            props.fontWeight = cta.fullMatch.match(/<b\b|<strong\b|font-weight\s*:\s*bold/i) ? 'bold' : 'normal';
+            props.fontWeight = cssP.fontWeight || (cta.fullMatch.match(/<b\b|<strong\b|font-weight\s*:\s*bold/i) ? 'bold' : 'normal');
             
         } else {
             // Inline <a>-Button (original Logik)
@@ -1835,7 +1860,7 @@ class TemplateProcessor {
         // Mindesthöhe
         if (height < 36) height = 36;
         
-        const arcsize = props.borderRadius > 0 ? Math.round((props.borderRadius / Math.min(props.width, height)) * 100) + '%' : '0%';
+        const arcsize = props.borderRadius > 0 ? Math.min(50, Math.round((props.borderRadius / Math.min(props.width, height)) * 100)) + '%' : '0%';
         
         let vml = '<!--[if mso]>\n';
         vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
@@ -9700,7 +9725,7 @@ td[width] { width: auto !important; }
         }
         
         // Generiere neuen VML-Block
-        const arcsize = btnData.borderRadius > 0 ? Math.round((btnData.borderRadius / Math.min(btnData.width, btnData.height)) * 100) + '%' : '0%';
+        const arcsize = btnData.borderRadius > 0 ? Math.min(50, Math.round((btnData.borderRadius / Math.min(btnData.width, btnData.height)) * 100)) + '%' : '0%';
         
         let vml = '<!--[if mso]>\n';
         vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
