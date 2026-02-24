@@ -1538,12 +1538,12 @@ class TemplateProcessor {
         let match;
         
         // Typ A: <a> mit background-color im eigenen style
-        const typeA = /<a\b[^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+        const typeA = /<a\b[^>]*style\s*=\s*"[^"]*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"]*"[^>]*>[\s\S]*?<\/a>/gi;
         while ((match = typeA.exec(this.html)) !== null) {
-            const style = (match[0].match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const style = this._extractStyleValue(match[0]);
             const styleLower = style.toLowerCase();
             if (/background(?:-color)?\s*:/.test(styleLower) && (/padding/.test(styleLower) || /display\s*:\s*(block|inline-block)/.test(styleLower))) {
-                const href = (match[0].match(/href\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                const href = (match[0].match(/href\s*=\s*"([^"]*)"/i) || match[0].match(/href\s*=\s*'([^']*)'/i) || [])[1] || '';
                 buttons.push({
                     type: 'inline',
                     index: match.index,
@@ -1556,15 +1556,15 @@ class TemplateProcessor {
         
         // Typ B: <td> mit bgcolor-Attribut ODER background-color im style, text-align:center, enthält <a>
         // Robustes Matching: Finde <td mit bgcolor, dann vorwärts zum nächsten </td>
-        const typeBOpen = /<td\b([^>]*(?:bgcolor\s*=\s*["'][^"']*["']|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*)>/gi;
+        const typeBOpen = /<td\b([^>]*(?:bgcolor\s*=\s*"[^"]*"|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*)>/gi;
         while ((match = typeBOpen.exec(this.html)) !== null) {
             const tdAttrs = match[1];
             const tdOpenEnd = match.index + match[0].length;
             
             // Hat bgcolor-Attribut?
-            const bgcolorAttr = tdAttrs.match(/bgcolor\s*=\s*["']([^"']*)["']/i);
+            const bgcolorAttr = tdAttrs.match(/bgcolor\s*=\s*"([^"]*)"/i) || tdAttrs.match(/bgcolor\s*=\s*'([^']*)'/i);
             // Hat background-color im style?
-            const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const tdStyle = this._extractStyleValue('<td ' + tdAttrs + '>');
             const bgInStyle = tdStyle.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
             
             if (!bgcolorAttr && !bgInStyle) continue;
@@ -1668,11 +1668,32 @@ class TemplateProcessor {
                 const alreadyCaptured = buttons.some(b => Math.abs(b.index - match.index) < 50);
                 if (alreadyCaptured) continue;
                 
+                // Finde parent Container (<span> oder <td>) für korrekte VML-Positionierung
+                // Damit VML + !mso-Wrapper AUSSEN um den Button liegen, nicht drinnen
+                let containerIndex = match.index;
+                let containerEndIndex = match.index + match[0].length;
+                const beforeA = this.html.substring(Math.max(0, match.index - 500), match.index);
+                
+                // Suche rückwärts nach umschließendem <span class="...cssClass...">
+                const spanPattern = new RegExp('<span\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'][^>]*>', 'gi');
+                const spanMatches = [...beforeA.matchAll(spanPattern)];
+                if (spanMatches.length > 0) {
+                    const lastSpan = spanMatches[spanMatches.length - 1];
+                    const spanAbsPos = Math.max(0, match.index - 500) + lastSpan.index;
+                    // Finde das zugehörige </span> nach dem </a>
+                    const spanCloseIdx = this.html.indexOf('</span>', match.index + match[0].length);
+                    if (spanCloseIdx > -1) {
+                        containerIndex = spanAbsPos;
+                        containerEndIndex = spanCloseIdx + 7; // '</span>'.length
+                    }
+                }
+                
                 buttons.push({
                     type: 'css-class',
                     index: match.index,
-                    endIndex: match.index + match[0].length,
-                    fullMatch: match[0],
+                    endIndex: containerEndIndex,
+                    containerIndex: containerIndex,
+                    fullMatch: this.html.substring(containerIndex, containerEndIndex),
                     href: hrefM[1],
                     linkText: linkText,
                     bgColor: bgColor,
@@ -1684,6 +1705,20 @@ class TemplateProcessor {
         // Sortiere nach Position
         buttons.sort((a, b) => a.index - b.index);
         return buttons;
+    }
+    
+    // Hilfsfunktion: Style-Attribut robust extrahieren
+    // Löst das Problem: style="...font-family:Arial,'helvetica neue'..." 
+    // wo [^"'] beim ersten Apostroph abbricht
+    _extractStyleValue(tag) {
+        if (!tag) return '';
+        // Versuche zuerst Double-Quote: style="..."
+        const dqMatch = tag.match(/style\s*=\s*"([^"]*)"/i);
+        if (dqMatch) return dqMatch[1];
+        // Dann Single-Quote: style='...'
+        const sqMatch = tag.match(/style\s*=\s*'([^']*)'/i);
+        if (sqMatch) return sqMatch[1];
+        return '';
     }
     
     // Hilfsfunktion: Button-Eigenschaften aus CTA-Objekt extrahieren
@@ -1701,14 +1736,16 @@ class TemplateProcessor {
             bg = bg.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
             props.bgColor = bg;
             
-            // Text-Color aus dem <a> style
-            const linkStyle = (cta.fullMatch.match(/<a[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            // Text-Color aus dem <a> style (robuste Extraktion)
+            const aTag = (cta.fullMatch.match(/<a\b[^>]*>/is) || [''])[0];
+            const linkStyle = this._extractStyleValue(aTag);
             const colorMatch = linkStyle.match(/color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
             props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
             props.textColor = props.textColor.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
             
-            // Dimensions aus td style (falls td vorhanden)
-            const tdStyle = cta.tdMatch ? ((cta.tdMatch.match(/<td[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '') : '';
+            // Dimensions aus td style (falls td vorhanden) + link style
+            const tdTag = cta.tdMatch ? (cta.tdMatch.match(/<td\b[^>]*>/is) || [''])[0] : '';
+            const tdStyle = this._extractStyleValue(tdTag);
             const combinedStyle = tdStyle + ';' + linkStyle;
             
             const tdWidthPx = combinedStyle.match(/width\s*:\s*(\d+)px/i);
@@ -1718,9 +1755,9 @@ class TemplateProcessor {
             } else if (maxWidthPx) {
                 props.width = parseInt(maxWidthPx[1]);
             } else {
-                // Suche parent <table width="NNN"> rückwärts (nur Pixel-Werte)
+                // Suche parent <table width="NNN"> rückwärts (nur Pixel-Werte, kein %)
                 const beforeTd = this.html.substring(Math.max(0, cta.index - 1500), cta.index);
-                const allTW = [...beforeTd.matchAll(/<table[^>]*(?:width\s*=\s*["']?(\d+)|max-width\s*:\s*(\d+))/gi)];
+                const allTW = [...beforeTd.matchAll(/<table[^>]*(?:width\s*=\s*["']?(\d+%?)|max-width\s*:\s*(\d+))/gi)];
                 props.width = 250;
                 for (let tw = allTW.length - 1; tw >= 0; tw--) {
                     const val = allTW[tw][1] || allTW[tw][2];
@@ -1755,7 +1792,8 @@ class TemplateProcessor {
             props.text = (html.match(/>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/i) || [])[1] || 'Button';
             props.text = props.text.replace(/<[^>]*>/g, '').trim();
             
-            const style = (html.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const aTag = (html.match(/<a\b[^>]*>/is) || [''])[0];
+            const style = this._extractStyleValue(aTag);
             
             const bgMatch = style.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
             props.bgColor = bgMatch ? '#' + bgMatch[1] : '#333333';
@@ -1779,12 +1817,30 @@ class TemplateProcessor {
     
     // Hilfsfunktion: VML-Button generieren
     _generateVmlButton(props) {
-        const arcsize = props.borderRadius > 0 ? Math.round((props.borderRadius / Math.min(props.width, props.height)) * 100) + '%' : '0%';
+        // Höhe intelligent berechnen wenn Text lang ist
+        let height = props.height;
+        if (props.text && props.width && props.fontSize) {
+            // Schätze Zeichenbreite: ~0.6 × fontSize für Durchschnittsbuchstaben
+            const charWidth = props.fontSize * 0.6;
+            const availWidth = props.width - 40; // Padding abziehen
+            const charsPerLine = Math.max(1, Math.floor(availWidth / charWidth));
+            const cleanText = props.text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '');
+            const estimatedLines = Math.ceil(cleanText.length / charsPerLine);
+            const lineHeight = props.fontSize * 1.3;
+            const minHeight = Math.ceil(estimatedLines * lineHeight + 20); // +20 für VML-Padding
+            if (minHeight > height) {
+                height = minHeight;
+            }
+        }
+        // Mindesthöhe
+        if (height < 36) height = 36;
+        
+        const arcsize = props.borderRadius > 0 ? Math.round((props.borderRadius / Math.min(props.width, height)) * 100) + '%' : '0%';
         
         let vml = '<!--[if mso]>\n';
         vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
         vml += 'href="' + props.href + '" ';
-        vml += 'style="height:' + props.height + 'px;v-text-anchor:middle;width:' + props.width + 'px;" ';
+        vml += 'style="height:' + height + 'px;v-text-anchor:middle;width:' + props.width + 'px;" ';
         vml += 'arcsize="' + arcsize + '" ';
         vml += 'strokecolor="' + props.bgColor + '" ';
         vml += 'fillcolor="' + props.bgColor + '">\n';
@@ -2706,7 +2762,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
         
         // Zähle Preheader Divs mit display:none
-        const preheaderDivRegex = /<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/gi;
+        const preheaderDivRegex = /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi;
         const preheaderDivMatches = assetReviewStagedHtml.match(preheaderDivRegex) || [];
         const preheaderDivCount = preheaderDivMatches.length;
         
@@ -3238,7 +3294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Prüfe ob direkt nach <body> ein Preheader-Block existiert
         const afterBody = assetReviewStagedHtml.substring(bodyEndPos);
-        const preheaderRegex = /^\s*<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/i;
+        const preheaderRegex = /^\s*<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/i;
         const preheaderMatch = afterBody.match(preheaderRegex);
         
         let insertPosition = bodyEndPos;
@@ -3711,7 +3767,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Zähle Preheader
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
-        const preheaderDivRegex = /<div[^>]*style=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>.*?<\/div>/gi;
+        const preheaderDivRegex = /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi;
         const preheaderDivCount = (assetReviewStagedHtml.match(preheaderDivRegex) || []).length;
         const totalPreheader = preheaderPlaceholderCount + preheaderDivCount;
         
@@ -4394,8 +4450,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             case 'strip-a-button-styles':
                 // Outlook ignoriert padding, background-color und display auf <a>-Tags
-                return html.replace(/<a\s[^>]*style\s*=\s*["'][^"']*["'][^>]*>/gi, function(match) {
-                    return match.replace(/style\s*=\s*["']([^"']*)["']/i, function(styleMatch, styleContent) {
+                return html.replace(/<a\s[^>]*style\s*=\s*"[^"]*"[^>]*>/gi, function(match) {
+                    return match.replace(/style\s*=\s*"([^"]*)"/i, function(styleMatch, styleContent) {
                         let cleaned = styleContent
                             .replace(/padding(?:-(?:top|right|bottom|left))?\s*:\s*[^;]+;?/gi, '')
                             .replace(/background(?:-color)?\s*:\s*[^;]+;?/gi, '')
@@ -7001,14 +7057,14 @@ td[width] { width: auto !important; }
                     }
                     // Style: width auf 100% setzen
                     if (/style\s*=\s*["']/i.test(newImgTag)) {
-                        let styleMatch = newImgTag.match(/style\s*=\s*["']([^"']*)["']/i);
+                        let styleMatch = newImgTag.match(/style\s*=\s*["']([^"]*)["']/i);
                         if (styleMatch) {
                             let style = styleMatch[1];
                             style = style.replace(/\s*width\s*:\s*[^;]+;?/gi, '');
                             style = style.replace(/\s*max-width\s*:\s*[^;]+;?/gi, '');
                             style = style.replace(/;?\s*$/, '');
                             style = style ? style + '; width: 100%;' : 'width: 100%;';
-                            newImgTag = newImgTag.replace(/style\s*=\s*["'][^"']*["']/i, 'style="' + style + '"');
+                            newImgTag = newImgTag.replace(/style\s*=\s*["'][^"]*["']/i, 'style="' + style + '"');
                         }
                     }
                 } else {
@@ -7022,14 +7078,14 @@ td[width] { width: auto !important; }
                     }
                     // Style: width + max-width: 100% für Mobile-Sicherheit
                     if (/style\s*=\s*["']/i.test(newImgTag)) {
-                        let styleMatch = newImgTag.match(/style\s*=\s*["']([^"']*)["']/i);
+                        let styleMatch = newImgTag.match(/style\s*=\s*["']([^"]*)["']/i);
                         if (styleMatch) {
                             let style = styleMatch[1];
                             style = style.replace(/\s*width\s*:\s*[^;]+;?/gi, '');
                             style = style.replace(/\s*max-width\s*:\s*[^;]+;?/gi, '');
                             style = style.replace(/;?\s*$/, '');
                             style = style ? style + '; width: ' + pxVal + 'px; max-width: 100%;' : 'width: ' + pxVal + 'px; max-width: 100%;';
-                            newImgTag = newImgTag.replace(/style\s*=\s*["'][^"']*["']/i, 'style="' + style + '"');
+                            newImgTag = newImgTag.replace(/style\s*=\s*["'][^"]*["']/i, 'style="' + style + '"');
                         }
                     } else {
                         // Kein style-Attribut vorhanden – hinzufügen
@@ -7121,7 +7177,7 @@ td[width] { width: auto !important; }
         
         // 2. text-align im style setzen/ersetzen
         if (/style\s*=\s*["']/i.test(newParentTag)) {
-            let styleMatch = newParentTag.match(/style\s*=\s*["']([^"']*)["']/i);
+            let styleMatch = newParentTag.match(/style\s*=\s*["']([^"]*)["']/i);
             if (styleMatch) {
                 let style = styleMatch[1];
                 if (/text-align\s*:/i.test(style)) {
@@ -7130,7 +7186,7 @@ td[width] { width: auto !important; }
                     style = style.replace(/;?\s*$/, '');
                     style = style ? style + '; text-align: ' + newAlign + ';' : 'text-align: ' + newAlign + ';';
                 }
-                newParentTag = newParentTag.replace(/style\s*=\s*["'][^"']*["']/i, 'style="' + style + '"');
+                newParentTag = newParentTag.replace(/style\s*=\s*["'][^"]*["']/i, 'style="' + style + '"');
             }
         } else {
             // Kein style vorhanden – hinzufügen
@@ -7189,7 +7245,7 @@ td[width] { width: auto !important; }
         
         while ((parentMatch = parentTagRegex.exec(beforeImg)) !== null) {
             const attrs = parentMatch[2];
-            const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+            const styleMatch = attrs.match(/style\s*=\s*["']([^"]*)["']/i);
             if (styleMatch && /padding/i.test(styleMatch[1])) {
                 targetParent = {
                     fullTag: parentMatch[0],
@@ -7230,7 +7286,7 @@ td[width] { width: auto !important; }
         
         // Ersetze den Style im Parent-Tag
         let newParentTag = targetParent.fullTag.replace(
-            /style\s*=\s*["'][^"']*["']/i,
+            /style\s*=\s*["'][^"]*["']/i,
             'style="' + newStyle + '"'
         );
         
@@ -8661,6 +8717,16 @@ td[width] { width: auto !important; }
             return hex.toLowerCase();
         }
         
+        // Helper: Style-Attribut robust extrahieren (bricht nicht bei font-family:'...' ab)
+        function extractStyle(tag) {
+            if (!tag) return '';
+            const dq = tag.match(/style\s*=\s*"([^"]*)"/i);
+            if (dq) return dq[1];
+            const sq = tag.match(/style\s*=\s*'([^']*)'/i);
+            if (sq) return sq[1];
+            return '';
+        }
+        
         // Helper: VML-Status prüfen
         function checkVmlStatus(ctaPos, href, text) {
             let hasVml = false;
@@ -8680,7 +8746,7 @@ td[width] { width: auto !important; }
         // Helper: Prüfe ob ein <a>-Tag ein background-image hat (inline oder per CSS-Klasse)
         function checkBackgroundImage(aTag) {
             // 1. Inline-Style prüfen
-            const inlineStyle = (aTag.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const inlineStyle = (aTag.match(/style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
             if (/background-image\s*:/i.test(inlineStyle)) {
                 const urlMatch = inlineStyle.match(/background-image\s*:\s*url\s*\(\s*["']?([^"')]+)["']?\s*\)/i);
                 return { has: true, source: 'inline', url: urlMatch ? urlMatch[1] : '' };
@@ -8712,7 +8778,7 @@ td[width] { width: auto !important; }
         }
         
         // === TYP A: <a> mit background-color im eigenen style ===
-        const typeARegex = /<a\b([^>]*style\s*=\s*["'][^"']*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi;
+        const typeARegex = /<a\b([^>]*style\s*=\s*["'][^"]*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"]*["'][^>]*)>([\s\S]*?)<\/a>/gi;
         let match;
         const typeAPositions = [];
         
@@ -8721,7 +8787,7 @@ td[width] { width: auto !important; }
             const attrs = match[1];
             const inner = match[2];
             
-            const styleMatch = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+            const styleMatch = attrs.match(/style\s*=\s*["']([^"]*)["']/i);
             if (!styleMatch) continue;
             const style = styleMatch[1].toLowerCase();
             
@@ -8769,7 +8835,7 @@ td[width] { width: auto !important; }
             
             // Hat bgcolor oder background-color?
             const bgcolorAttr = tdAttrs.match(/bgcolor\s*=\s*["']([^"']*)["']/i);
-            const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
             const bgInStyle = tdStyle.match(/background(?:-color)?\s*:\s*#?([a-fA-F0-9]{3,6})/i);
             
             if (!bgcolorAttr && !bgInStyle) continue;
@@ -8806,7 +8872,7 @@ td[width] { width: auto !important; }
             let bgColor = normalizeHex(bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? bgInStyle[1] : '333333'));
             
             // Text-Color aus dem <a> style
-            const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
             const tcMatch = linkStyleStr.match(/color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
             const textColor = normalizeHex(tcMatch ? tcMatch[1] : '05141f');
             
@@ -8937,8 +9003,8 @@ td[width] { width: auto !important; }
                 const id = 'B' + String(btnIndex).padStart(3, '0');
                 
                 const tdAttrs = tdMatch[1];
-                const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
-                const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
+                const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
                 
                 // Farben: Aus CSS-Klasse oder Inline
                 const bgColor = normalizeHex(cssInfo.bgColor);
@@ -9006,7 +9072,7 @@ td[width] { width: auto !important; }
                 btnIndex++;
                 const id = 'B' + String(btnIndex).padStart(3, '0');
                 
-                const aStyle = (attrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                const aStyle = (attrs.match(/style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
                 const bgColor = normalizeHex(cssInfo.bgColor);
                 const tcInline = aStyle.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
                 const textColor = normalizeHex(tcInline ? tcInline[1] : (cssInfo.textColor || 'ffffff'));
@@ -9344,15 +9410,15 @@ td[width] { width: auto !important; }
             
             // 3. Schriftfarbe im <a> style ändern
             newBtnHtml = newBtnHtml.replace(
-                /(<a\b[^>]*style\s*=\s*["'][^"']*)(color\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                /(<a\b[^>]*style\s*=\s*["'][^"]*)(color\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
                 '$1$2' + newTextColor
             );
             
             // 3b. Background-Color im <a> style ändern (falls vorhanden – überschreibt sonst die td-Farbe)
-            const aTagMatch = newBtnHtml.match(/<a\b[^>]*style\s*=\s*["']([^"']*)["']/i);
+            const aTagMatch = newBtnHtml.match(/<a\b[^>]*style\s*=\s*["']([^"]*)["']/i);
             if (aTagMatch && /background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}/i.test(aTagMatch[1])) {
                 newBtnHtml = newBtnHtml.replace(
-                    /(<a\b[^>]*style\s*=\s*["'][^"']*)(background(?:-color)?\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
+                    /(<a\b[^>]*style\s*=\s*["'][^"]*)(background(?:-color)?\s*:\s*)#?[a-fA-F0-9]{3,6}/i,
                     '$1$2' + newBgColor
                 );
             }
