@@ -2275,10 +2275,10 @@ document.addEventListener('DOMContentLoaded', () => {
     resetBtn.innerHTML = '🔄 Neues Template';
     resetBtn.title = 'Alles zurücksetzen und neues Template laden';
     resetBtn.style.display = 'none';
-    // Einfügen neben processBtn
-    const controlActions = processBtn.parentElement;
-    if (controlActions) {
-        controlActions.appendChild(resetBtn);
+    // Einfügen neben Upload-Button
+    const uploadBtnEl = document.getElementById('uploadBtn');
+    if (uploadBtnEl && uploadBtnEl.parentElement) {
+        uploadBtnEl.parentElement.appendChild(resetBtn);
     }
     
     // Reset-Funktion: Setzt alles sauber auf Anfangszustand zurück
