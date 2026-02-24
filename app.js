@@ -8986,11 +8986,19 @@ td[width] { width: auto !important; }
             const textColorMatch = rules.match(/(?:^|;)\s*color\s*:\s*(#[a-fA-F0-9]{3,6})/i);
             
             if (bgColor) {
+                const cssFontSize = (rules.match(/font-size\s*:\s*(\d+)/i) || [])[1];
+                const cssPadding = (rules.match(/padding\s*:\s*(\d+)/i) || [])[1];
+                const cssLineHeight = (rules.match(/line-height\s*:\s*([\d.]+)/i) || [])[1];
+                const cssFontWeight = (rules.match(/font-weight\s*:\s*(\w+)/i) || [])[1];
                 bgClasses[className] = {
                     bgColor: bgColor,
                     textColor: textColorMatch ? textColorMatch[1] : null,
                     hasGradient: !!gradientMatch,
-                    rules: rules.trim()
+                    rules: rules.trim(),
+                    fontSize: cssFontSize ? parseInt(cssFontSize) : null,
+                    padding: cssPadding ? parseInt(cssPadding) : null,
+                    lineHeight: cssLineHeight ? parseFloat(cssLineHeight) : null,
+                    fontWeight: cssFontWeight || null
                 };
             }
         }
@@ -9043,8 +9051,11 @@ td[width] { width: auto !important; }
                 // Dimensionen - aus td style + link style
                 const combinedStyle = tdStyle + ';' + linkStyleStr;
                 const padMatch = combinedStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)px\s+(\d+)px/i);
-                const padTop = padMatch ? parseInt(padMatch[1]) : parseInt((combinedStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)/i) || [])[1] || '12');
-                const fontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                let padTop = padMatch ? parseInt(padMatch[1]) : parseInt((combinedStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)/i) || [])[1] || '12');
+                // CSS-Klasse hat Vorrang wenn größer
+                if (cssInfo.padding && cssInfo.padding > padTop) padTop = cssInfo.padding;
+                const inlineFontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                const fontSize = cssInfo.fontSize && cssInfo.fontSize > inlineFontSize ? cssInfo.fontSize : inlineFontSize;
                 let height = padTop * 2 + 20;
                 
                 // Mindesthöhe basierend auf Textlänge
@@ -9138,11 +9149,14 @@ td[width] { width: auto !important; }
                     }
                 }
                 
-                // Height: Aus padding berechnen, aber Mindesthöhe für Text berücksichtigen
-                const fontSize = parseInt((aStyle.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
-                // padding:10px 0px → nur echtes padding matchen, nicht mso-padding-alt
+                // fontSize: CSS-Klasse hat Vorrang (oft größer/korrekter als inline)
+                const inlineFontSize = parseInt((aStyle.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                const fontSize = cssInfo.fontSize && cssInfo.fontSize > inlineFontSize ? cssInfo.fontSize : inlineFontSize;
+                
+                // padding: CSS-Klasse hat Vorrang wenn größer
                 const padExact = aStyle.match(/(?:^|;)\s*padding\s*:\s*(\d+)/i);
-                const padTop = padExact ? parseInt(padExact[1]) : 10;
+                let padTop = padExact ? parseInt(padExact[1]) : 10;
+                if (cssInfo.padding && cssInfo.padding > padTop) padTop = cssInfo.padding;
                 let height = padTop * 2 + 20;
                 
                 // Mindesthöhe basierend auf Textlänge berechnen
