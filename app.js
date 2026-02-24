@@ -26,6 +26,18 @@ class TemplateProcessor {
     // Phase A: Automatische Korrekturen
     phaseA_SafeFix() {
         // === PHASE A0: Sanitize (Struktur-Reparatur ZUERST) ===
+        
+        // Zeilenumbrüche normalisieren: \r\n → \n (Windows → Unix)
+        // Muss als allererster Schritt passieren, damit alle Regex-Patterns
+        // und Position-Berechnungen konsistent arbeiten
+        const crlfCount = (this.html.match(/\r\n/g) || []).length;
+        if (crlfCount > 0) {
+            this.html = this.html.replace(/\r\n/g, '\n');
+            // Auch einzelne \r entfernen (alte Mac-Zeilenumbrüche)
+            this.html = this.html.replace(/\r/g, '\n');
+            console.log('[SANITIZE] Zeilenumbrüche normalisiert: ' + crlfCount + '× \\r\\n → \\n');
+        }
+        
         // P01: DOCTYPE
         this.checkDoctype();
 
@@ -1117,23 +1129,48 @@ class TemplateProcessor {
             return;
         }
         
-        // Prüfe ob bereits Responsive-Regeln für TABELLEN-BREITEN existieren
-        // (nicht nur irgendwelche Media Queries – z.B. Footer-Mobile-Styles zählen nicht)
-        const allMediaBlocks = this.html.match(/@media[^{]*max-width[^{]*\{[\s\S]*?\}\s*\}/gi) || [];
-        const hasTableResponsiveRules = allMediaBlocks.some(mq => {
-            // Suche nach echten Tabellen-Selektoren (nicht .footer-table o.ä.)
-            // Matches: table[width=...], table { width, table, td { width
-            return /(?:^|[\s,{;])table\s*[\[{,]/im.test(mq) && /width/i.test(mq);
-        });
+        // Sammle alle @media-Blöcke im Template
+        const allMediaBlocks = this.html.match(/@media[^{]*\{[\s\S]*?\}\s*\}/gi) || [];
         
-        // Prüfe ob EIGENE Media Queries vom Kunden vorhanden sind
-        // (wir erkennen unsere eigenen hinzugefügten Footer-Styles anhand des Selektors)
-        const hasCustomerMediaQueries = allMediaBlocks.some(mq => 
-            !/(\.footer-table|Footer Mobile)/i.test(mq)
+        // Filtere unsere eigenen hinzugefügten Styles heraus (Footer-Mobile etc.)
+        const customerMediaBlocks = allMediaBlocks.filter(mq => 
+            !/(\.footer-table|Footer Mobile|footer-mobile)/i.test(mq)
         );
         
-        if (!hasTableResponsiveRules) {
-            // Keine Tabellen-Responsive-Regeln - hinzufügen
+        // Prüfe ob der Kunde bereits substanzielle Responsive-Regeln hat
+        // "substanziell" = enthält width-bezogene Regeln für Layout-Elemente
+        const hasCustomerResponsiveRules = customerMediaBlocks.some(mq => {
+            // Prüfe ob der Block width-Regeln enthält (width, max-width, min-width)
+            const hasWidthRules = /width\s*:/i.test(mq);
+            // Prüfe ob er Layout-relevante Selektoren hat (nicht nur Schriftgrößen etc.)
+            const hasLayoutSelectors = /(?:table|td|div|\.container|\.wrapper|\.content|\.row|\.col|img)/i.test(mq);
+            return hasWidthRules && hasLayoutSelectors;
+        });
+        
+        // Zähle: Wie viele Layout-relevante Regeln hat der Kunde?
+        const customerRuleCount = customerMediaBlocks.reduce((count, mq) => {
+            const rules = mq.match(/[{;]\s*[^{}]+\s*:\s*[^;{}]+/gi) || [];
+            return count + rules.length;
+        }, 0);
+        
+        console.log('[RESPONSIVE] Kunden-Media-Blocks:', customerMediaBlocks.length, 
+                    '| Regeln:', customerRuleCount, 
+                    '| Hat Layout-Responsive:', hasCustomerResponsiveRules);
+        
+        if (hasCustomerResponsiveRules && customerRuleCount >= 3) {
+            // Kunde hat bereits umfangreiche Responsive-Regeln → NICHT überschreiben
+            // Prüfe nur ob grundlegende Dinge abgedeckt sind
+            const allCustomerCss = customerMediaBlocks.join(' ');
+            const hasImgResponsive = /img[^}]*(max-width|width)/i.test(allCustomerCss);
+            const hasTableOrContainerResponsive = /(table|\.container|\.wrapper)[^}]*width/i.test(allCustomerCss);
+            
+            if (hasImgResponsive && hasTableOrContainerResponsive) {
+                this.addCheck(id, 'PASS', 'Mobile Responsiveness vorhanden (Kunden-Styles mit ' + customerRuleCount + ' Regeln erkannt)');
+            } else {
+                this.addCheck(id, 'PASS', 'Kunden-Responsive-Styles erkannt (' + customerMediaBlocks.length + ' Media-Blöcke, ' + customerRuleCount + ' Regeln) – keine eigenen Styles hinzugefügt');
+            }
+        } else {
+            // Keine oder nur minimale Kunden-Responsive-Regeln → unsere einfügen
             const headCloseMatch = this.html.match(/<\/head>/i);
             if (headCloseMatch) {
                 const insertPos = this.html.indexOf(headCloseMatch[0]);
@@ -1157,18 +1194,6 @@ class TemplateProcessor {
                 this.addCheck(id, 'FIXED', `Mobile-Responsive Styles hinzugefügt (${widthInfo})`);
             } else {
                 this.addCheck(id, 'WARN', 'Head-Tag nicht gefunden, Mobile-Responsive Styles nicht hinzugefügt');
-            }
-        } else {
-            // Media Queries vorhanden - prüfe auf grundlegende Mobile-Optimierung
-            const hasImgResponsive = /@media[^{]*\{[^}]*img[^}]*(max-width|width)/i.test(this.html);
-            const hasTableResponsive = /@media[^{]*\{[^}]*table[^}]*width/i.test(this.html);
-            
-            if (hasImgResponsive && hasTableResponsive) {
-                this.addCheck(id, 'PASS', 'Mobile Responsiveness korrekt (Media Queries mit Bild- und Tabellen-Regeln)');
-            } else if (hasImgResponsive || hasTableResponsive) {
-                this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber möglicherweise unvollständig (Bilder oder Tabellen nicht abgedeckt)');
-            } else {
-                this.addCheck(id, 'WARN', 'Media Queries vorhanden, aber keine Responsive-Regeln für Bilder/Tabellen erkannt');
             }
         }
     }
@@ -1397,7 +1422,7 @@ class TemplateProcessor {
             }
             
             // Typ B (table mit bgcolor): Outlook versteht bgcolor nativ → KEIN VML nötig
-            // VML wird nur für Typ A (inline CSS background) generiert
+            // CSS-class Buttons: Outlook versteht KEIN linear-gradient → VML nötig
             if (cta.type === 'table' && !hasVml) {
                 ctasSkippedTable++;
                 continue;
@@ -1584,6 +1609,78 @@ class TemplateProcessor {
             });
         }
         
+        // Typ C: CSS-Klassen-basierte Buttons
+        // <td class="blue-cta"> oder <a class="red-banner"> mit background in <style>
+        const styleBlocks = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
+        const allCssP = styleBlocks.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');
+        const cssWithoutMediaP = allCssP.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
+        const bgClassRegexP = /\.([a-zA-Z][\w-]*)\s*\{([^}]*(?:background(?:-color)?)\s*:[^}]*)\}/gi;
+        const bgClassesP = {};
+        let cssMatchP;
+        while ((cssMatchP = bgClassRegexP.exec(cssWithoutMediaP)) !== null) {
+            const className = cssMatchP[1];
+            const rules = cssMatchP[2];
+            const gradientMatch = rules.match(/background\s*:\s*linear-gradient\s*\([^)]*?(#[a-fA-F0-9]{3,6})/i);
+            const simpleBgMatch = rules.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+            const bgColor = gradientMatch ? gradientMatch[1] : (simpleBgMatch ? simpleBgMatch[1] : null);
+            if (bgColor) bgClassesP[className] = bgColor;
+        }
+        
+        for (const [className, bgColor] of Object.entries(bgClassesP)) {
+            const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            // <td> mit dieser Klasse
+            const tdCRegex = new RegExp('<td\\b([^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'][^>]*)>', 'gi');
+            while ((match = tdCRegex.exec(this.html)) !== null) {
+                const tdOpenEnd = match.index + match[0].length;
+                const closingIdx = this.html.indexOf('</td>', tdOpenEnd);
+                if (closingIdx < 0) continue;
+                const tdInner = this.html.substring(tdOpenEnd, closingIdx);
+                const fullTdMatch = this.html.substring(match.index, closingIdx + 5);
+                const linkMatch = tdInner.match(/<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/i);
+                if (!linkMatch) continue;
+                const linkText = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+                if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+                const alreadyCaptured = buttons.some(b => Math.abs(b.index - match.index) < 50);
+                if (alreadyCaptured) continue;
+                
+                buttons.push({
+                    type: 'css-class',
+                    index: match.index,
+                    endIndex: match.index + fullTdMatch.length,
+                    containerIndex: match.index,
+                    fullMatch: fullTdMatch,
+                    tdMatch: fullTdMatch,
+                    href: linkMatch[1],
+                    linkText: linkText,
+                    bgColor: bgColor,
+                    cssClass: className
+                });
+            }
+            
+            // <a> mit dieser Klasse
+            const aCRegex = new RegExp('<a\\b([^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'][^>]*)>([\\s\\S]*?)<\\/a>', 'gi');
+            while ((match = aCRegex.exec(this.html)) !== null) {
+                const linkText = match[2].replace(/<[^>]*>/g, '').trim();
+                if (!linkText) continue;
+                const hrefM = match[1].match(/href\s*=\s*["']([^"']*)["']/i);
+                if (!hrefM) continue;
+                const alreadyCaptured = buttons.some(b => Math.abs(b.index - match.index) < 50);
+                if (alreadyCaptured) continue;
+                
+                buttons.push({
+                    type: 'css-class',
+                    index: match.index,
+                    endIndex: match.index + match[0].length,
+                    fullMatch: match[0],
+                    href: hrefM[1],
+                    linkText: linkText,
+                    bgColor: bgColor,
+                    cssClass: className
+                });
+            }
+        }
+        
         // Sortiere nach Position
         buttons.sort((a, b) => a.index - b.index);
         return buttons;
@@ -1593,12 +1690,12 @@ class TemplateProcessor {
     _extractButtonProperties(cta) {
         const props = {};
         
-        if (cta.type === 'table') {
-            // Tabellen-basierter Button
+        if (cta.type === 'table' || cta.type === 'css-class') {
+            // Tabellen-basierter oder CSS-Klassen-basierter Button
             props.href = cta.href || '';
             props.text = cta.linkText || 'Button';
             
-            // BG-Color von td bgcolor
+            // BG-Color
             let bg = cta.bgColor || '#333333';
             if (bg.indexOf('#') !== 0) bg = '#' + bg;
             bg = bg.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
@@ -1610,37 +1707,42 @@ class TemplateProcessor {
             props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
             props.textColor = props.textColor.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
             
-            // Dimensions aus td style
-            const tdStyle = (cta.tdMatch.match(/<td[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            // Dimensions aus td style (falls td vorhanden)
+            const tdStyle = cta.tdMatch ? ((cta.tdMatch.match(/<td[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '') : '';
+            const combinedStyle = tdStyle + ';' + linkStyle;
             
-            const tdWidthPx = tdStyle.match(/width\s*:\s*(\d+)px/i);
+            const tdWidthPx = combinedStyle.match(/width\s*:\s*(\d+)px/i);
+            const maxWidthPx = combinedStyle.match(/max-width\s*:\s*(\d+)px/i);
             if (tdWidthPx) {
                 props.width = parseInt(tdWidthPx[1]);
+            } else if (maxWidthPx) {
+                props.width = parseInt(maxWidthPx[1]);
             } else {
                 // Suche parent <table width="NNN"> rückwärts (nur Pixel-Werte)
                 const beforeTd = this.html.substring(Math.max(0, cta.index - 1500), cta.index);
-                const allTW = [...beforeTd.matchAll(/<table[^>]*width\s*=\s*["']?(\d+%?)/gi)];
+                const allTW = [...beforeTd.matchAll(/<table[^>]*(?:width\s*=\s*["']?(\d+)|max-width\s*:\s*(\d+))/gi)];
                 props.width = 250;
                 for (let tw = allTW.length - 1; tw >= 0; tw--) {
-                    if (!allTW[tw][1].includes('%')) {
-                        props.width = parseInt(allTW[tw][1]);
+                    const val = allTW[tw][1] || allTW[tw][2];
+                    if (val && !String(val).includes('%')) {
+                        props.width = parseInt(val);
                         break;
                     }
                 }
             }
             
             // Höhe aus padding berechnen
-            const padTopMatch = tdStyle.match(/padding-top\s*:\s*(\d+)/i);
-            const padBotMatch = tdStyle.match(/padding-bottom\s*:\s*(\d+)/i);
-            const padGenMatch = tdStyle.match(/padding\s*:\s*(\d+)/i);
+            const padTopMatch = combinedStyle.match(/padding-top\s*:\s*(\d+)/i);
+            const padBotMatch = combinedStyle.match(/padding-bottom\s*:\s*(\d+)/i);
+            const padGenMatch = combinedStyle.match(/padding\s*:\s*(\d+)/i);
             const padTop = padTopMatch ? parseInt(padTopMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
             const padBot = padBotMatch ? parseInt(padBotMatch[1]) : (padGenMatch ? parseInt(padGenMatch[1]) : 12);
             props.height = padTop + padBot + 20;
             
-            const radiusMatch = tdStyle.match(/border-radius\s*:\s*(\d+)/i);
+            const radiusMatch = combinedStyle.match(/border-radius\s*:\s*(\d+)/i);
             props.borderRadius = radiusMatch ? parseInt(radiusMatch[1]) : 0;
             
-            const fontSizeMatch = (linkStyle || tdStyle).match(/font-size\s*:\s*(\d+)/i);
+            const fontSizeMatch = combinedStyle.match(/font-size\s*:\s*(\d+)/i);
             props.fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
             
             props.fontFamily = 'Arial';
@@ -8701,6 +8803,182 @@ td[width] { width: auto !important; }
             });
         }
         
+        // === TYP C: CSS-Klassen-basierte Buttons ===
+        // Findet <td> oder <a> mit CSS-Klassen die background/gradient im <style>-Block definieren
+        // Typisch für moderne E-Mail-Builder (z.B. Stripo, Litmus, etc.)
+        
+        // 1. Alle <style>-Blöcke parsen
+        const styleBlocks = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
+        const allCss = styleBlocks.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');
+        
+        // 2. CSS-Klassen mit background finden (nicht innerhalb von @media)
+        // Entferne @media-Blöcke um nur Top-Level-Regeln zu prüfen
+        const cssWithoutMedia = allCss.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
+        const bgClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]*(?:background(?:-color)?)\s*:[^}]*)\}/gi;
+        const bgClasses = {};
+        let cssMatch;
+        while ((cssMatch = bgClassRegex.exec(cssWithoutMedia)) !== null) {
+            const className = cssMatch[1];
+            const rules = cssMatch[2];
+            
+            // Extrahiere Farbe aus background, background-color, oder linear-gradient
+            let bgColor = null;
+            
+            // linear-gradient: Nimm die erste Farbe als Hauptfarbe
+            const gradientMatch = rules.match(/background\s*:\s*linear-gradient\s*\([^)]*?(#[a-fA-F0-9]{3,6})/i);
+            if (gradientMatch) {
+                bgColor = gradientMatch[1];
+            }
+            
+            // Einfache background-color
+            if (!bgColor) {
+                const simpleBgMatch = rules.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+                if (simpleBgMatch) bgColor = simpleBgMatch[1];
+            }
+            
+            // Textfarbe
+            const textColorMatch = rules.match(/(?:^|;)\s*color\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+            
+            if (bgColor) {
+                bgClasses[className] = {
+                    bgColor: bgColor,
+                    textColor: textColorMatch ? textColorMatch[1] : null,
+                    hasGradient: !!gradientMatch,
+                    rules: rules.trim()
+                };
+            }
+        }
+        
+        if (Object.keys(bgClasses).length > 0) {
+            console.log('[BUTTONS] CSS-Klassen mit Background gefunden:', Object.keys(bgClasses).join(', '));
+        }
+        
+        // 3. Suche <td> und <a> mit diesen Klassen
+        for (const [className, cssInfo] of Object.entries(bgClasses)) {
+            // Suche <td class="...className..."> mit <a> drin
+            const escapedClass = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            // 3a. <td> mit dieser Klasse
+            const tdClassRegex = new RegExp('<td\\b([^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'][^>]*)>', 'gi');
+            let tdMatch;
+            while ((tdMatch = tdClassRegex.exec(html)) !== null) {
+                const tdOpenEnd = tdMatch.index + tdMatch[0].length;
+                const closingIdx = html.indexOf('</td>', tdOpenEnd);
+                if (closingIdx < 0) continue;
+                
+                const tdInner = html.substring(tdOpenEnd, closingIdx);
+                const fullTdMatch = html.substring(tdMatch.index, closingIdx + 5);
+                
+                // Enthält <a>-Link mit Text?
+                const linkMatch = tdInner.match(/<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/i);
+                if (!linkMatch) continue;
+                
+                const href = linkMatch[1];
+                const linkText = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+                if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+                
+                // Überspringe bereits erfasste
+                const linkPos = html.indexOf(linkMatch[0], tdMatch.index);
+                const alreadyCaptured = buttons.some(b => Math.abs(b.matchIndex - tdMatch.index) < 50);
+                if (alreadyCaptured) continue;
+                
+                btnIndex++;
+                const id = 'B' + String(btnIndex).padStart(3, '0');
+                
+                const tdAttrs = tdMatch[1];
+                const tdStyle = (tdAttrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                
+                // Farben: Aus CSS-Klasse oder Inline
+                const bgColor = normalizeHex(cssInfo.bgColor);
+                const tcInline = linkStyleStr.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+                const textColor = normalizeHex(tcInline ? tcInline[1] : (cssInfo.textColor || 'ffffff'));
+                
+                // Dimensionen
+                const padMatch = tdStyle.match(/padding\s*:\s*(\d+)px\s+(\d+)px/i);
+                const padTop = padMatch ? parseInt(padMatch[1]) : parseInt((tdStyle.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12');
+                const padSide = padMatch ? parseInt(padMatch[2]) : 20;
+                const height = padTop * 2 + 20;
+                
+                // Width: Aus parent table oder max-width
+                let width = 250;
+                const maxWidthMatch = (tdStyle + ' ' + (tdInner.match(/max-width\s*:\s*(\d+)/i) || ['',''])[0]).match(/max-width\s*:\s*(\d+)/i);
+                if (maxWidthMatch) {
+                    width = parseInt(maxWidthMatch[1]);
+                } else {
+                    const beforeTd = html.substring(Math.max(0, tdMatch.index - 1500), tdMatch.index);
+                    const allTableWidths = [...beforeTd.matchAll(/<table[^>]*(?:width\s*=\s*["']?(\d+)|max-width\s*:\s*(\d+))/gi)];
+                    for (let tw = allTableWidths.length - 1; tw >= 0; tw--) {
+                        const val = allTableWidths[tw][1] || allTableWidths[tw][2];
+                        if (val && !String(val).includes('%')) {
+                            width = parseInt(val);
+                            break;
+                        }
+                    }
+                }
+                
+                const borderRadius = parseInt((tdStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
+                const fontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                
+                const vml = checkVmlStatus(tdMatch.index, href, linkText);
+                const bgImageInfo = checkBackgroundImage(linkMatch[0]);
+                
+                buttons.push({
+                    id, type: 'css-class', href, text: linkText, bgColor, textColor, width, height,
+                    borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                    bgImageInfo: bgImageInfo,
+                    cssClass: className, hasGradient: cssInfo.hasGradient,
+                    matchIndex: tdMatch.index, fullMatch: fullTdMatch
+                });
+            }
+            
+            // 3b. <a> mit dieser Klasse (z.B. <a class="red-banner">)
+            const aClassRegex = new RegExp('<a\\b([^>]*class\\s*=\\s*["\'][^"\']*\\b' + escapedClass + '\\b[^"\']*["\'][^>]*)>([\\s\\S]*?)<\\/a>', 'gi');
+            let aMatch;
+            while ((aMatch = aClassRegex.exec(html)) !== null) {
+                const attrs = aMatch[1];
+                const inner = aMatch[2];
+                const linkText = inner.replace(/<[^>]*>/g, '').trim();
+                
+                // Überspringe Bild-Links ohne Text
+                if (!linkText && /<img\b/i.test(inner)) continue;
+                if (!linkText) continue;
+                
+                // Überspringe bereits erfasste
+                const alreadyCaptured = buttons.some(b => Math.abs(b.matchIndex - aMatch.index) < 50);
+                if (alreadyCaptured) continue;
+                
+                const hrefMatch = attrs.match(/href\s*=\s*["']([^"']*)["']/i);
+                const href = hrefMatch ? hrefMatch[1] : '';
+                if (!href) continue;
+                
+                btnIndex++;
+                const id = 'B' + String(btnIndex).padStart(3, '0');
+                
+                const aStyle = (attrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                const bgColor = normalizeHex(cssInfo.bgColor);
+                const tcInline = aStyle.match(/(?:^|;)\s*color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
+                const textColor = normalizeHex(tcInline ? tcInline[1] : (cssInfo.textColor || 'ffffff'));
+                
+                const width = parseInt((aStyle.match(/(?:max-)?width\s*:\s*(\d+)/i) || [])[1] || '250');
+                const padMatch = aStyle.match(/padding\s*:\s*(\d+)/i);
+                const height = padMatch ? parseInt(padMatch[1]) * 2 + 20 : 44;
+                const borderRadius = parseInt((aStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
+                const fontSize = parseInt((aStyle.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
+                
+                const vml = checkVmlStatus(aMatch.index, href, linkText);
+                const bgImageInfo = checkBackgroundImage(aMatch[0]);
+                
+                buttons.push({
+                    id, type: 'css-class-link', href, text: linkText, bgColor, textColor, width, height,
+                    borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                    bgImageInfo: bgImageInfo,
+                    cssClass: className, hasGradient: cssInfo.hasGradient,
+                    matchIndex: aMatch.index, fullMatch: aMatch[0]
+                });
+            }
+        }
+        
         // Sortiere nach Position im HTML
         buttons.sort((a, b) => a.matchIndex - b.matchIndex);
         
@@ -8711,7 +8989,8 @@ td[width] { width: auto !important; }
         
         console.log('[INSPECTOR] Extracted ' + buttons.length + ' CTA buttons (inline: ' + 
             buttons.filter(b => b.type === 'inline').length + ', table: ' + 
-            buttons.filter(b => b.type === 'table').length + ')');
+            buttons.filter(b => b.type === 'table').length + ', css-class: ' +
+            buttons.filter(b => b.type === 'css-class' || b.type === 'css-class-link').length + ')');
         return buttons;
     }
     
