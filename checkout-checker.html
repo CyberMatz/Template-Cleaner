@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout Checker – PW Toolbox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* ===========================
+           RESET & BASE
+           =========================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f2a93b;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* ===========================
+           HEADER
+           =========================== */
+        .main-header {
+            background: white;
+            padding: 16px 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            color: #f2a93b;
+            font-weight: 500;
+            font-size: 14px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 2px solid #f2a93b;
+            transition: all 0.2s;
+        }
+        .back-link:hover { background: #f2a93b; color: #fff; }
+        .main-header h1 { font-size: 22px; color: #333; font-weight: 600; }
+
+        /* ===========================
+           LAYOUT: 2 Spalten
+           =========================== */
+        .app-layout {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 1100px) {
+            .app-layout { grid-template-columns: 1fr; }
+        }
+
+        /* ===========================
+           PANELS (weiße Karten)
+           =========================== */
+        .panel {
+            background: #fff;
+            border-radius: 8px;
+            padding: 24px 28px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .panel h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #333;
+        }
+        .panel h3 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        /* ===========================
+           STEP INDICATOR
+           =========================== */
+        .steps {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+        }
+        .step-dot {
+            flex: 1;
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.4);
+            transition: background 0.3s;
+        }
+        .step-dot.active { background: #fff; }
+        .step-dot.done { background: rgba(255,255,255,0.75); }
+
+        /* ===========================
+           FORMAT CARDS
+           =========================== */
+        .format-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .format-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .format-card:hover { border-color: #f2a93b; background: #fffbf5; }
+        .format-card.selected { border-color: #f2a93b; background: #fef6e8; }
+        .format-card.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            background: #f2a93b;
+            color: #fff;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .format-id { font-weight: 700; font-size: 16px; color: #333; }
+        .format-name { font-size: 13px; color: #777; margin-bottom: 6px; }
+        .format-specs { font-size: 12px; color: #999; display: flex; flex-wrap: wrap; gap: 8px; }
+        .format-specs span { background: #f5f5f5; padding: 2px 8px; border-radius: 4px; }
+
+        /* ===========================
+           IMAGE UPLOAD
+           =========================== */
+        .upload-zone {
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafafa;
+        }
+        .upload-zone:hover { border-color: #f2a93b; background: #fffbf5; }
+        .upload-zone.has-image { border-style: solid; border-color: #f2a93b; padding: 12px; }
+        .upload-zone img { max-width: 100%; max-height: 200px; border-radius: 4px; }
+        .upload-icon { font-size: 36px; margin-bottom: 8px; }
+        .upload-text { font-size: 14px; color: #777; }
+        .upload-hint { font-size: 12px; color: #aaa; margin-top: 4px; }
+        .upload-error { color: #dc2626; font-size: 12px; margin-top: 8px; font-weight: 500; }
+        .upload-success { color: #16a34a; font-size: 12px; margin-top: 8px; font-weight: 500; }
+        .btn-change-img {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #f2a93b;
+            background: none;
+            border: 1px solid #f2a93b;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-change-img:hover { background: #f2a93b; color: #fff; }
+
+        /* ===========================
+           TEXT INPUTS
+           =========================== */
+        .input-group { margin-bottom: 16px; }
+        .input-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .input-label label { font-size: 14px; font-weight: 500; }
+        .char-count { font-size: 12px; color: #999; }
+        .char-count.over { color: #dc2626; font-weight: 600; }
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        input[type="text"]:focus, input[type="url"]:focus { border-color: #f2a93b; }
+        input[type="text"].input-error { border-color: #dc2626; }
+
+        /* ===========================
+           COLOR SETTINGS
+           =========================== */
+        .color-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .color-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .color-item label { font-size: 12px; color: #666; flex: 1; }
+        .color-item input[type="color"] {
+            width: 32px;
+            height: 28px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 0;
+        }
+        .btn-reset {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #999;
+            background: none;
+            border: 1px solid #ddd;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .btn-reset:hover { background: #f5f5f5; }
+
+        /* ===========================
+           ACTION BUTTONS
+           =========================== */
+        .btn-primary {
+            background: #f2a93b;
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #e09520; }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-secondary {
+            background: #fff;
+            color: #333;
+            border: 2px solid #e5e7eb;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { border-color: #f2a93b; color: #f2a93b; }
+        .nav-buttons { display: flex; gap: 10px; margin-top: 16px; }
+        .nav-buttons .btn-secondary { flex: 1; }
+        .nav-buttons .btn-primary { flex: 1; }
+
+        /* ===========================
+           CHECKOUT PREVIEW (rechte Seite)
+           =========================== */
+        .preview-wrapper {
+            position: sticky;
+            top: 20px;
+        }
+        .preview-label {
+            font-size: 14px;
+            color: rgba(255,255,255,0.85);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .checkout-preview {
+            background: #111827;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+            font-size: 13px;
+        }
+
+        /* Checkout Header */
+        .checkout-header {
+            position: relative;
+            padding: 28px 24px;
+            overflow: hidden;
+        }
+        .checkout-header .pattern-overlay {
+            position: absolute;
+            inset: 0;
+            opacity: 0.15;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        .checkout-header-content { position: relative; z-index: 1; }
+        .checkout-header h2 {
+            font-size: 20px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .checkout-header p {
+            font-size: 13px;
+            line-height: 1.5;
+            opacity: 0.9;
+        }
+        .checkout-header .highlight { color: #fbbf24; font-weight: 600; }
+
+        /* Ad Grid */
+        .ads-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            padding: 16px;
+        }
+        @media (max-width: 700px) {
+            .ads-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Single Ad Card */
+        .ad-card {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .ad-card.user-ad {
+            outline: 2px solid #fbbf24;
+            background: rgba(251, 191, 36, 0.08);
+        }
+        .ad-card-img {
+            width: 72px;
+            min-width: 72px;
+            height: 92px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #2a2a3e;
+        }
+        .ad-card-body { flex: 1; min-width: 0; }
+        .ad-card-headline {
+            font-weight: 700;
+            font-size: 12px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 6px;
+            word-break: break-word;
+        }
+        .ad-card-sublines { list-style: none; }
+        .ad-card-sublines li {
+            font-size: 11px;
+            color: #ccc;
+            line-height: 1.4;
+            display: flex;
+            align-items: flex-start;
+            gap: 5px;
+            margin-bottom: 2px;
+        }
+        .bullet { flex-shrink: 0; margin-top: 1px; }
+        .ad-card-btn {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 6px;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: center;
+            cursor: default;
+            letter-spacing: 0.3px;
+        }
+        .ad-badge {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #fff;
+        }
+        .ad-card-img-wrap { position: relative; flex-shrink: 0; }
+
+        /* Checkout Footer */
+        .checkout-footer {
+            background: #1f2937;
+            padding: 8px;
+            text-align: center;
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        /* ===========================
+           SECTION VISIBILITY
+           =========================== */
+        .step-section { display: none; }
+        .step-section.active { display: block; }
+
+        /* ===========================
+           ANIMATIONS
+           =========================== */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .step-section.active { animation: fadeIn 0.3s ease-out; }
+
+        /* Hilfstexte */
+        .hint { font-size: 12px; color: #999; margin-top: 4px; }
+        .section-divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="main-header">
+        <a href="index.html" class="back-link">← Toolbox</a>
+        <h1>✅ Checkout Checker</h1>
+    </header>
+
+    <!-- Step Indicator -->
+    <div class="steps">
+        <div class="step-dot active" id="dot-0"></div>
+        <div class="step-dot" id="dot-1"></div>
+        <div class="step-dot" id="dot-2"></div>
+        <div class="step-dot" id="dot-3"></div>
+    </div>
+
+    <!-- 2-Spalten Layout -->
+    <div class="app-layout">
+
+        <!-- ============ LINKE SPALTE: Eingaben ============ -->
+        <div class="left-col">
+
+            <!-- STEP 0: Format wählen -->
+            <div class="step-section active" id="step-0">
+                <div class="panel">
+                    <h2>1. Anzeigenformat wählen</h2>
+                    <div class="format-grid" id="formatGrid"></div>
+                    <div class="nav-buttons">
+                        <button class="btn-primary" id="btnNext0" disabled onclick="goStep(1)">Weiter →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 1: Bild hochladen -->
+            <div class="step-section" id="step-1">
+                <div class="panel">
+                    <h2>2. Bild hochladen</h2>
+                    <div id="uploadInfo" class="hint" style="margin-bottom:12px;"></div>
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text">Klicken oder Bild hierher ziehen</div>
+                        <div class="upload-hint">JPG, PNG oder GIF</div>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleImageUpload(event)">
+                    <div id="uploadMsg"></div>
+                    <div class="nav-buttons">
+                        <button class="btn-secondary" onclick="goStep(0)">← Zurück</button>
+                        <button class="btn-primary" id="btnNext1" disabled onclick="goStep(2)">Weiter →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 2: Texte eingeben -->
+            <div class="step-section" id="step-2">
+                <div class="panel">
+                    <h2>3. Texte eingeben</h2>
+                    <div id="textInputs"></div>
+                    <div class="nav-buttons">
+                        <button class="btn-secondary" onclick="goStep(1)">← Zurück</button>
+                        <button class="btn-primary" id="btnNext2" onclick="goStep(3)">Weiter →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 3: Farben & Zusammenfassung -->
+            <div class="step-section" id="step-3">
+                <div class="panel">
+                    <h2>4. Farben anpassen</h2>
+                    <div class="color-grid">
+                        <div class="color-item">
+                            <label>Header</label>
+                            <input type="color" id="colHeader" value="#c41e3a" onchange="updatePreview()">
+                        </div>
+                        <div class="color-item">
+                            <label>Header-Text</label>
+                            <input type="color" id="colHeaderText" value="#ffffff" onchange="updatePreview()">
+                        </div>
+                        <div class="color-item">
+                            <label>Buttons</label>
+                            <input type="color" id="colButton" value="#dc2626" onchange="updatePreview()">
+                        </div>
+                        <div class="color-item">
+                            <label>Button-Text</label>
+                            <input type="color" id="colButtonText" value="#ffffff" onchange="updatePreview()">
+                        </div>
+                        <div class="color-item">
+                            <label>Bullet Points</label>
+                            <input type="color" id="colBullet" value="#f97316" onchange="updatePreview()">
+                        </div>
+                        <div class="color-item">
+                            <label>Hintergrund</label>
+                            <input type="color" id="colCardBg" value="#1a1a2e" onchange="updatePreview()">
+                        </div>
+                    </div>
+                    <button class="btn-reset" onclick="resetColors()">Farben zurücksetzen</button>
+
+                    <hr class="section-divider">
+
+                    <h3>Zusammenfassung</h3>
+                    <div id="summary" style="font-size:13px; color:#666;"></div>
+
+                    <div class="nav-buttons" style="margin-top:20px;">
+                        <button class="btn-secondary" onclick="goStep(2)">← Zurück</button>
+                        <button class="btn-secondary" onclick="resetAll()">🔄 Neu starten</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ RECHTE SPALTE: Live-Vorschau ============ -->
+        <div class="right-col">
+            <div class="preview-wrapper">
+                <div class="preview-label">Live-Vorschau – so erscheint die Anzeige auf der Checkout-Seite</div>
+                <div class="checkout-preview" id="checkoutPreview">
+                    <!-- Wird via JS gefüllt -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    /* ===========================
+       AD FORMAT SPECIFICATIONS
+       =========================== */
+    const AD_FORMATS = {
+        SA: {
+            id: 'SA', name: 'SA – Seitliche Anzeige',
+            desc: 'Seitliche Anzeige mit Grafik',
+            imgW: 316, imgH: 404,
+            headline: { maxLines: 2, maxChars: 21 },
+            sublines: { maxCount: 2, maxChars: 33 },
+            hasButton: false
+        },
+        SO: {
+            id: 'SO', name: 'SO – Seitlich Oben',
+            desc: 'Seitliche Anzeige oben',
+            imgW: 160, imgH: 204, altW: 440, altH: 560,
+            headline: { maxLines: 1, maxChars: 45 },
+            sublines: { maxCount: 3, maxChars: 45 },
+            hasButton: false
+        },
+        FU: {
+            id: 'FU', name: 'FU – Fußzeile Unten',
+            desc: 'Fußzeilen-Anzeige, max. 80 KB',
+            imgW: 320, imgH: 400, maxKB: 80,
+            headline: { maxLines: 1, maxChars: 40 },
+            sublines: { maxCount: 3, maxChars: 54 },
+            hasButton: true, btnMaxChars: 30
+        },
+        PW: {
+            id: 'PW', name: 'PW – Popup/Window',
+            desc: 'Popup-Anzeige',
+            imgW: 300, imgH: 250,
+            headline: { maxLines: 1, maxChars: 45 },
+            sublines: { maxCount: 3, maxChars: 45 },
+            hasButton: false
+        },
+        UW: {
+            id: 'UW', name: 'UW – Unterer Werbebereich',
+            desc: 'Untere Anzeige',
+            imgW: 185, imgH: 250,
+            headline: { maxLines: 1, maxChars: 42 },
+            sublines: { maxCount: 3, maxChars: 42 },
+            hasButton: false
+        }
+    };
+
+    /* ===========================
+       SAMPLE ADS (Platzhalter)
+       =========================== */
+    const SAMPLE_ADS = [
+        { headline: 'GOLD FÜR ALLE – 60% RABATT', sublines: ['reines Gold – für nur 29 €', 'Gold günstig nach Hause', 'nutzen Sie Ihre Chance'], badge: '-60%', color: '#b8860b' },
+        { headline: 'DER NEUE OPEL GRANDLAND', sublines: ['100% Electric bis 694 km', 'Wien bis St. Anton ohne Laden', 'ab nur 159 € / Monat'], color: '#374151' },
+        { headline: 'KRONEN ZEITUNG', sublines: ['bis zu 4 Wochen kostenlos', 'Print- und Digitalangebot', 'endet automatisch'], badge: '4 WOCHEN GRATIS', color: '#991b1b' },
+        { headline: 'DER STANDARD', sublines: ['4 Wochen kostenfrei lesen', 'täglicher Print-Lesegenuss', 'endet automatisch'], badge: '4 WOCHEN GRATIS', color: '#1e3a5f' },
+        { headline: 'DIE BESTEN ETF-TRENDS', sublines: ['4 ETFs die 2026 ins Depot gehören', 'hohe Kursgewinne möglich', 'kostenloser PDF-Report'], color: '#166534' },
+        { headline: 'BÖRSENBRIEF NEWCOMER', sublines: ['1 Monat kostenlos lesen', 'Ihr Begleiter an der Börse', 'endet automatisch'], badge: '1 MONAT GRATIS', color: '#92400e' },
+        { headline: 'CHRISTKINDL-BARREN', sublines: ['Goldbarren zum Top-Preis', 'reines Gold in bester Qualität', 'limitiertes Sammlerstück'], badge: '-60%', color: '#854d0e' },
+    ];
+
+    /* ===========================
+       STATE
+       =========================== */
+    let state = {
+        step: 0,
+        format: null,
+        imageDataUrl: null,
+        headline: '',
+        sublines: ['', '', ''],
+        buttonText: 'AUSWÄHLEN',
+        colors: {
+            header: '#c41e3a', headerText: '#ffffff',
+            button: '#dc2626', buttonText: '#ffffff',
+            bullet: '#f97316', cardBg: '#1a1a2e'
+        }
+    };
+    const defaultColors = { ...state.colors };
+
+    /* ===========================
+       INIT
+       =========================== */
+    window.addEventListener('DOMContentLoaded', () => {
+        renderFormatCards();
+        updatePreview();
+    });
+
+    /* ===========================
+       STEP NAVIGATION
+       =========================== */
+    function goStep(n) {
+        state.step = n;
+        document.querySelectorAll('.step-section').forEach((el, i) => {
+            el.classList.toggle('active', i === n);
+        });
+        document.querySelectorAll('.step-dot').forEach((el, i) => {
+            el.classList.remove('active', 'done');
+            if (i === n) el.classList.add('active');
+            else if (i < n) el.classList.add('done');
+        });
+        if (n === 2) renderTextInputs();
+        if (n === 3) renderSummary();
+        updatePreview();
+    }
+
+    /* ===========================
+       STEP 0: FORMAT SELECTION
+       =========================== */
+    function renderFormatCards() {
+        const grid = document.getElementById('formatGrid');
+        grid.innerHTML = '';
+        for (const key of Object.keys(AD_FORMATS)) {
+            const f = AD_FORMATS[key];
+            const card = document.createElement('div');
+            card.className = 'format-card' + (state.format === key ? ' selected' : '');
+            let specs = `<span>📐 ${f.imgW}×${f.imgH}px</span>`;
+            if (f.altW) specs += `<span>oder ${f.altW}×${f.altH}px</span>`;
+            if (f.maxKB) specs += `<span>max. ${f.maxKB} KB</span>`;
+            specs += `<span>✏️ Headline: max. ${f.headline.maxChars} Zeichen</span>`;
+            specs += `<span>📝 ${f.sublines.maxCount} Sublines, je max. ${f.sublines.maxChars} Zeichen</span>`;
+            if (f.hasButton) specs += `<span>🔘 Button-Text: max. ${f.btnMaxChars} Zeichen</span>`;
+
+            card.innerHTML = `
+                <div class="format-id">${f.id}</div>
+                <div class="format-name">${f.name}</div>
+                <div class="format-specs">${specs}</div>
+            `;
+            card.onclick = () => selectFormat(key);
+            grid.appendChild(card);
+        }
+    }
+
+    function selectFormat(key) {
+        state.format = key;
+        state.imageDataUrl = null;
+        state.headline = '';
+        state.sublines = ['', '', ''];
+        state.buttonText = 'AUSWÄHLEN';
+        renderFormatCards();
+        document.getElementById('btnNext0').disabled = false;
+        updatePreview();
+    }
+
+    /* ===========================
+       STEP 1: IMAGE UPLOAD
+       =========================== */
+    function handleImageUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const f = AD_FORMATS[state.format];
+        const msgEl = document.getElementById('uploadMsg');
+        const zone = document.getElementById('uploadZone');
+
+        // File size check for FU
+        if (f.maxKB && file.size > f.maxKB * 1024) {
+            msgEl.innerHTML = `<div class="upload-error">⚠️ Datei zu groß: ${(file.size/1024).toFixed(0)} KB (max. ${f.maxKB} KB)</div>`;
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            const img = new Image();
+            img.onload = function() {
+                const matchPrimary = img.width === f.imgW && img.height === f.imgH;
+                const matchAlt = f.altW && img.width === f.altW && img.height === f.altH;
+                const isExact = matchPrimary || matchAlt;
+
+                state.imageDataUrl = ev.target.result;
+                zone.classList.add('has-image');
+                zone.innerHTML = `<img src="${ev.target.result}" alt="Vorschau"><br><button class="btn-change-img" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">Bild ändern</button>`;
+
+                if (isExact) {
+                    msgEl.innerHTML = `<div class="upload-success">✅ Bildgröße passt perfekt: ${img.width}×${img.height}px</div>`;
+                } else {
+                    msgEl.innerHTML = `<div class="upload-error">⚠️ Bild ist ${img.width}×${img.height}px – empfohlen: ${f.imgW}×${f.imgH}px. Wird trotzdem in der Vorschau angezeigt.</div>`;
+                }
+
+                document.getElementById('btnNext1').disabled = false;
+                updatePreview();
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+
+        // Upload info
+        document.getElementById('uploadInfo').textContent = `Empfohlene Größe: ${f.imgW}×${f.imgH}px` + (f.altW ? ` oder ${f.altW}×${f.altH}px` : '') + (f.maxKB ? ` | Max. ${f.maxKB} KB` : '');
+    }
+
+    // Drag & Drop
+    document.addEventListener('DOMContentLoaded', () => {
+        const zone = document.getElementById('uploadZone');
+        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = '#f2a93b'; });
+        zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.style.borderColor = '';
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                document.getElementById('fileInput').files = dt.files;
+                handleImageUpload({ target: { files: [file] } });
+            }
+        });
+    });
+
+    /* ===========================
+       STEP 2: TEXT INPUTS
+       =========================== */
+    function renderTextInputs() {
+        const f = AD_FORMATS[state.format];
+        if (!f) return;
+        const container = document.getElementById('textInputs');
+        let html = '';
+
+        // Headline
+        const hlMax = f.headline.maxChars * f.headline.maxLines;
+        html += `
+            <div class="input-group">
+                <div class="input-label">
+                    <label>Headline</label>
+                    <span class="char-count" id="hlCount">0 / ${hlMax}</span>
+                </div>
+                <input type="text" id="inputHeadline" value="${escHtml(state.headline)}"
+                    placeholder="z.B. IHR PRODUKT ZUM BESTPREIS"
+                    maxlength="${hlMax + 10}"
+                    oninput="onTextInput()">
+                <div class="hint">${f.headline.maxLines > 1 ? f.headline.maxLines + ' Zeilen, je ' : ''}max. ${f.headline.maxChars} Zeichen</div>
+            </div>
+        `;
+
+        // Sublines
+        for (let i = 0; i < f.sublines.maxCount; i++) {
+            html += `
+                <div class="input-group">
+                    <div class="input-label">
+                        <label>Subline ${i + 1}</label>
+                        <span class="char-count" id="slCount${i}">0 / ${f.sublines.maxChars}</span>
+                    </div>
+                    <input type="text" id="inputSub${i}" value="${escHtml(state.sublines[i] || '')}"
+                        placeholder="z.B. Ihre ${i+1}. Produkteigenschaft"
+                        maxlength="${f.sublines.maxChars + 10}"
+                        oninput="onTextInput()">
+                </div>
+            `;
+        }
+
+        // Button text (only for FU format)
+        if (f.hasButton) {
+            html += `
+                <div class="input-group">
+                    <div class="input-label">
+                        <label>Button-Text</label>
+                        <span class="char-count" id="btnCount">0 / ${f.btnMaxChars}</span>
+                    </div>
+                    <input type="text" id="inputBtn" value="${escHtml(state.buttonText)}"
+                        placeholder="z.B. JETZT ENTDECKEN"
+                        maxlength="${f.btnMaxChars + 5}"
+                        oninput="onTextInput()">
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+        onTextInput(); // initial count update
+    }
+
+    function onTextInput() {
+        const f = AD_FORMATS[state.format];
+        if (!f) return;
+
+        const hlEl = document.getElementById('inputHeadline');
+        state.headline = hlEl ? hlEl.value : '';
+        updateCharCount('hlCount', state.headline.length, f.headline.maxChars * f.headline.maxLines);
+
+        for (let i = 0; i < f.sublines.maxCount; i++) {
+            const el = document.getElementById('inputSub' + i);
+            state.sublines[i] = el ? el.value : '';
+            updateCharCount('slCount' + i, state.sublines[i].length, f.sublines.maxChars);
+        }
+
+        if (f.hasButton) {
+            const btnEl = document.getElementById('inputBtn');
+            state.buttonText = btnEl ? btnEl.value : 'AUSWÄHLEN';
+            updateCharCount('btnCount', state.buttonText.length, f.btnMaxChars);
+        }
+
+        updatePreview();
+    }
+
+    function updateCharCount(elId, current, max) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.textContent = `${current} / ${max}`;
+        el.classList.toggle('over', current > max);
+    }
+
+    /* ===========================
+       STEP 3: SUMMARY
+       =========================== */
+    function renderSummary() {
+        const f = AD_FORMATS[state.format];
+        if (!f) return;
+        let html = `<p><strong>Format:</strong> ${f.name}</p>`;
+        html += `<p><strong>Headline:</strong> ${escHtml(state.headline) || '(leer)'}</p>`;
+        state.sublines.forEach((s, i) => {
+            if (s) html += `<p><strong>Subline ${i+1}:</strong> ${escHtml(s)}</p>`;
+        });
+        if (f.hasButton) html += `<p><strong>Button:</strong> ${escHtml(state.buttonText)}</p>`;
+        html += `<p><strong>Bild:</strong> ✅ hochgeladen</p>`;
+        document.getElementById('summary').innerHTML = html;
+    }
+
+    /* ===========================
+       COLORS
+       =========================== */
+    function getColors() {
+        return {
+            header: document.getElementById('colHeader').value,
+            headerText: document.getElementById('colHeaderText').value,
+            button: document.getElementById('colButton').value,
+            buttonText: document.getElementById('colButtonText').value,
+            bullet: document.getElementById('colBullet').value,
+            cardBg: document.getElementById('colCardBg').value,
+        };
+    }
+
+    function resetColors() {
+        document.getElementById('colHeader').value = defaultColors.header;
+        document.getElementById('colHeaderText').value = defaultColors.headerText;
+        document.getElementById('colButton').value = defaultColors.button;
+        document.getElementById('colButtonText').value = defaultColors.buttonText;
+        document.getElementById('colBullet').value = defaultColors.bullet;
+        document.getElementById('colCardBg').value = defaultColors.cardBg;
+        updatePreview();
+    }
+
+    /* ===========================
+       DARKEN HELPER
+       =========================== */
+    function darken(hex, amount) {
+        const num = parseInt(hex.replace('#', ''), 16);
+        const r = Math.max(0, (num >> 16) + amount);
+        const g = Math.max(0, ((num >> 8) & 0xff) + amount);
+        const b = Math.max(0, (num & 0xff) + amount);
+        return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+    }
+
+    /* ===========================
+       CHECKOUT PREVIEW RENDERER
+       =========================== */
+    function updatePreview() {
+        const c = getColors();
+        const f = state.format ? AD_FORMATS[state.format] : null;
+        const userImg = state.imageDataUrl || null;
+        const userHL = state.headline || 'IHRE HEADLINE';
+        const userSubs = state.sublines.filter(s => s).length > 0
+            ? state.sublines.filter(s => s)
+            : ['Ihre erste Subline', 'Ihre zweite Subline', 'Ihre dritte Subline'];
+        const userBtn = state.buttonText || 'AUSWÄHLEN';
+
+        // Build ads array – user ad at position 1
+        let adsHtml = '';
+
+        // Sample ad 0
+        adsHtml += renderAdCard(SAMPLE_ADS[0], c, false);
+
+        // USER AD
+        adsHtml += renderUserAdCard(userImg, userHL, userSubs, userBtn, c);
+
+        // More sample ads
+        for (let i = 1; i < 7; i++) {
+            adsHtml += renderAdCard(SAMPLE_ADS[i], c, false);
+        }
+
+        const preview = document.getElementById('checkoutPreview');
+        preview.innerHTML = `
+            <div class="checkout-header" style="background: linear-gradient(135deg, ${c.header} 0%, ${darken(c.header, -30)} 100%);">
+                <div class="pattern-overlay"></div>
+                <div class="checkout-header-content" style="color: ${c.headerText};">
+                    <h2>LIEBER HERR MUSTERMANN,</h2>
+                    <p>herzlichen <span class="highlight">Dank</span> für Ihren Einkauf im <strong>MediaMarkt Online-Shop</strong>. Dafür gibt's ein <span class="highlight">Geschenk</span> von uns.</p>
+                    <p>Suchen Sie sich jetzt Ihr <strong>persönliches Dankeschön</strong> aus.</p>
+                </div>
+            </div>
+            <div class="ads-grid" style="background-color: ${c.cardBg};">
+                ${adsHtml}
+            </div>
+            <div class="checkout-footer">MM App-traffic</div>
+        `;
+    }
+
+    function renderAdCard(ad, colors, isUser) {
+        const placeholderBg = ad.color || '#333';
+        const bulletsHtml = ad.sublines.map(s =>
+            `<li><span class="bullet" style="color:${colors.bullet};">●</span><span>${escHtml(s)}</span></li>`
+        ).join('');
+        const badgeHtml = ad.badge
+            ? `<div class="ad-badge" style="background:${colors.button};">${escHtml(ad.badge)}</div>`
+            : '';
+        return `
+            <div class="ad-card">
+                <div class="ad-card-img-wrap">
+                    <div class="ad-card-img" style="background:${placeholderBg}; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.3); font-size:10px; font-weight:700;">AD</div>
+                    ${badgeHtml}
+                </div>
+                <div class="ad-card-body">
+                    <div class="ad-card-headline">${escHtml(ad.headline)}</div>
+                    <ul class="ad-card-sublines">${bulletsHtml}</ul>
+                    <div class="ad-card-btn" style="background:${colors.button}; color:${colors.buttonText};">AUSWÄHLEN</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderUserAdCard(imgSrc, headline, sublines, btnText, colors) {
+        const imgHtml = imgSrc
+            ? `<img class="ad-card-img" src="${imgSrc}" alt="Ihre Anzeige">`
+            : `<div class="ad-card-img" style="display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.5); font-size:10px; font-weight:600; background:#333;">IHR BILD</div>`;
+        const badgeHtml = !imgSrc
+            ? `<div class="ad-badge" style="background:${colors.button};">IHRE ANZEIGE</div>`
+            : '';
+        const bulletsHtml = sublines.map(s =>
+            `<li><span class="bullet" style="color:${colors.bullet};">●</span><span>${escHtml(s)}</span></li>`
+        ).join('');
+        return `
+            <div class="ad-card user-ad">
+                <div class="ad-card-img-wrap">
+                    ${imgHtml}
+                    ${badgeHtml}
+                </div>
+                <div class="ad-card-body">
+                    <div class="ad-card-headline">${escHtml(headline)}</div>
+                    <ul class="ad-card-sublines">${bulletsHtml}</ul>
+                    <div class="ad-card-btn" style="background:${colors.button}; color:${colors.buttonText};">${escHtml(btnText)}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    /* ===========================
+       RESET
+       =========================== */
+    function resetAll() {
+        state = {
+            step: 0, format: null, imageDataUrl: null,
+            headline: '', sublines: ['', '', ''], buttonText: 'AUSWÄHLEN',
+            colors: { ...defaultColors }
+        };
+        document.getElementById('fileInput').value = '';
+        const zone = document.getElementById('uploadZone');
+        zone.classList.remove('has-image');
+        zone.innerHTML = '<div class="upload-icon">📁</div><div class="upload-text">Klicken oder Bild hierher ziehen</div><div class="upload-hint">JPG, PNG oder GIF</div>';
+        document.getElementById('uploadMsg').innerHTML = '';
+        document.getElementById('btnNext0').disabled = true;
+        document.getElementById('btnNext1').disabled = true;
+        resetColors();
+        renderFormatCards();
+        goStep(0);
+    }
+
+    /* ===========================
+       HELPERS
+       =========================== */
+    function escHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    </script>
+</body>
+</html>
