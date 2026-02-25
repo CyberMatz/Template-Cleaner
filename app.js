@@ -857,13 +857,43 @@ class TemplateProcessor {
         });
         fixCount += editorStyleCount;
         
+        // 5. Leere class-Attribute entfernen: class="" oder class (ohne Wert)
+        let emptyClassCount = 0;
+        const emptyClassQuoted = (this.html.match(/\s+class=""/gi) || []).length;
+        if (emptyClassQuoted > 0) {
+            this.html = this.html.replace(/\s+class=""/gi, '');
+            emptyClassCount += emptyClassQuoted;
+        }
+        // class ohne Wert (z.B. <div class> statt <div class="...">)
+        // Nur matchen wenn class NICHT von = gefolgt wird
+        // Filtere false positives: prüfe ob nach class ein = kommt (mit optionalen Spaces)
+        let emptyClassBare = 0;
+        this.html = this.html.replace(/\s+class(?=\s*[>\/\s])/gi, (match, offset) => {
+            // Prüfe was nach "class" + Whitespace kommt
+            const afterPos = offset + match.length;
+            const rest = this.html.substring(afterPos, afterPos + 5).trimStart();
+            if (rest.charAt(0) === '=') return match; // class="..." → behalten
+            emptyClassBare++;
+            return '';
+        });
+        fixCount += emptyClassCount + emptyClassBare;
+        
+        // 6. alt="null" korrigieren (Template-System-Bug: gibt "null" als String aus statt leer)
+        const altNullCount = (this.html.match(/alt="null"/gi) || []).length;
+        if (altNullCount > 0) {
+            this.html = this.html.replace(/alt="null"/gi, 'alt=""');
+            fixCount += altNullCount;
+        }
+        
         if (fixCount > 0) {
             const details = [];
             if (ceCount > 0) details.push(ceCount + '× contenteditable');
             if (qaCount > 0) details.push(qaCount + '× data-qa-*');
             if (editorAttrCount > 0) details.push(editorAttrCount + '× data-editor-*');
             if (editorStyleCount > 0) details.push(editorStyleCount + '× Editor-Styles');
-            this.addCheck('S06_CMS_ARTIFACTS', 'FIXED', 'CMS-Editor-Reste entfernt: ' + details.join(', '));
+            if (emptyClassCount + emptyClassBare > 0) details.push((emptyClassCount + emptyClassBare) + '× leere class-Attribute');
+            if (altNullCount > 0) details.push(altNullCount + '× alt="null" korrigiert');
+            this.addCheck('S06_CMS_ARTIFACTS', 'FIXED', 'CMS-/Template-Reste entfernt: ' + details.join(', '));
         }
     }
 
@@ -2062,6 +2092,16 @@ class TemplateProcessor {
                 }
             }
             
+            // Maizzle/Tailwind-Pattern: MSO <i>-Tags INNERHALB des Buttons
+            // <!--[if mso]><i style="letter-spacing:...">...</i><![endif]-->
+            // Das ist ein gültiger Outlook-Fallback → nicht mit VML überschreiben
+            if (!hasVml && cta.fullMatch) {
+                const hasMsoInside = /<!--\[if\s+mso\]>[\s\S]*?<i[\s>][\s\S]*?<!\[endif\]-->/i.test(cta.fullMatch);
+                if (hasMsoInside) {
+                    hasVml = true; // Behandle als "hat Outlook-Support"
+                }
+            }
+            
             // Typ B (table mit bgcolor): Outlook versteht bgcolor nativ → KEIN VML nötig
             // CSS-class Buttons: Outlook versteht KEIN linear-gradient → VML nötig
             if (cta.type === 'table' && !hasVml) {
@@ -2572,6 +2612,7 @@ class TemplateProcessor {
             /\$\{[^}]+\}/,                        // ${variable}
             /<%[^%]+%>/,                          // <%variable%> (ASP style)
             /#\{[^}]+\}/,                         // #{variable} (Ruby style)
+            /\*\|[^|]+\|\*/,                      // *|ANREDE|*, *|FNAME|* (Mailchimp)
         ];
         
         const isTemplateVariable = (str) => {
@@ -3091,7 +3132,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.7-2026-02-25';
+const APP_VERSION = 'v3.7.1-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -3948,6 +3989,16 @@ document.addEventListener('DOMContentLoaded', () => {
         result = result.replace(/\s+data-qa-[a-z-]+="[^"]*"/gi, '');
         // data-editor-* Attribute
         result = result.replace(/\s+data-editor-[a-z-]+="[^"]*"/gi, '');
+        // Leere class-Attribute entfernen: class="" oder class (ohne Wert)
+        result = result.replace(/\s+class=""/gi, '');
+        result = result.replace(/\s+class(?=[\s>\/])/gi, function(match, offset, str) {
+            // Nur entfernen wenn kein = folgt (auch nicht mit Leerzeichen davor)
+            const afterMatch = str.substring(offset + match.length).trimStart();
+            if (afterMatch.charAt(0) === '=') return match; // class = "..." → behalten
+            return '';
+        });
+        // alt="null" korrigieren (Template-System-Bug)
+        result = result.replace(/alt="null"/gi, 'alt=""');
         // CMS-Klassen entfernen (qa-selected, qa-editable etc.)
         result = result.replace(/\s+class="qa-[^"]*"/gi, '');
         // class="qa-..." auch wenn Teil einer gemischten class entfernen
