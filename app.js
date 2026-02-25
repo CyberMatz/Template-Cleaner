@@ -68,6 +68,18 @@ class TemplateProcessor {
         // S06: CMS-Editor-Reste entfernen (contenteditable, data-qa-*, Editor-Styling)
         this.removeCmsEditorArtifacts();
 
+        // S07: HTML-Entities in CSS/Style-Blöcken decodieren (&amp;gt; → > etc.)
+        this.fixHtmlEntitiesInCss();
+
+        // S08: Abgeschnittenes HTML reparieren (fehlende </body></html>)
+        this.fixTruncatedHtml();
+
+        // S09: Doppelte HTML-Attribute auf Elementen entfernen (z.B. border="0" border="0")
+        this.fixDuplicateHtmlAttributes();
+
+        // S10: Nutzlose Meta-Tags entfernen (darkreader-lock etc.)
+        this.removeUselessMetaTags();
+
         // P01: DOCTYPE
         this.checkDoctype();
 
@@ -168,6 +180,12 @@ class TemplateProcessor {
         
         // W04: Charset-Konflikte erkennen
         this.checkCharsetConflicts();
+
+        // W05: Inline min-width das responsive CSS blockiert
+        this.checkInlineMinWidth();
+
+        // W06: Cloudflare Email Protection Links erkennen
+        this.checkCloudflareEmailProtection();
     }
 
     // P01: DOCTYPE Check
@@ -846,6 +864,156 @@ class TemplateProcessor {
             if (editorAttrCount > 0) details.push(editorAttrCount + '× data-editor-*');
             if (editorStyleCount > 0) details.push(editorStyleCount + '× Editor-Styles');
             this.addCheck('S06_CMS_ARTIFACTS', 'FIXED', 'CMS-Editor-Reste entfernt: ' + details.join(', '));
+        }
+    }
+
+    // S07: HTML-Entities in CSS decodieren
+    // Manche CMS/Editoren codieren CSS-Zeichen als HTML-Entities:
+    // &amp;gt; → >, &amp;amp; → &, &amp;lt; → < etc.
+    // Das zerstört CSS-Selektoren wie .u-row .u-col > div
+    fixHtmlEntitiesInCss() {
+        let fixCount = 0;
+        
+        // Nur innerhalb von <style>...</style> Blöcken decodieren
+        this.html = this.html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, cssContent) => {
+            let decoded = cssContent;
+            let changed = false;
+            
+            // Mehrstufig decodieren (kann mehrfach escaped sein: &amp;amp;amp;gt; → &amp;amp;gt; → &amp;gt; → &gt; → >)
+            let prev;
+            let iterations = 0;
+            do {
+                prev = decoded;
+                decoded = decoded
+                    .replace(/&amp;/gi, '&')
+                    .replace(/&gt;/gi, '>')
+                    .replace(/&lt;/gi, '<')
+                    .replace(/&quot;/gi, '"')
+                    .replace(/&#39;/gi, "'")
+                    .replace(/&nbsp;/gi, ' ');
+                iterations++;
+            } while (decoded !== prev && iterations < 20);
+            
+            if (decoded !== cssContent) {
+                fixCount++;
+                changed = true;
+            }
+            
+            return match.replace(cssContent, decoded);
+        });
+        
+        if (fixCount > 0) {
+            this.addCheck('S07_CSS_ENTITIES', 'FIXED', fixCount + '× HTML-Entities in CSS-Blöcken decodiert (z.B. &amp;gt; → >)');
+        }
+    }
+
+    // S08: Abgeschnittenes HTML reparieren
+    // Manche Templates enden abrupt ohne </body></html>
+    fixTruncatedHtml() {
+        const trimmed = this.html.trim();
+        const hasBodyClose = /<\/body>/i.test(trimmed);
+        const hasHtmlClose = /<\/html>/i.test(trimmed);
+        const hasBodyOpen = /<body[\s>]/i.test(trimmed);
+        const hasHtmlOpen = /<html[\s>]/i.test(trimmed);
+        
+        if (hasBodyOpen && hasHtmlOpen) {
+            const fixes = [];
+            let html = this.html.trimEnd();
+            
+            // Prüfe ob das Ende mitten in einem Kommentar oder Tag abgeschnitten ist
+            // Entferne unvollständige Kommentare am Ende (z.B. "<!--" ohne "-->")
+            const lastCommentOpen = html.lastIndexOf('<!--');
+            const lastCommentClose = html.lastIndexOf('-->');
+            if (lastCommentOpen > lastCommentClose) {
+                // Offener Kommentar am Ende – abschneiden
+                html = html.substring(0, lastCommentOpen).trimEnd();
+                fixes.push('unvollständiger Kommentar entfernt');
+            }
+            
+            if (!hasBodyClose) {
+                html += '\n</body>';
+                fixes.push('</body> ergänzt');
+            }
+            if (!hasHtmlClose) {
+                html += '\n</html>';
+                fixes.push('</html> ergänzt');
+            }
+            
+            if (fixes.length > 0) {
+                this.html = html;
+                this.addCheck('S08_TRUNCATED', 'FIXED', 'Abgeschnittenes HTML repariert: ' + fixes.join(', '));
+            }
+        }
+    }
+
+    // S09: Doppelte HTML-Attribute entfernen (nicht style – das macht S05)
+    // z.B. <table border="0" border="0"> → <table border="0">
+    fixDuplicateHtmlAttributes() {
+        let totalFixCount = 0;
+        
+        // Finde alle öffnenden Tags
+        this.html = this.html.replace(/<([a-z][a-z0-9]*)\s([^>]*?)>/gi, (match, tagName, attrs) => {
+            // Extrahiere alle Attribut-Name=Wert-Paare
+            const attrRegex = /([a-z][a-z0-9-]*)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi;
+            const foundAttrs = new Map();
+            const attrList = [];
+            let attrMatch;
+            let localFixCount = 0;
+            
+            while ((attrMatch = attrRegex.exec(attrs)) !== null) {
+                const name = attrMatch[1].toLowerCase();
+                
+                if (name === 'style') {
+                    // style immer behalten (S05 kümmert sich)
+                    attrList.push(attrMatch[0]);
+                } else if (foundAttrs.has(name)) {
+                    // Duplikat – überspringen
+                    localFixCount++;
+                } else {
+                    foundAttrs.set(name, true);
+                    attrList.push(attrMatch[0]);
+                }
+            }
+            
+            if (localFixCount > 0) {
+                totalFixCount += localFixCount;
+                return '<' + tagName + ' ' + attrList.join(' ') + '>';
+            }
+            return match;
+        });
+        
+        if (totalFixCount > 0) {
+            this.addCheck('S09_DUP_ATTRS', 'FIXED', totalFixCount + '× doppelte HTML-Attribute entfernt');
+        }
+    }
+
+    // S10: Nutzlose Meta-Tags entfernen (haben in E-Mails keine Funktion)
+    removeUselessMetaTags() {
+        const removals = [];
+        
+        // darkreader-lock (Browser-Extension Artefakt)
+        const darkreaderCount = (this.html.match(/<meta\s+name="darkreader[^"]*"[^>]*\/?>/gi) || []).length;
+        if (darkreaderCount > 0) {
+            this.html = this.html.replace(/<meta\s+name="darkreader[^"]*"[^>]*\/?>\s*/gi, '');
+            removals.push(darkreaderCount + '× darkreader');
+        }
+        
+        // generator Meta-Tags (CMS-Signaturen)
+        const generatorCount = (this.html.match(/<meta\s+name="generator"[^>]*\/?>/gi) || []).length;
+        if (generatorCount > 0) {
+            this.html = this.html.replace(/<meta\s+name="generator"[^>]*\/?>\s*/gi, '');
+            removals.push(generatorCount + '× generator');
+        }
+        
+        // robots Meta-Tags (keine Funktion in E-Mails)
+        const robotsCount = (this.html.match(/<meta\s+name="robots"[^>]*\/?>/gi) || []).length;
+        if (robotsCount > 0) {
+            this.html = this.html.replace(/<meta\s+name="robots"[^>]*\/?>\s*/gi, '');
+            removals.push(robotsCount + '× robots');
+        }
+        
+        if (removals.length > 0) {
+            this.addCheck('S10_USELESS_META', 'FIXED', 'Nutzlose Meta-Tags entfernt: ' + removals.join(', '));
         }
     }
 
@@ -2691,6 +2859,49 @@ class TemplateProcessor {
         // Kein Check-Eintrag wenn alles OK (UTF-8 oder wurde bereits durch S03c bereinigt)
     }
 
+    // W05: Inline min-width das responsive CSS blockiert
+    // Viele Templates haben min-width: 640px inline auf Spalten-Divs.
+    // Das überschreibt Media Queries und verhindert Mobile-Responsiveness.
+    checkInlineMinWidth() {
+        const id = 'W05_INLINE_MINWIDTH';
+        
+        // Finde Elemente mit inline min-width >= 500px
+        const minWidthRegex = /<(?:div|td|table)[^>]*style="[^"]*min-width:\s*(\d+)px[^"]*"[^>]*>/gi;
+        const problems = [];
+        let match;
+        
+        while ((match = minWidthRegex.exec(this.html)) !== null) {
+            const minWidth = parseInt(match[1]);
+            if (minWidth >= 500) {
+                // Prüfe ob das Element eine responsive Klasse hat
+                const hasResponsiveClass = /class="[^"]*u-col[^"]*"/i.test(match[0]) || 
+                                          /class="[^"]*responsive[^"]*"/i.test(match[0]) ||
+                                          /class="[^"]*mobile[^"]*"/i.test(match[0]);
+                if (hasResponsiveClass) {
+                    problems.push(minWidth + 'px');
+                }
+            }
+        }
+        
+        if (problems.length > 0) {
+            const unique = [...new Set(problems)];
+            this.addCheck(id, 'WARN', '⚠️ Mobile-Darstellung blockiert: ' + problems.length + ' Element(e) haben eine feste Mindestbreite (' + unique.join(', ') + ') im Code, die verhindert dass das Template auf dem Handy schmaler wird. → AKTION: Kunde/Agentur muss im Template-Editor die Mindestbreite auf diesen Elementen entfernen oder die responsive CSS-Regeln mit !important ergänzen.');
+        }
+    }
+
+    // W06: Cloudflare Email Protection Links erkennen
+    // Cloudflare's Email-Obfuscation ersetzt E-Mail-Links mit /cdn-cgi/l/email-protection#...
+    // Diese Links funktionieren nur auf der Website, nicht in E-Mails.
+    checkCloudflareEmailProtection() {
+        const id = 'W06_CLOUDFLARE_EMAIL';
+        
+        const cfLinks = this.html.match(/href="[^"]*\/cdn-cgi\/l\/email-protection[^"]*"/gi) || [];
+        
+        if (cfLinks.length > 0) {
+            this.addCheck(id, 'WARN', '⚠️ Kaputter E-Mail-Link: ' + cfLinks.length + '× Kontakt-Link wurde von Cloudflare verschlüsselt und funktioniert in E-Mails NICHT. → AKTION: Kunde muss die echte E-Mail-Adresse liefern (z.B. mailto:kontakt@firma.de). Den verschlüsselten Link ersetzen.');
+        }
+    }
+
     // Check hinzufügen
     addCheck(id, status, message) {
         this.checks.push({ id, status, message });
@@ -2862,7 +3073,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.6.2-2026-02-25';
+const APP_VERSION = 'v3.7-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
