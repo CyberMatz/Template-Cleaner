@@ -2247,7 +2247,12 @@ class TemplateProcessor {
             
             if (!bgcolorAttr && !bgInStyle) continue;
             
-            // Ist es zentriert? (text-align:center im style ODER align="center" als Attribut)
+            // Weiße/helle Hintergründe überspringen – das sind Inhaltszellen, keine Buttons
+            const rawBg = (bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? bgInStyle[1] : '')).toLowerCase().replace('#', '');
+            const lightBgValues = ['fff', 'ffffff', 'fefefe', 'fafafa', 'f5f5f5', 'f8f8f8', 'f9f9f9', 'fafbfc'];
+            if (lightBgValues.includes(rawBg)) continue;
+            
+            // Ist es zentriert?
             const isCentered = /text-align\s*:\s*center/i.test(tdStyle) || /align\s*=\s*["']center["']/i.test(tdAttrs);
             if (!isCentered) continue;
             
@@ -3122,7 +3127,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.7.3-2026-02-25';
+const APP_VERSION = 'v3.7.4-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -10346,7 +10351,7 @@ td[width] { width: auto !important; }
         }
         
         // Helper: VML-Status prüfen
-        function checkVmlStatus(ctaPos, href, text) {
+        function checkVmlStatus(ctaPos, href, text, fullMatch) {
             let hasVml = false;
             let vmlStatus = 'missing';
             for (const vml of vmlBlocks) {
@@ -10356,6 +10361,14 @@ td[width] { width: auto !important; }
                     const textOk = vml.text.toLowerCase() === text.toLowerCase();
                     vmlStatus = (hrefOk && textOk) ? 'ok' : 'mismatch';
                     break;
+                }
+            }
+            // Maizzle/Tailwind-Pattern: MSO <i>-Tags INNERHALB des Buttons
+            if (!hasVml && fullMatch) {
+                const hasMsoInside = /<!--\[if\s+mso\]>[\s\S]*?<i[\s>][\s\S]*?<!\[endif\]-->/i.test(fullMatch);
+                if (hasMsoInside) {
+                    hasVml = true;
+                    vmlStatus = 'ok'; // Maizzle-Pattern ist valider Outlook-Support
                 }
             }
             return { hasVml, vmlStatus };
@@ -10430,7 +10443,7 @@ td[width] { width: auto !important; }
             const borderRadius = parseInt((style.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
             const fontSize = parseInt((style.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
             
-            const vml = checkVmlStatus(match.index, href, text);
+            const vml = checkVmlStatus(match.index, href, text, fullTag);
             
             const bgImageInfo = checkBackgroundImage(fullTag);
             
@@ -10489,6 +10502,11 @@ td[width] { width: auto !important; }
             
             let bgColor = normalizeHex(bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? bgInStyle[1] : '333333'));
             
+            // Weiße/helle Hintergrundfarben überspringen – das sind Inhaltszellen, keine Buttons
+            // z.B. <td bgcolor="#fff"> mit einer verlinkten Überschrift drin
+            const lightBgs = ['#ffffff', '#fff', '#fefefe', '#fafafa', '#f5f5f5', '#f8f8f8', '#f9f9f9', '#fafbfc'];
+            if (lightBgs.includes(bgColor)) continue;
+            
             // Text-Color aus dem <a> style
             const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
             const tcMatch = linkStyleStr.match(/color\s*:\s*#?([a-fA-F0-9]{3,6})/i);
@@ -10522,7 +10540,7 @@ td[width] { width: auto !important; }
             const borderRadius = parseInt((tdStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
             const fontSize = parseInt(((linkStyleStr || tdStyle).match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
             
-            const vml = checkVmlStatus(match.index, href, linkText);
+            const vml = checkVmlStatus(match.index, href, linkText, fullTdMatch);
             
             // Typ B (td mit bgcolor): Outlook versteht bgcolor nativ → VML nicht nötig
             // Wenn kein VML vorhanden ist, ist das korrekt (kein Fehler)
@@ -10678,7 +10696,7 @@ td[width] { width: auto !important; }
                 
                 const borderRadius = parseInt((combinedStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
                 
-                const vml = checkVmlStatus(tdMatch.index, href, linkText);
+                const vml = checkVmlStatus(tdMatch.index, href, linkText, fullTdMatch);
                 const bgImageInfo = checkBackgroundImage(linkMatch[0]);
                 
                 buttons.push({
@@ -10759,7 +10777,7 @@ td[width] { width: auto !important; }
                 
                 const borderRadius = parseInt((aStyle.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
                 
-                const vml = checkVmlStatus(aMatch.index, href, linkText);
+                const vml = checkVmlStatus(aMatch.index, href, linkText, aMatch[0]);
                 const bgImageInfo = checkBackgroundImage(aMatch[0]);
                 
                 buttons.push({
