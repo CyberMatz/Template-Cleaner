@@ -1527,8 +1527,12 @@ class TemplateProcessor {
     // P08/P09: Image Alt-Attribute (Erweitert)
     checkImageAltAttributes() {
         const id = this.checklistType === 'dpl' ? 'P09_IMAGE_ALT' : 'P08_IMAGE_ALT';
+        
+        // HTML-Kommentare entfernen für die Zählung (nicht im Original verändern)
+        const htmlWithoutComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        
         const imgRegex = /<img[^>]*>/gi;
-        const images = this.html.match(imgRegex) || [];
+        const images = htmlWithoutComments.match(imgRegex) || [];
         let fixed = 0;
         let emptyAlt = 0;
 
@@ -1580,15 +1584,8 @@ class TemplateProcessor {
         }
 
         if (pixelFound) {
-            // Prüfe ob Pixel versteckt ist (display:none oder width/height=1)
-            const isHidden = /display:\s*none/i.test(pixelElement) || 
-                           (/width="1"/.test(pixelElement) && /height="1"/.test(pixelElement));
-            
-            if (isHidden) {
-                this.addCheck(id, 'PASS', 'Öffnerpixel vorhanden und korrekt versteckt');
-            } else {
-                this.addCheck(id, 'WARN', 'Öffnerpixel vorhanden, aber möglicherweise sichtbar (sollte hidden sein)');
-            }
+            // Ein Öffnerpixel (1×1 oder Tracking-URL) ist per Definition unsichtbar
+            this.addCheck(id, 'PASS', 'Öffnerpixel vorhanden und korrekt versteckt');
         } else {
             // Read-only - kein FAIL, nur WARN
             this.addCheck(id, 'PASS', 'Öffnerpixel nicht gefunden (optional, wird im Inspector geprüft)');
@@ -2649,11 +2646,11 @@ class TemplateProcessor {
         const sizeKB = Math.round(sizeBytes / 1024);
         
         if (sizeKB > 102) {
-            this.addCheck(id, 'WARN', 'Template ist ' + sizeKB + ' KB groß – Gmail schneidet E-Mails über ~102 KB ab! Inhalte am Ende werden möglicherweise nicht angezeigt.');
+            this.addCheck(id, 'WARN', 'Template-Größe: ' + sizeKB + ' KB – Gmail schneidet E-Mails über ~102 KB ab!');
         } else if (sizeKB > 80) {
-            this.addCheck(id, 'PASS', 'Template ist ' + sizeKB + ' KB (Achtung: Gmail-Grenze bei ~102 KB, noch ' + (102 - sizeKB) + ' KB Puffer)');
+            this.addCheck(id, 'PASS', 'Template-Größe: ' + sizeKB + ' KB (Gmail-Grenze: ~102 KB, noch ' + (102 - sizeKB) + ' KB Puffer)');
         } else {
-            this.addCheck(id, 'PASS', 'Template-Größe OK (' + sizeKB + ' KB, Gmail-Grenze: ~102 KB)');
+            this.addCheck(id, 'PASS', 'Template-Größe: ' + sizeKB + ' KB (Gmail-Grenze: ~102 KB)');
         }
     }
 
@@ -2677,11 +2674,12 @@ class TemplateProcessor {
         const words = textOnly.split(/\s+/).filter(w => w.length >= 2);
         const wordCount = words.length;
         
-        // Bilder zählen (nur sichtbare, nicht Pixel/1px)
+        // Bilder zählen (nur sichtbare, nicht Pixel/1px, nicht in Kommentaren)
+        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
         const imgRegex = /<img\b[^>]*>/gi;
         let imgMatch;
         let visibleImages = 0;
-        while ((imgMatch = imgRegex.exec(this.html)) !== null) {
+        while ((imgMatch = imgRegex.exec(htmlNoComments)) !== null) {
             const tag = imgMatch[0];
             // Überspringe Tracking-Pixel (1x1, width=1, height=1)
             const w = (tag.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
@@ -2693,13 +2691,13 @@ class TemplateProcessor {
         
         // Verhältnis bewerten
         if (visibleImages === 0) {
-            this.addCheck(id, 'PASS', 'Keine Bilder im Template – reines Text-Template (' + wordCount + ' Wörter)');
+            this.addCheck(id, 'PASS', 'Reines Text-Template (' + wordCount + ' Wörter, keine Bilder)');
         } else if (wordCount < 50 && visibleImages >= 3) {
             this.addCheck(id, 'WARN', 'Wenig Text im Verhältnis zu Bildern (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder) – Spamfilter bevorzugen ein Verhältnis von mindestens 60% Text zu 40% Bild');
         } else if (wordCount < 20 && visibleImages >= 1) {
             this.addCheck(id, 'WARN', 'Sehr wenig Text (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder) – „Image-only" E-Mails werden häufig als Spam eingestuft');
         } else {
-            this.addCheck(id, 'PASS', 'Text-Bild-Verhältnis OK (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder)');
+            this.addCheck(id, 'PASS', 'Text-Bild-Verhältnis: ' + wordCount + ' Wörter, ' + visibleImages + ' Bilder – OK');
         }
     }
 
@@ -2788,14 +2786,18 @@ class TemplateProcessor {
     checkRelativeImagePaths() {
         const id = 'W01_RELATIVE_IMAGES';
         
+        // HTML-Kommentare entfernen (Template-Varianten, MSO-Blöcke etc.)
+        // Behalte nur <!--[if...]> und <![endif]--> (Outlook Conditional Comments)
+        const htmlWithoutComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        
         const imgRegex = /<img[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi;
         let match;
         const relativeImages = [];
         
         // Template-Variablen-Patterns die OK sind
-        const templateVarRegex = /^(%|{{|\[\[|\[@|\[%|##|\$\{|<%|#\{|\$[a-zA-Z])/;
+        const templateVarRegex = /^(%|{{|\[\[|\[@|\[%|##|\$\{|<%|#\{|\$[a-zA-Z]|\*\|)/;
         
-        while ((match = imgRegex.exec(this.html)) !== null) {
+        while ((match = imgRegex.exec(htmlWithoutComments)) !== null) {
             const src = match[1].trim();
             // Überspringe Template-Variablen (werden vor Versand ersetzt)
             if (templateVarRegex.test(src)) continue;
@@ -2803,6 +2805,8 @@ class TemplateProcessor {
             if (src.startsWith('data:')) continue;
             // Überspringe leere/Platzhalter
             if (src === '' || src === '#') continue;
+            // Überspringe Backtick-Template-Literale (Maizzle/JS-Templates)
+            if (src.startsWith('`') || src.includes('${')) continue;
             
             // Relative Pfade: kein http/https am Anfang und kein // (protocol-relative)
             if (!src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('//')) {
@@ -2823,9 +2827,12 @@ class TemplateProcessor {
     checkInsecureUrls() {
         const id = 'W02_INSECURE_URLS';
         
+        // HTML-Kommentare entfernen (auskommentierte Template-Varianten ignorieren)
+        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        
         // Suche nach http:// in src-Attributen (Bilder)
         const httpImgRegex = /<img[^>]*src\s*=\s*["']http:\/\/[^"']+["'][^>]*>/gi;
-        const httpImgMatches = this.html.match(httpImgRegex) || [];
+        const httpImgMatches = htmlNoComments.match(httpImgRegex) || [];
         
         // Tracking-Pixel (1x1) separat zählen
         let trackingPixels = 0;
@@ -3050,16 +3057,23 @@ class TemplateProcessor {
         }
         
         // === Zustellbarkeits-Checks (höherer Impact) ===
-        const sizeCheck = this.checks.find(c => c.id === 'P17_TEMPLATE_SIZE' && c.status === 'WARN');
+        const sizeCheck = this.checks.find(c => c.id === 'P17_TEMPLATE_SIZE');
         if (sizeCheck) {
-            confidence -= 10; // Gmail-Clipping ist kritisch
+            if (sizeCheck.status === 'WARN') {
+                confidence -= 10; // Gmail-Clipping ist kritisch
+            }
             attentionItems.push('📦 ' + sizeCheck.message);
         }
         
-        const textImgCheck = this.checks.find(c => c.id === 'P18_TEXT_IMAGE_RATIO' && c.status === 'WARN');
+        const textImgCheck = this.checks.find(c => c.id === 'P18_TEXT_IMAGE_RATIO');
         if (textImgCheck) {
-            confidence -= 5;
-            attentionItems.push('📊 Ungünstiges Text-Bild-Verhältnis – Spam-Risiko erhöht');
+            if (textImgCheck.status === 'WARN') {
+                confidence -= 5;
+                attentionItems.push('📊 ' + textImgCheck.message);
+            } else {
+                // Immer anzeigen als Info
+                attentionItems.push('📊 ' + textImgCheck.message);
+            }
         }
         
         const brokenLinkCheck = this.checks.find(c => c.id === 'P16_BROKEN_LINKS' && c.status === 'WARN');
@@ -3080,29 +3094,6 @@ class TemplateProcessor {
             confidenceLevel = 'low';
         }
 
-        // Report generieren
-        let report = '=== HTML TEMPLATE QA REPORT ===\n\n';
-        report += `Checklist-Typ: ${this.checklistType.toUpperCase()}\n`;
-        report += `Preheader-Text: ${this.preheaderText || '(nicht angegeben)'}\n`;
-        report += `Title-Tag: ${this.titleText || '(nicht angegeben)'}\n`;
-        report += `Externe Fonts entfernen: ${this.removeFonts ? 'Ja' : 'Nein'}\n\n`;
-        report += '--- CHECKS ---\n\n';
-
-        this.checks.forEach(check => {
-            report += `${check.id} ${check.status} - ${check.message}\n`;
-        });
-
-        report += `\n--- SUMMARY ---\n`;
-        report += `${this.checks.length} checks, ${failCount} failures, ${fixedCount} fixes, ${replacedCount} replacements, ${warnCount} warnings\n`;
-        report += `Status: ${status.toUpperCase()}\n`;
-        report += `Confidence: ${confidence}% (${confidenceLevel === 'high' ? 'HOCH' : confidenceLevel === 'medium' ? 'MITTEL' : 'NIEDRIG'})\n\n`;
-        
-        if (attentionItems.length > 0) {
-            report += `--- BITTE PRÜFEN ---\n`;
-            attentionItems.forEach(item => { report += item + '\n'; });
-            report += '\n';
-        }
-
         // Unresolved generieren
         let unresolved = '=== UNRESOLVED ISSUES ===\n\n';
         const unresolvedChecks = this.checks.filter(c => c.status === 'FAIL' || c.status === 'STILL_FAIL' || c.status === 'WARN');
@@ -3118,7 +3109,6 @@ class TemplateProcessor {
         return {
             originalHtml: this.originalHtml,
             optimizedHtml: this.html,
-            report: report,
             unresolved: unresolved,
             status: status,
             confidence: confidence,
@@ -3132,7 +3122,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.7.2-2026-02-25';
+const APP_VERSION = 'v3.7.3-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -3177,9 +3167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeFonts = document.getElementById('removeFonts');
     const resultsSection = document.getElementById('resultsSection');
     const statusBadge = document.getElementById('statusBadge');
-    const reportPreview = document.getElementById('reportPreview');
     const downloadOptimized = document.getElementById('downloadOptimized');
-    const downloadReport = document.getElementById('downloadReport');
     const downloadUnresolved = document.getElementById('downloadUnresolved');
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
     const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');  // FIX: TDZ - früh deklarieren
@@ -3463,9 +3451,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Pending Warning ausblenden
         if (pendingWarning) pendingWarning.style.display = 'none';
         
-        // Report Preview leeren
-        if (reportPreview) reportPreview.textContent = '';
-        
         // Reset-Button wieder verstecken
         resetBtn.style.display = 'none';
         
@@ -3705,9 +3690,6 @@ document.addEventListener('DOMContentLoaded', () => {
             confHtml += '</div>';
             confidenceEl.innerHTML = confHtml;
 
-            // Report Preview
-            reportPreview.textContent = processingResult.report;
-
             // Diff-Button aktivieren
             showDiffBtn.disabled = false;
             showDiffBtn.title = 'Änderungen zwischen Original und Optimiert anzeigen';
@@ -3771,61 +3753,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const baseName = nameParts.join('.');
             const newName = `${baseName}_optimized.${extension}`;
             downloadFile(currentWorkingHtml, newName, 'text/html');
-        }
-    });
-
-    downloadReport.addEventListener('click', () => {
-        if (processingResult && selectedFilename) {
-            // Originalnamen verwenden und "_report" anhängen
-            const originalName = selectedFilename;
-            const nameParts = originalName.split('.');
-            const baseName = nameParts.join('.');
-            const newName = `${baseName}_report.txt`;
-            
-            // Report mit MANUAL_ACTIONS erweitern
-            let reportContent = processingResult.report;
-            
-            // Prüfe ob autoFixes existiert
-            if (processingResult.autoFixes && processingResult.autoFixes.length > 0) {
-                reportContent += `\n\nAUTO_FIXES_COUNT=${processingResult.autoFixes.length}\n`;
-                reportContent += `AUTO_FIXES:\n`;
-                processingResult.autoFixes.forEach(fix => {
-                    reportContent += `${fix.id}_${fix.type} - tag=<${fix.tag}> inserted=${fix.inserted} bei Position ${fix.insertPosition} [${fix.confidence || 'unknown'}] method=${fix.method || 'legacy'}\n`;
-                });
-            }
-            
-            // Prüfe ob tagProblems existiert
-            if (processingResult.tagProblems && processingResult.tagProblems.length > 0) {
-                reportContent += `\n\nTAG_PROBLEMS_COUNT=${processingResult.tagProblems.length}\n`;
-                reportContent += `TAG_PROBLEMS:\n`;
-                processingResult.tagProblems.forEach(problem => {
-                    reportContent += `${problem.id}_${problem.type} - tag=<${problem.tag}> ${problem.message}\n`;
-                });
-            }
-            
-            // Prüfe ob manualActionLog existiert (nur wenn Tag-Review verwendet wurde)
-            if (typeof manualActionLog !== 'undefined' && manualActionLog.length > 0) {
-                reportContent += `\n\nMANUAL_ACTIONS_COUNT=${manualActionLog.length}\n`;
-                reportContent += `MANUAL_ACTIONS:\n`;
-                manualActionLog.forEach(action => {
-                    reportContent += `${action}\n`;
-                });
-            } else if (typeof manualActionLog !== 'undefined') {
-                reportContent += `\n\nMANUAL_ACTIONS_COUNT=0\n`;
-            }
-            
-            // Phase 11 B5: TAB_COMMITS Extension
-            if (globalCommitLog.length > 0) {
-                reportContent += `\n\nTAB_COMMITS_COUNT=${globalCommitLog.length}\n`;
-                reportContent += `TAB_COMMITS:\n`;
-                globalCommitLog.forEach(commit => {
-                    reportContent += `${commit}\n`;
-                });
-            } else {
-                reportContent += `\n\nTAB_COMMITS_COUNT=0\n`;
-            }
-            
-            downloadFile(reportContent, newName, 'text/plain');
         }
     });
 
@@ -5478,30 +5405,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const preheaderDivCount = phPositions.size;
         const totalPreheader = preheaderPlaceholderCount + preheaderDivCount;
-        
-        let phaseCReport = '\n\n===== PHASE C: ASSET REVIEW =====\n';
-        
-        // Preheader Status
-        if (totalPreheader === 0 || totalPreheader === 1) {
-            phaseCReport += 'PHASEC_PREHEADER_OK\n';
-        } else {
-            phaseCReport += `PHASEC_PREHEADER_WARN=COUNT_GT_1 (${totalPreheader})\n`;
-        }
-        
-        // Aktionen
-        phaseCReport += `ASSET_REVIEW_ACTIONS_COUNT=${assetReviewActionLog.length}\n`;
-        if (assetReviewActionLog.length > 0) {
-            phaseCReport += 'ASSET_REVIEW_ACTIONS:\n';
-            assetReviewActionLog.forEach(action => {
-                phaseCReport += `  ${action}\n`;
-            });
-        }
-        
-        // Erweitere bestehenden Report
-        processingResult.report += phaseCReport;
-        
-        // Update Report Preview
-        reportPreview.textContent = processingResult.report;
     }
     
     // ===== INSPECTOR FEATURE =====
