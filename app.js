@@ -2247,11 +2247,6 @@ class TemplateProcessor {
             
             if (!bgcolorAttr && !bgInStyle) continue;
             
-            // Weiße/helle Hintergründe überspringen – das sind Inhaltszellen, keine Buttons
-            const rawBg = (bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? bgInStyle[1] : '')).toLowerCase().replace('#', '');
-            const lightBgValues = ['fff', 'ffffff', 'fefefe', 'fafafa', 'f5f5f5', 'f8f8f8', 'f9f9f9', 'fafbfc'];
-            if (lightBgValues.includes(rawBg)) continue;
-            
             // Ist es zentriert?
             const isCentered = /text-align\s*:\s*center/i.test(tdStyle) || /align\s*=\s*["']center["']/i.test(tdAttrs);
             if (!isCentered) continue;
@@ -2272,6 +2267,11 @@ class TemplateProcessor {
             
             // Überspringe wenn es ein Bild-Link ist (kein Text, nur <img>)
             if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+            
+            // Überspringe Inhaltszellen: Wenn die <td> mehrere Block-Elemente enthält,
+            // ist es eine Inhaltszelle (z.B. mit Überschriften, Absätzen), kein Button
+            const blockElements = (tdInner.match(/<(?:h[1-6]|p|ol|ul|table|img)\b/gi) || []).length;
+            if (blockElements >= 2) continue;
             
             // Überspringe wenn der Link selbst schon als Typ A erfasst wurde
             const linkFullPos = this.html.indexOf(linkMatch[0], match.index);
@@ -2339,6 +2339,9 @@ class TemplateProcessor {
                 if (!linkMatch) continue;
                 const linkText = linkMatch[2].replace(/<[^>]*>/g, '').trim();
                 if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+                // Inhaltszellen überspringen (mehrere Block-Elemente = kein Button)
+                const blockEls = (tdInner.match(/<(?:h[1-6]|p|ol|ul|table|img)\b/gi) || []).length;
+                if (blockEls >= 2) continue;
                 const alreadyCaptured = buttons.some(b => Math.abs(b.index - match.index) < 50);
                 if (alreadyCaptured) continue;
                 
@@ -3127,7 +3130,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.7.4-2026-02-25';
+const APP_VERSION = 'v3.7.6-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -10492,6 +10495,11 @@ td[width] { width: auto !important; }
             // Überspringe Bild-Links
             if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
             
+            // Inhaltszellen überspringen: Wenn die <td> mehrere Block-Elemente enthält
+            // (Überschriften, Absätze, Listen, Bilder), ist es kein Button
+            const blockElCount = (tdInner.match(/<(?:h[1-6]|p|ol|ul|table|img)\b/gi) || []).length;
+            if (blockElCount >= 2) continue;
+            
             // Überspringe wenn bereits als Typ A erfasst
             const linkPos = html.indexOf(linkMatch[0], match.index);
             const alreadyCaptured = typeAPositions.some(p => Math.abs(p - linkPos) < 10);
@@ -10501,11 +10509,6 @@ td[width] { width: auto !important; }
             const id = 'B' + String(btnIndex).padStart(3, '0');
             
             let bgColor = normalizeHex(bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? bgInStyle[1] : '333333'));
-            
-            // Weiße/helle Hintergrundfarben überspringen – das sind Inhaltszellen, keine Buttons
-            // z.B. <td bgcolor="#fff"> mit einer verlinkten Überschrift drin
-            const lightBgs = ['#ffffff', '#fff', '#fefefe', '#fafafa', '#f5f5f5', '#f8f8f8', '#f9f9f9', '#fafbfc'];
-            if (lightBgs.includes(bgColor)) continue;
             
             // Text-Color aus dem <a> style
             const linkStyleStr = (tdInner.match(/<a[^>]*style\s*=\s*["']([^"]*)["']/i) || [])[1] || '';
@@ -10637,6 +10640,10 @@ td[width] { width: auto !important; }
                 const href = linkMatch[1];
                 const linkText = linkMatch[2].replace(/<[^>]*>/g, '').trim();
                 if (!linkText && /<img\b/i.test(linkMatch[2])) continue;
+                
+                // Inhaltszellen überspringen (mehrere Block-Elemente = kein Button)
+                const blockElsC = (tdInner.match(/<(?:h[1-6]|p|ol|ul|table|img)\b/gi) || []).length;
+                if (blockElsC >= 2) continue;
                 
                 // Überspringe bereits erfasste
                 const linkPos = html.indexOf(linkMatch[0], tdMatch.index);
