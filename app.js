@@ -3132,7 +3132,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.7.1-2026-02-25';
+const APP_VERSION = 'v3.7.2-2026-02-25';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4029,6 +4029,106 @@ document.addEventListener('DOMContentLoaded', () => {
         // Doppelte Leerzeichen in Tags: <p  class → <p class
         result = result.replace(/<([a-z][a-z0-9]*)\s{2,}/gi, '<$1 ');
         return result;
+    }
+
+    // === MSO-Style Protection ===
+    // Browser-DOMParser entfernt proprietäre mso-* CSS Properties (z.B. mso-text-raise).
+    // Diese sind aber für Outlook essentiell. Lösung: vor DOM-Parsing als data-Attribut sichern,
+    // nach outerHTML-Serialisierung zurückschreiben.
+    function protectMsoStyles(html) {
+        // 1. MSO-* Inline-Styles schützen
+        let result = html.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            const msoProps = [];
+            const otherProps = [];
+            styleContent.split(';').forEach(prop => {
+                const trimmed = prop.trim();
+                if (!trimmed) return;
+                if (/^mso-/i.test(trimmed)) {
+                    msoProps.push(trimmed);
+                } else {
+                    otherProps.push(trimmed);
+                }
+            });
+            if (msoProps.length === 0) return match;
+            const preserved = msoProps.join('; ').replace(/"/g, '&quot;');
+            if (otherProps.length === 0) {
+                return `data-mso-preserve="${preserved}"`;
+            }
+            return `style="${otherProps.join('; ')};" data-mso-preserve="${preserved}"`;
+        });
+        
+        // 2. xml:lang Attribut schützen (DOMParser entfernt es)
+        result = result.replace(/\sxml:lang="([^"]*)"/gi, (match, val) => {
+            return ` data-xmllang-preserve="${val}"`;
+        });
+        
+        return result;
+    }
+
+    function restoreMsoStyles(html) {
+        // Fall 1: style + data-mso-preserve nebeneinander
+        let result = html.replace(/style="([^"]*)"\s*data-mso-preserve="([^"]*)"/gi, (match, existingStyle, msoStyles) => {
+            const clean = existingStyle.replace(/;?\s*$/, '');
+            const msoDecoded = msoStyles.replace(/&quot;/g, '"');
+            return `style="${clean}; ${msoDecoded}"`;
+        });
+        // Fall 2: data-mso-preserve + style (umgekehrte Reihenfolge durch Browser)
+        result = result.replace(/data-mso-preserve="([^"]*)"\s*style="([^"]*)"/gi, (match, msoStyles, existingStyle) => {
+            const clean = existingStyle.replace(/;?\s*$/, '');
+            const msoDecoded = msoStyles.replace(/&quot;/g, '"');
+            return `style="${clean}; ${msoDecoded}"`;
+        });
+        // Fall 3: nur data-mso-preserve (style war nur mso → wurde komplett entfernt)
+        result = result.replace(/data-mso-preserve="([^"]*)"/gi, (match, msoStyles) => {
+            const msoDecoded = msoStyles.replace(/&quot;/g, '"');
+            return `style="${msoDecoded}"`;
+        });
+        return result;
+    }
+
+    // Wrapper: HTML sicher durch DOMParser → outerHTML schleusen
+    function safeDomSerialize(doc) {
+        let raw = doc.documentElement.outerHTML;
+        
+        // 1. MSO-Styles wiederherstellen
+        raw = restoreMsoStyles(raw);
+        
+        // 2. xml:lang wiederherstellen
+        raw = raw.replace(/\sdata-xmllang-preserve="([^"]*)"/gi, (match, val) => {
+            return ` xml:lang="${val}"`;
+        });
+        
+        // 3. Browser-eingefügte <tbody>/<\/tbody> entfernen
+        // Browser fügt automatisch <tbody> in <table> ein – das verändert das Email-HTML
+        raw = raw.replace(/<tbody>/gi, '');
+        raw = raw.replace(/<\/tbody>/gi, '');
+        
+        // 4. Font-Family Quotes reparieren: &quot;Segoe UI&quot; → 'Segoe UI'
+        // DOMParser encodiert einfache Anführungszeichen in style-Attributen als &quot;
+        raw = raw.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            if (/&quot;/i.test(styleContent)) {
+                const fixed = styleContent.replace(/&quot;\s*/g, "'").replace(/\s*&quot;/g, "'");
+                return 'style="' + fixed + '"';
+            }
+            return match;
+        });
+        
+        // 5. CSS-Normalisierungen rückgängig: 0px → 0 (Browser fügt px hinzu)
+        raw = raw.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+            if (/:\s*0px/i.test(styleContent)) {
+                const fixed = styleContent.replace(/:\s*0px\b/gi, ': 0');
+                return 'style="' + fixed + '"';
+            }
+            return match;
+        });
+        
+        return raw;
+    }
+
+    function safeDomParse(html) {
+        const protected_ = protectMsoStyles(html);
+        const parser = new DOMParser();
+        return parser.parseFromString(protected_, 'text/html');
     }
 
     function downloadFile(content, filename, mimeType) {
@@ -5683,12 +5783,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const r = findElementByQaNodeId(editorTabHtml, event.data.qaNodeId);
                 if (r) {
                     // Ersetze das Element mit dem aktualisierten HTML aus dem iframe
-                    const tmp = new DOMParser().parseFromString(event.data.outerHTML, 'text/html');
+                    const tmp = new DOMParser().parseFromString(protectMsoStyles(event.data.outerHTML), 'text/html');
                     const updatedEl = tmp.body.firstChild;
                     if (updatedEl) {
                         // Übertrage den neuen innerHTML (ohne qa-node-id Manipulationen)
                         r.element.innerHTML = updatedEl.innerHTML;
-                        editorTabHtml = XHTML_DOCTYPE + '\n' + r.doc.documentElement.outerHTML;
+                        editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(r.doc);
                     }
                 }
                 setEditorPending(true);
@@ -6329,7 +6429,7 @@ td[width] { width: auto !important; }
     // Erzeuge annotierte Preview-Version mit data-qa-link-id und data-qa-img-id
     function generateAnnotatedPreview(html, tabName) {
         const parser = new DOMParser();
-        let doc = parser.parseFromString(html, 'text/html');  // FIX: let statt const (wird später neu zugewiesen)
+        let doc = parser.parseFromString(protectMsoStyles(html), 'text/html');  // FIX: let statt const (wird später neu zugewiesen)
         
         // Phase 13 P7: Strip <script> tags für Preview-Security (nur in srcdoc, nicht in committed HTML)
         const scripts = doc.querySelectorAll('script');
@@ -6379,7 +6479,7 @@ td[width] { width: auto !important; }
             const sortedFixes = [...autoFixes].sort((a, b) => b.insertPosition - a.insertPosition);
             
             // Serialisiere HTML zu String für Marker-Einfügung
-            let htmlString = doc.documentElement.outerHTML;
+            let htmlString = safeDomSerialize(doc);
             
             sortedFixes.forEach(fix => {
                 // Finde Position via beforeCtx + inserted + afterCtx
@@ -6395,7 +6495,7 @@ td[width] { width: auto !important; }
             });
             
             // Parse zurück zu DOM
-            doc = parser.parseFromString(htmlString, 'text/html');
+            doc = parser.parseFromString(protectMsoStyles(htmlString), 'text/html');
             console.log('[INSPECTOR] Inserted ' + sortedFixes.length + ' fix markers');
         }
         
@@ -6881,7 +6981,7 @@ td[width] { width: auto !important; }
         }
         
         // Serialisiere zurück zu HTML (WICHTIG: outerHTML statt XMLSerializer, damit Script nicht escaped wird)
-        const annotatedHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+        const annotatedHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
         
         // Debug-Guard: Prüfe ob Script escaped wurde
         const _scriptMatch2 = annotatedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
@@ -7117,7 +7217,7 @@ td[width] { width: auto !important; }
         if (!html) return [];
         
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         const anchors = doc.querySelectorAll('a[href]');
         
         const links = [];
@@ -7142,7 +7242,7 @@ td[width] { width: auto !important; }
         if (!html) return null;
         
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         
         // Suche nach typischen Tracking-Pixeln
         // 1x1 Bilder, oft am Ende des Body
@@ -7681,7 +7781,7 @@ td[width] { width: auto !important; }
         
         // Parse HTML
         const parser = new DOMParser();
-        const doc = parser.parseFromString(trackingTabHtml, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(trackingTabHtml), 'text/html');
         
         // Finde Element via qaNodeId (ohne data-qa-node-id, da nicht in trackingTabHtml)
         // Wir müssen das Element via Index finden (N001 -> 1. klickbares Element, etc.)
@@ -7727,7 +7827,7 @@ td[width] { width: auto !important; }
         
         // Serialisiere zurück
         // BUG #4 FIX: outerHTML statt XMLSerializer
-        trackingTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+        trackingTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
         
         // Check Pending (Phase 10)
         checkTrackingPending();
@@ -8037,7 +8137,7 @@ td[width] { width: auto !important; }
         if (!html) return [];
         
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         const imgElements = doc.querySelectorAll('img');
         
         const images = [];
@@ -8280,7 +8380,7 @@ td[width] { width: auto !important; }
         
         try {
             const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
+            const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
             
             // Suche in inline styles
             const elementsWithStyle = doc.querySelectorAll('[style]');
@@ -8528,7 +8628,7 @@ td[width] { width: auto !important; }
         
         // Parse HTML
         const parser = new DOMParser();
-        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(imagesTabHtml), 'text/html');
         const images = doc.querySelectorAll('img');
         
         if (imgIndex >= 0 && imgIndex < images.length) {
@@ -8540,7 +8640,7 @@ td[width] { width: auto !important; }
             
             // Serialisiere zurück
             // BUG #4 FIX: outerHTML statt XMLSerializer
-            imagesTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+            imagesTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -8570,7 +8670,7 @@ td[width] { width: auto !important; }
         
         // Parse HTML
         const parser = new DOMParser();
-        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(imagesTabHtml), 'text/html');
         const images = doc.querySelectorAll('img');
         
         if (imgIndex >= 0 && imgIndex < images.length) {
@@ -8581,7 +8681,7 @@ td[width] { width: auto !important; }
             
             // Serialisiere zurück
             // BUG #4 FIX: outerHTML statt XMLSerializer
-            imagesTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+            imagesTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -8611,7 +8711,7 @@ td[width] { width: auto !important; }
         
         // Parse HTML
         const parser = new DOMParser();
-        const doc = parser.parseFromString(imagesTabHtml, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(imagesTabHtml), 'text/html');
         const images = doc.querySelectorAll('img');
         
         if (imgIndex >= 0 && imgIndex < images.length) {
@@ -8621,7 +8721,7 @@ td[width] { width: auto !important; }
             img.setAttribute('alt', newAlt);
             
             // Serialisiere zurück
-            imagesTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+            imagesTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
             
             // Check Pending
             checkImagesPending();
@@ -12393,7 +12493,7 @@ td[width] { width: auto !important; }
     // Inject data-qa-node-id in editorTabHtml (gleiche Reihenfolge wie generateAnnotatedPreview)
     function injectQaNodeIds(html) {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         const selectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'];
         let counter = 0;
         selectors.forEach(sel => {
@@ -12402,7 +12502,7 @@ td[width] { width: auto !important; }
                 el.setAttribute('data-qa-node-id', 'N' + String(counter).padStart(4, '0'));
             });
         });
-        return XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+        return XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
     }
 
     // Entferne data-qa-node-id vor Commit (kommen nicht ins finale HTML)
@@ -12413,7 +12513,7 @@ td[width] { width: auto !important; }
     // Finde Element in editorTabHtml per qaNodeId (editorTabHtml hat bereits IDs durch injectQaNodeIds)
     function findElementByQaNodeId(html, qaNodeId) {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         const element = doc.querySelector('[data-qa-node-id="' + qaNodeId + '"]');
         return element ? { doc, element } : null;
     }
@@ -12602,7 +12702,7 @@ td[width] { width: auto !important; }
         editorHistory.push(editorTabHtml);
         
         const parser = new DOMParser();
-        const doc = parser.parseFromString(editorTabHtml, 'text/html');
+        const doc = parser.parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const element = doc.querySelector('[data-qa-node-id="' + data.qaNodeId + '"]');
         if (!element) {
             console.warn('[EDITOR] Element nicht gefunden:', data.qaNodeId);
@@ -12649,7 +12749,7 @@ td[width] { width: auto !important; }
             element.innerHTML = data.html;
             
             // Serialize back to HTML
-            editorTabHtml = XHTML_DOCTYPE + '\n' + doc.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
             
             // Mark as pending
             setEditorPending(true);
@@ -12763,11 +12863,11 @@ td[width] { width: auto !important; }
         
         editorHistory.push(editorTabHtml);
         
-        const _doc7 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _doc7 = new DOMParser().parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const _el7 = _doc7.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el7) {
             _el7.parentNode.removeChild(_el7);
-            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc7.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(_doc7);
             setEditorPending(true);
             editorSelectedElement = null;
             updateInspectorPreview();
@@ -12795,11 +12895,11 @@ td[width] { width: auto !important; }
         
         // Save to history
         editorHistory.push(editorTabHtml);
-        const _doc1 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _doc1 = new DOMParser().parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const _el1 = _doc1.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el1 && _el1.tagName.toLowerCase() === 'a') {
             _el1.setAttribute('href', newUrl);
-            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc1.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(_doc1);
             setEditorPending(true);
             editorSelectedElement.href = newUrl;
             showEditorTab(document.getElementById('editorContent'));
@@ -12811,11 +12911,11 @@ td[width] { width: auto !important; }
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
         
         editorHistory.push(editorTabHtml);
-        const _doc2 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _doc2 = new DOMParser().parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const _el2 = _doc2.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el2 && _el2.tagName.toLowerCase() === 'a') {
             _el2.setAttribute('href', '');
-            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc2.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(_doc2);
             setEditorPending(true);
             editorSelectedElement.href = '';
             showEditorTab(document.getElementById('editorContent'));
@@ -12826,11 +12926,11 @@ td[width] { width: auto !important; }
     function handleEditorRemoveLink() {
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'a') return;
         editorHistory.push(editorTabHtml);
-        const _doc3 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _doc3 = new DOMParser().parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const _el3 = _doc3.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el3 && _el3.tagName.toLowerCase() === 'a') {
             _el3.parentNode.replaceChild(_doc3.createTextNode(_el3.textContent), _el3);
-            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc3.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(_doc3);
             setEditorPending(true);
             editorSelectedElement = null;
             showEditorTab(document.getElementById('editorContent'));
@@ -12853,11 +12953,11 @@ td[width] { width: auto !important; }
         }
         
         editorHistory.push(editorTabHtml);
-        const _doc4 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _doc4 = new DOMParser().parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const _el4 = _doc4.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el4 && _el4.tagName.toLowerCase() === 'img') {
             _el4.setAttribute('src', newSrc);
-            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc4.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(_doc4);
             setEditorPending(true);
             editorSelectedElement.src = newSrc;
             showEditorTab(document.getElementById('editorContent'));
@@ -12869,11 +12969,11 @@ td[width] { width: auto !important; }
         if (!editorSelectedElement || editorSelectedElement.tagName !== 'img') return;
         
         editorHistory.push(editorTabHtml);
-        const _doc5 = new DOMParser().parseFromString(editorTabHtml, 'text/html');
+        const _doc5 = new DOMParser().parseFromString(protectMsoStyles(editorTabHtml), 'text/html');
         const _el5 = _doc5.querySelector('[data-qa-node-id="' + editorSelectedElement.qaNodeId + '"]');
         if (_el5 && _el5.tagName.toLowerCase() === 'img') {
             _el5.parentNode.removeChild(_el5);
-            editorTabHtml = XHTML_DOCTYPE + '\n' + _doc5.documentElement.outerHTML;
+            editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(_doc5);
             setEditorPending(true);
             editorSelectedElement = null;
             showEditorTab(document.getElementById('editorContent'));
