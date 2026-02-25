@@ -11898,7 +11898,9 @@ td[width] { width: auto !important; }
         
         // Preview aktualisieren
         updateInspectorPreview();
-        showInspectorToast('✅ ' + fix.inserted + ' eingefügt');
+        if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+        resetNonPendingTabHtmls();
+        showInspectorToast('✅ ' + fix.inserted + ' eingefügt (direkt übernommen)');
     }
     
     // Angewendeten Vorschlag rückgängig machen (Toggle zurück)
@@ -11951,7 +11953,9 @@ td[width] { width: auto !important; }
         });
         
         updateInspectorPreview();
-        showInspectorToast('↩️ ' + fix.inserted + ' entfernt');
+        if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+        resetNonPendingTabHtmls();
+        showInspectorToast('↩️ ' + fix.inserted + ' entfernt (direkt übernommen)');
     }
     
     // Vorschlag ignorieren → Manuell platzieren anbieten
@@ -12078,7 +12082,9 @@ td[width] { width: auto !important; }
             
             // Preview aktualisieren
             updateInspectorPreview();
-            showInspectorToast('✅ ' + tagToInsert + ' manuell eingefügt');
+            if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+            resetNonPendingTabHtmls();
+            showInspectorToast('✅ ' + tagToInsert + ' manuell eingefügt (direkt übernommen)');
         });
         
         // Abbrechen
@@ -12155,6 +12161,8 @@ td[width] { width: auto !important; }
         fixElement.querySelector('.tagreview-fix-header').appendChild(label);
         
         updateInspectorPreview();
+        if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+        resetNonPendingTabHtmls();
         showInspectorToast('↶ ' + fix.id + ' rückgängig gemacht');
     }
     
@@ -12221,7 +12229,10 @@ td[width] { width: auto !important; }
         element.querySelector('.tagreview-problem-header').appendChild(label);
         
         updateInspectorPreview();
-        showInspectorToast('🗑️ Überzähliges </' + tag + '> entfernt');
+        // Andere Tabs synchronisieren (damit sie die Tag-Änderung nicht überschreiben)
+        if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+        resetNonPendingTabHtmls();
+        showInspectorToast('🗑️ Überzähliges </' + tag + '> entfernt (direkt übernommen – kein Commit nötig)');
     }
     
     // Manuell Tag schließen (nutzt Boundary-Logik)
@@ -12298,7 +12309,9 @@ td[width] { width: auto !important; }
         element.querySelector('.tagreview-problem-header').appendChild(label);
         
         updateInspectorPreview();
-        showInspectorToast('✓ <' + tag + '> manuell geschlossen' + (bestBoundary ? ' (vor ' + bestBoundary + ')' : ''));
+        if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+        resetNonPendingTabHtmls();
+        showInspectorToast('✓ <' + tag + '> manuell geschlossen (direkt übernommen – kein Commit nötig)' + (bestBoundary ? ' (vor ' + bestBoundary + ')' : ''));
     }
     
     // Problem ignorieren
