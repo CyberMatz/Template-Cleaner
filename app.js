@@ -2859,33 +2859,46 @@ class TemplateProcessor {
         // Kein Check-Eintrag wenn alles OK (UTF-8 oder wurde bereits durch S03c bereinigt)
     }
 
-    // W05: Inline min-width das responsive CSS blockiert
+    // W05: Inline min-width entfernen das responsive CSS blockiert
     // Viele Templates haben min-width: 640px inline auf Spalten-Divs.
     // Das überschreibt Media Queries und verhindert Mobile-Responsiveness.
+    // Wenn eine responsive Media Query vorhanden ist, ist das min-width ein Fehler → entfernen.
     checkInlineMinWidth() {
         const id = 'W05_INLINE_MINWIDTH';
         
-        // Finde Elemente mit inline min-width >= 500px
-        const minWidthRegex = /<(?:div|td|table)[^>]*style="[^"]*min-width:\s*(\d+)px[^"]*"[^>]*>/gi;
-        const problems = [];
-        let match;
+        // Prüfe ob responsive Media Query vorhanden ist
+        const hasResponsiveMediaQuery = /@media[^{]*max-width\s*:\s*\d+px[^{]*\{[^}]*width\s*:\s*100%/i.test(this.html);
+        if (!hasResponsiveMediaQuery) return; // Ohne Media Query nichts anfassen
         
-        while ((match = minWidthRegex.exec(this.html)) !== null) {
-            const minWidth = parseInt(match[1]);
-            if (minWidth >= 500) {
-                // Prüfe ob das Element eine responsive Klasse hat
-                const hasResponsiveClass = /class="[^"]*u-col[^"]*"/i.test(match[0]) || 
-                                          /class="[^"]*responsive[^"]*"/i.test(match[0]) ||
-                                          /class="[^"]*mobile[^"]*"/i.test(match[0]);
-                if (hasResponsiveClass) {
-                    problems.push(minWidth + 'px');
-                }
-            }
-        }
+        let fixCount = 0;
         
-        if (problems.length > 0) {
-            const unique = [...new Set(problems)];
-            this.addCheck(id, 'WARN', '⚠️ Mobile-Darstellung blockiert: ' + problems.length + ' Element(e) haben eine feste Mindestbreite (' + unique.join(', ') + ') im Code, die verhindert dass das Template auf dem Handy schmaler wird. → AKTION: Kunde/Agentur muss im Template-Editor die Mindestbreite auf diesen Elementen entfernen oder die responsive CSS-Regeln mit !important ergänzen.');
+        // Finde Elemente mit responsive Klassen UND inline min-width >= 500px
+        this.html = this.html.replace(/<(div|td|table)([^>]*?)>/gi, (match, tagName, attrs) => {
+            // Hat das Element eine responsive Klasse?
+            const hasResponsiveClass = /class="[^"]*(?:u-col|responsive|mobile|container)[^"]*"/i.test(match);
+            if (!hasResponsiveClass) return match;
+            
+            // Hat es ein inline min-width >= 500px?
+            const minWidthMatch = attrs.match(/style="([^"]*)"/i);
+            if (!minWidthMatch) return match;
+            
+            const styleContent = minWidthMatch[1];
+            const mwMatch = styleContent.match(/min-width:\s*(\d+)px/i);
+            if (!mwMatch || parseInt(mwMatch[1]) < 500) return match;
+            
+            // min-width aus dem style entfernen
+            const cleanedStyle = styleContent
+                .replace(/min-width:\s*\d+px\s*;?\s*/i, '')
+                .replace(/;\s*$/, ';')
+                .replace(/^\s*;\s*/, '');
+            
+            fixCount++;
+            const newAttrs = attrs.replace(minWidthMatch[0], 'style="' + cleanedStyle + '"');
+            return '<' + tagName + newAttrs + '>';
+        });
+        
+        if (fixCount > 0) {
+            this.addCheck(id, 'FIXED', fixCount + '× feste Mindestbreite (min-width) entfernt – blockierte die mobile Darstellung');
         }
     }
 
@@ -2931,7 +2944,10 @@ class TemplateProcessor {
         if (failCount > 0) {
             confidence -= failCount * 15;
             const failChecks = this.checks.filter(c => c.status === 'FAIL' || c.status === 'STILL_FAIL');
-            failChecks.forEach(c => attentionItems.push('❌ ' + c.id + ': ' + c.message));
+            failChecks.forEach(c => {
+                const cleanMsg = c.message.replace(/^❌\s*/, '');
+                attentionItems.push('❌ ' + cleanMsg);
+            });
         }
         
         // WARNs: Differenziert bewerten
@@ -2944,7 +2960,9 @@ class TemplateProcessor {
                 // Informelle Warnungen (optional/read-only) weniger abziehen
                 const isInfoOnly = /Read-only|optional|nicht optimal|generischen Phrasen/i.test(c.message);
                 confidence -= isInfoOnly ? 2 : 5;
-                attentionItems.push('⚠️ ' + c.id + ': ' + c.message);
+                // Nachricht ohne doppelte Emojis und ohne technische ID anzeigen
+                const cleanMsg = c.message.replace(/^⚠️\s*/, '');
+                attentionItems.push('⚠️ ' + cleanMsg);
             });
         }
         
