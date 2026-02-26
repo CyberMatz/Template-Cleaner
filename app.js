@@ -7594,19 +7594,30 @@ td[width] { width: auto !important; }
                 html += '</div>';
                 
                 groupLinks.forEach(link => {
-                    html += '<div class="link-card" data-link-id="' + link.id + '">';
+                    // Prüfe ob der Link problematisch ist (leer, nur Whitespace, nur #)
+                    const isEmptyHref = !link.href || link.href.trim() === '' || link.href.trim() === '#';
+                    const cardClass = isEmptyHref ? 'link-card link-card-warning' : 'link-card';
                     
-                    // Header: ID + Typ Badge
+                    html += '<div class="' + cardClass + '" data-link-id="' + link.id + '">';
+                    
+                    // Header: ID + Typ Badge + ggf. Warn-Badge
                     html += '<div class="link-card-header">';
                     html += '<span class="link-card-id">' + link.id + '</span>';
                     html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
+                    if (isEmptyHref) {
+                        html += '<span class="link-card-warning-badge">⚠ Leerer Link</span>';
+                    }
                     html += '</div>';
                     
                     // Text
                     html += '<div class="link-card-text">' + escapeHtml(link.text) + '</div>';
                     
-                    // URL
-                    html += '<div class="link-card-url" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</div>';
+                    // URL (bei leerem href deutliche Anzeige)
+                    if (isEmptyHref) {
+                        html += '<div class="link-card-url link-card-url-empty">⚠ href ist leer – Versandsystem belegt diesen Link ggf. automatisch mit Redirect!</div>';
+                    } else {
+                        html += '<div class="link-card-url" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</div>';
+                    }
                     
                     // Actions + Edit Row
                     html += '<div class="link-card-actions">';
