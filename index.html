@@ -16,8 +16,8 @@
 
         body {
             font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f2a93b;
-            color: #333;
+            background: #f5f3f0;
+            color: #44403c;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -39,7 +39,7 @@
             background: #fff;
             padding: 20px 40px;
             border-radius: 12px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             margin-bottom: 24px;
         }
 
@@ -53,15 +53,14 @@
         .dashboard-title {
             font-size: 32px;
             font-weight: 300;
-            color: #fff;
+            color: #f2a93b;
             letter-spacing: 3px;
             text-transform: uppercase;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.15);
         }
 
         .dashboard-subtitle {
             font-size: 15px;
-            color: rgba(255,255,255,0.85);
+            color: #a8a29e;
             margin-top: 8px;
             font-weight: 400;
             letter-spacing: 0.5px;
@@ -84,8 +83,8 @@
             border-radius: 12px;
             padding: 36px 30px;
             text-decoration: none;
-            color: #333;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            color: #44403c;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             transition: transform 0.25s ease, box-shadow 0.25s ease;
             display: flex;
             flex-direction: column;
@@ -98,7 +97,7 @@
 
         .tile:hover {
             transform: translateY(-6px);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
         }
 
         .tile:active {
@@ -126,7 +125,7 @@
 
         .tile--coming-soon:hover {
             transform: none;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
 
         .tile-icon {
@@ -142,19 +141,19 @@
         }
 
         .tile--coming-soon .tile-icon {
-            background: #f0f0f0;
+            background: #f5f3f0;
         }
 
         .tile-name {
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 10px;
-            color: #333;
+            color: #44403c;
         }
 
         .tile-description {
             font-size: 14px;
-            color: #777;
+            color: #78716c;
             line-height: 1.5;
         }
 
@@ -174,8 +173,8 @@
         }
 
         .tile-badge--soon {
-            background: #f0f0f0;
-            color: #999;
+            background: #f5f3f0;
+            color: #a8a29e;
         }
 
         /* ===========================
@@ -184,7 +183,7 @@
         .dashboard-footer {
             margin-top: 60px;
             text-align: center;
-            color: rgba(255,255,255,0.7);
+            color: #a8a29e;
             font-size: 13px;
             animation: fadeInUp 0.6s ease-out 0.4s both;
         }
@@ -276,15 +275,15 @@
             <span class="tile-badge tile-badge--active">✓ Verfügbar</span>
         </a>
 
-        <!-- Template Ersteller (KOMMT BALD) -->
-        <div class="tile tile--coming-soon">
+        <!-- Template Ersteller (AKTIV) -->
+        <a href="template-ersteller.html" class="tile tile--active">
             <div class="tile-icon">🛠️</div>
             <div class="tile-name">Template Ersteller</div>
             <div class="tile-description">
                 Neue E-Mail-Templates schnell und standardkonform erstellen.
             </div>
-            <span class="tile-badge tile-badge--soon">Kommt bald</span>
-        </div>
+            <span class="tile-badge tile-badge--active">✓ Verfügbar</span>
+        </a>
 
         <!-- Platzhalter (KOMMT BALD) -->
         <div class="tile tile--coming-soon">

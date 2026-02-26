@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Ersteller – PW Toolbox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ===========================
+           RESET & BASE
+           =========================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f3f0;
+            color: #44403c;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* ===========================
+           HEADER
+           =========================== */
+        .main-header {
+            background: white;
+            padding: 16px 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            color: #f2a93b;
+            font-weight: 500;
+            font-size: 14px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 2px solid #f2a93b;
+            transition: all 0.2s;
+        }
+        .back-link:hover { background: #f2a93b; color: #fff; }
+        .main-header h1 { font-size: 22px; color: #44403c; font-weight: 600; }
+
+        /* ===========================
+           LAYOUT: 3 Spalten
+           =========================== */
+        .app-layout {
+            display: grid;
+            grid-template-columns: 220px 1fr 1fr;
+            gap: 16px;
+            align-items: start;
+        }
+
+        /* ===========================
+           PANELS
+           =========================== */
+        .panel {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #44403c;
+            border-bottom: 2px solid #f2a93b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-body {
+            padding: 16px;
+        }
+
+        /* ===========================
+           LEFT SIDEBAR: Block-Palette
+           =========================== */
+        .block-palette {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .palette-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #faf9f7;
+            border: 1px solid #e7e5e4;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: #57534e;
+            transition: all 0.15s;
+        }
+        .palette-btn:hover {
+            background: #fff3e0;
+            border-color: #f2a93b;
+            color: #44403c;
+        }
+        .palette-btn .p-icon { font-size: 18px; }
+
+        /* Global Settings */
+        .settings-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 8px;
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .setting-item label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a8a29e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .setting-item input[type="text"],
+        .setting-item input[type="number"],
+        .setting-item select {
+            padding: 7px 10px;
+            border: 1px solid #d6d3d1;
+            border-radius: 5px;
+            font-size: 13px;
+            transition: border-color 0.2s;
+            width: 100%;
+            background: #faf9f7;
+            color: #44403c;
+        }
+        .setting-item input:focus,
+        .setting-item select:focus {
+            outline: none;
+            border-color: #f2a93b;
+        }
+        .color-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .color-row input[type="color"] {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #d6d3d1;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 2px;
+        }
+        .color-row input[type="text"] {
+            flex: 1;
+        }
+
+        /* ===========================
+           CENTER: Block-Editor
+           =========================== */
+        .blocks-list {
+            min-height: 200px;
+        }
+        .block-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a8a29e;
+            font-size: 14px;
+        }
+        .block-empty .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* Single Block Card */
+        .block-card {
+            background: #fff;
+            border: 1px solid #e7e5e4;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+        }
+        .block-card:hover {
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        .block-card.dragging {
+            opacity: 0.5;
+            border: 2px dashed #f2a93b;
+        }
+        .block-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #faf9f7;
+            border-bottom: 1px solid #e7e5e4;
+            cursor: grab;
+        }
+        .block-card-header:active { cursor: grabbing; }
+        .block-drag-handle {
+            color: #d6d3d1;
+            font-size: 16px;
+            cursor: grab;
+        }
+        .block-type-icon { font-size: 16px; }
+        .block-type-label {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 600;
+            color: #57534e;
+        }
+        .block-actions {
+            display: flex;
+            gap: 4px;
+        }
+        .block-btn {
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 14px;
+            color: #a8a29e;
+            transition: all 0.15s;
+        }
+        .block-btn:hover { background: #f5f3f0; color: #57534e; }
+        .block-btn.btn-delete:hover { background: #fde8e8; color: #d32f2f; }
+
+        /* Block Edit Form */
+        .block-card-body {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .block-card-body.collapsed { display: none; }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .field-group label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a8a29e;
+            text-transform: uppercase;
+        }
+        .field-group input[type="text"],
+        .field-group input[type="number"],
+        .field-group input[type="url"],
+        .field-group textarea,
+        .field-group select {
+            padding: 8px 10px;
+            border: 1px solid #d6d3d1;
+            border-radius: 5px;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+            background: #faf9f7;
+            color: #44403c;
+        }
+        .field-group input:focus,
+        .field-group textarea:focus,
+        .field-group select:focus {
+            outline: none;
+            border-color: #f2a93b;
+        }
+        .field-group textarea { resize: vertical; min-height: 60px; }
+        .field-row {
+            display: flex;
+            gap: 10px;
+        }
+        .field-row .field-group { flex: 1; }
+        .field-hint {
+            font-size: 11px;
+            color: #a8a29e;
+            margin-top: 2px;
+        }
+
+        /* ===========================
+           RIGHT: Preview
+           =========================== */
+        .preview-panel {
+            position: sticky;
+            top: 20px;
+        }
+        .preview-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-bottom: 1px solid #e7e5e4;
+        }
+        .preview-toggle {
+            display: flex;
+            background: #f5f3f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .preview-toggle-btn {
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            background: transparent;
+            color: #a8a29e;
+            transition: all 0.15s;
+        }
+        .preview-toggle-btn.active {
+            background: #f2a93b;
+            color: #fff;
+        }
+        .preview-size-label {
+            font-size: 11px;
+            color: #a8a29e;
+            margin-left: auto;
+        }
+        .preview-container {
+            background: #eae7e3;
+            min-height: 500px;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            overflow: auto;
+            max-height: 80vh;
+        }
+        .preview-container iframe {
+            border: none;
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            transition: width 0.3s ease;
+        }
+
+        /* ===========================
+           EXPORT BAR
+           =========================== */
+        .export-bar {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-top: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn-export {
+            background: #f2a93b;
+            color: white;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-export:hover {
+            background: #e09930;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .btn-secondary {
+            background: #faf9f7;
+            color: #78716c;
+            border: 1px solid #d6d3d1;
+            padding: 10px 22px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover {
+            background: #f5f3f0;
+            border-color: #a8a29e;
+        }
+        .export-spacer { flex: 1; }
+        .template-size-info {
+            font-size: 12px;
+            color: #a8a29e;
+        }
+        .template-size-info.warn { color: #d32f2f; font-weight: 600; }
+
+        /* ===========================
+           RESPONSIVE
+           =========================== */
+        @media (max-width: 1200px) {
+            .app-layout {
+                grid-template-columns: 200px 1fr;
+            }
+            .preview-panel { position: static; }
+        }
+        @media (max-width: 800px) {
+            .app-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="main-header">
+    <a href="index.html" class="back-link">← Toolbox</a>
+    <h1>🛠️ Template Ersteller</h1>
+</header>
+
+<!-- Main Layout -->
+<div class="app-layout">
+
+    <!-- LEFT: Block-Palette + Settings -->
+    <div class="sidebar-left">
+        <div class="panel">
+            <div class="panel-header">➕ Bausteine</div>
+            <div class="panel-body block-palette">
+                <button class="palette-btn" onclick="addBlock('header-image')"><span class="p-icon">🖼️</span> Header-Bild</button>
+                <button class="palette-btn" onclick="addBlock('text')"><span class="p-icon">📝</span> Textblock</button>
+                <button class="palette-btn" onclick="addBlock('image')"><span class="p-icon">🏞️</span> Bild</button>
+                <button class="palette-btn" onclick="addBlock('button')"><span class="p-icon">🔘</span> Button / CTA</button>
+                <button class="palette-btn" onclick="addBlock('spacer')"><span class="p-icon">↕️</span> Trenner / Abstand</button>
+                <button class="palette-btn" onclick="addBlock('footer')"><span class="p-icon">📋</span> Footer</button>
+            </div>
+        </div>
+
+        <div class="panel" style="margin-top: 12px;">
+            <div class="panel-header">⚙️ Einstellungen</div>
+            <div class="panel-body settings-group">
+                <div class="setting-item">
+                    <label>Title-Tag</label>
+                    <input type="text" id="settingTitle" placeholder="z.B. Newsletter März 2026" oninput="updatePreview()">
+                </div>
+                <div class="setting-item">
+                    <label>Template-Breite (px)</label>
+                    <input type="number" id="settingWidth" value="600" min="400" max="800" oninput="updatePreview()">
+                </div>
+                <div class="setting-item">
+                    <label>Seiten-Hintergrund</label>
+                    <div class="color-row">
+                        <input type="color" id="settingBgColor" value="#f4f4f4" oninput="syncColor('settingBgColor')">
+                        <input type="text" id="settingBgColorText" value="#f4f4f4" oninput="syncColorText('settingBgColor')">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>Inhalts-Hintergrund</label>
+                    <div class="color-row">
+                        <input type="color" id="settingContentBg" value="#ffffff" oninput="syncColor('settingContentBg')">
+                        <input type="text" id="settingContentBgText" value="#ffffff" oninput="syncColorText('settingContentBg')">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>Schriftart</label>
+                    <select id="settingFont" onchange="updatePreview()">
+                        <option value="Arial, Helvetica, sans-serif">Arial</option>
+                        <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+                        <option value="Georgia, 'Times New Roman', serif">Georgia</option>
+                        <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                        <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+                        <option value="'Trebuchet MS', Helvetica, sans-serif">Trebuchet MS</option>
+                        <option value="'Courier New', Courier, monospace">Courier New</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Eigene Schriftart (optional)</label>
+                    <input type="text" id="settingCustomFont" placeholder="z.B. NissanBrand" oninput="updatePreview()">
+                    <span class="field-hint">Wird als Fallback mit der obigen Schrift kombiniert</span>
+                </div>
+                <div class="setting-item">
+                    <label>Eigene Font-URL (optional)</label>
+                    <input type="text" id="settingCustomFontUrl" placeholder="https://fonts.googleapis.com/css2?..." oninput="updatePreview()">
+                    <span class="field-hint">Google Fonts oder andere Web-Font-URL</span>
+                </div>
+                <div class="setting-item">
+                    <label>Template-Typ</label>
+                    <select id="settingType" onchange="updatePreview()">
+                        <option value="standard">Standard</option>
+                        <option value="dpl">DPL</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CENTER: Block Editor -->
+    <div class="panel">
+        <div class="panel-header">📧 Template-Aufbau</div>
+        <div class="panel-body">
+            <div id="blocksList" class="blocks-list">
+                <div class="block-empty" id="emptyState">
+                    <div class="empty-icon">📭</div>
+                    Noch keine Bausteine hinzugefügt.<br>
+                    Klicke links auf einen Baustein, um zu starten.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Preview -->
+    <div class="panel preview-panel">
+        <div class="panel-header">👁️ Vorschau</div>
+        <div class="preview-toolbar">
+            <div class="preview-toggle">
+                <button class="preview-toggle-btn active" onclick="setPreviewMode('desktop')">🖥️ Desktop</button>
+                <button class="preview-toggle-btn" onclick="setPreviewMode('mobile')">📱 Mobil</button>
+            </div>
+            <span class="preview-size-label" id="previewSizeLabel">600px</span>
+        </div>
+        <div class="preview-container" id="previewContainer">
+            <iframe id="previewFrame" style="width: 600px; min-height: 400px;"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- Export Bar -->
+<div class="export-bar">
+    <button class="btn-export" onclick="exportHtml()">📥 HTML exportieren</button>
+    <button class="btn-secondary" onclick="saveTemplate()">💾 Vorlage speichern</button>
+    <button class="btn-secondary" onclick="loadTemplate()">📂 Vorlage laden</button>
+    <button class="btn-secondary" onclick="exportTemplateFile()">📤 Vorlage als Datei</button>
+    <button class="btn-secondary" onclick="importTemplateFile()">📥 Vorlage importieren</button>
+    <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(event)">
+    <div class="export-spacer"></div>
+    <span class="template-size-info" id="templateSizeInfo"></span>
+</div>
+
+<script>
+// ===========================
+// STATE
+// ===========================
+let blocks = [];
+let blockIdCounter = 0;
+let previewMode = 'desktop';
+let dragSrcIndex = null;
+
+// ===========================
+// BLOCK DEFINITIONS
+// ===========================
+const BLOCK_DEFS = {
+    'header-image': {
+        icon: '🖼️',
+        label: 'Header-Bild',
+        defaults: { src: '', alt: 'Header', link: '', width: '100%' }
+    },
+    'text': {
+        icon: '📝',
+        label: 'Textblock',
+        defaults: {
+            heading: '', headingSize: '22', headingColor: '#333333',
+            text: '', textSize: '15', textColor: '#555555',
+            textAlign: 'left', paddingTop: '10', paddingBottom: '10',
+            paddingLeft: '20', paddingRight: '20'
+        }
+    },
+    'image': {
+        icon: '🏞️',
+        label: 'Bild',
+        defaults: { src: '', alt: '', link: '', width: '100%', align: 'center' }
+    },
+    'button': {
+        icon: '🔘',
+        label: 'Button / CTA',
+        defaults: {
+            text: 'Jetzt entdecken', link: '#', bgColor: '#f2a93b',
+            textColor: '#ffffff', borderRadius: '5', fontSize: '16',
+            paddingV: '12', paddingH: '30', align: 'center'
+        }
+    },
+    'spacer': {
+        icon: '↕️',
+        label: 'Trenner / Abstand',
+        defaults: { height: '20', showLine: false, lineColor: '#e0e0e0' }
+    },
+    'footer': {
+        icon: '📋',
+        label: 'Footer',
+        defaults: {
+            text: 'Sie erhalten diese E-Mail, weil Sie sich für unseren Newsletter angemeldet haben.',
+            unsubscribeText: 'Abmelden',
+            unsubscribeLink: '#UNSUBSCRIBE#',
+            imprintText: 'Impressum',
+            imprintLink: '#',
+            textColor: '#999999',
+            bgColor: '#f8f8f8',
+            fontSize: '12'
+        }
+    }
+};
+
+// ===========================
+// ADD BLOCK
+// ===========================
+function addBlock(type) {
+    const def = BLOCK_DEFS[type];
+    if (!def) return;
+    const block = {
+        id: ++blockIdCounter,
+        type: type,
+        data: JSON.parse(JSON.stringify(def.defaults)),
+        collapsed: false
+    };
+    blocks.push(block);
+    renderBlocks();
+    updatePreview();
+}
+
+// ===========================
+// REMOVE BLOCK
+// ===========================
+function removeBlock(id) {
+    blocks = blocks.filter(b => b.id !== id);
+    renderBlocks();
+    updatePreview();
+}
+
+// ===========================
+// MOVE BLOCK
+// ===========================
+function moveBlock(id, dir) {
+    const idx = blocks.findIndex(b => b.id === id);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= blocks.length) return;
+    [blocks[idx], blocks[newIdx]] = [blocks[newIdx], blocks[idx]];
+    renderBlocks();
+    updatePreview();
+}
+
+// ===========================
+// TOGGLE BLOCK
+// ===========================
+function toggleBlock(id) {
+    const block = blocks.find(b => b.id === id);
+    if (block) block.collapsed = !block.collapsed;
+    renderBlocks();
+}
+
+// ===========================
+// DUPLICATE BLOCK
+// ===========================
+function duplicateBlock(id) {
+    const block = blocks.find(b => b.id === id);
+    if (!block) return;
+    const newBlock = {
+        id: ++blockIdCounter,
+        type: block.type,
+        data: JSON.parse(JSON.stringify(block.data)),
+        collapsed: false
+    };
+    const idx = blocks.findIndex(b => b.id === id);
+    blocks.splice(idx + 1, 0, newBlock);
+    renderBlocks();
+    updatePreview();
+}
+
+// ===========================
+// UPDATE BLOCK DATA
+// ===========================
+function updateBlockData(id, key, value) {
+    const block = blocks.find(b => b.id === id);
+    if (block) {
+        block.data[key] = value;
+        updatePreview();
+    }
+}
+
+// ===========================
+// RENDER BLOCKS LIST
+// ===========================
+function renderBlocks() {
+    const list = document.getElementById('blocksList');
+    const empty = document.getElementById('emptyState');
+
+    if (blocks.length === 0) {
+        list.innerHTML = '';
+        list.appendChild(createEmptyState());
+        return;
+    }
+
+    list.innerHTML = '';
+    blocks.forEach((block, index) => {
+        const card = document.createElement('div');
+        card.className = 'block-card';
+        card.dataset.blockId = block.id;
+        card.draggable = true;
+
+        // Drag events
+        card.addEventListener('dragstart', (e) => {
+            dragSrcIndex = index;
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            dragSrcIndex = null;
+        });
+        card.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        card.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (dragSrcIndex === null || dragSrcIndex === index) return;
+            const moved = blocks.splice(dragSrcIndex, 1)[0];
+            blocks.splice(index, 0, moved);
+            dragSrcIndex = null;
+            renderBlocks();
+            updatePreview();
+        });
+
+        const def = BLOCK_DEFS[block.type];
+        card.innerHTML = `
+            <div class="block-card-header">
+                <span class="block-drag-handle">⠿</span>
+                <span class="block-type-icon">${def.icon}</span>
+                <span class="block-type-label">${def.label}</span>
+                <div class="block-actions">
+                    <button class="block-btn" title="Nach oben" onclick="moveBlock(${block.id}, -1)">▲</button>
+                    <button class="block-btn" title="Nach unten" onclick="moveBlock(${block.id}, 1)">▼</button>
+                    <button class="block-btn" title="Duplizieren" onclick="duplicateBlock(${block.id})">📋</button>
+                    <button class="block-btn" title="${block.collapsed ? 'Aufklappen' : 'Zuklappen'}" onclick="toggleBlock(${block.id})">${block.collapsed ? '▶' : '▼'}</button>
+                    <button class="block-btn btn-delete" title="Löschen" onclick="removeBlock(${block.id})">✕</button>
+                </div>
+            </div>
+            <div class="block-card-body ${block.collapsed ? 'collapsed' : ''}">
+                ${renderBlockFields(block)}
+            </div>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function createEmptyState() {
+    const div = document.createElement('div');
+    div.className = 'block-empty';
+    div.id = 'emptyState';
+    div.innerHTML = '<div class="empty-icon">📭</div>Noch keine Bausteine hinzugefügt.<br>Klicke links auf einen Baustein, um zu starten.';
+    return div;
+}
+
+// ===========================
+// RENDER BLOCK FIELDS
+// ===========================
+function renderBlockFields(block) {
+    const d = block.data;
+    const id = block.id;
+
+    switch(block.type) {
+        case 'header-image':
+            return `
+                <div class="field-group">
+                    <label>Bild-URL</label>
+                    <input type="url" value="${esc(d.src)}" placeholder="https://example.com/header.jpg" oninput="updateBlockData(${id},'src',this.value)">
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Alt-Text</label>
+                        <input type="text" value="${esc(d.alt)}" placeholder="Beschreibung" oninput="updateBlockData(${id},'alt',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Breite</label>
+                        <input type="text" value="${esc(d.width)}" placeholder="100% oder 600" oninput="updateBlockData(${id},'width',this.value)">
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>Link (optional)</label>
+                    <input type="url" value="${esc(d.link)}" placeholder="https://..." oninput="updateBlockData(${id},'link',this.value)">
+                </div>
+            `;
+
+        case 'text':
+            return `
+                <div class="field-group">
+                    <label>Überschrift (optional)</label>
+                    <input type="text" value="${esc(d.heading)}" placeholder="z.B. Willkommen!" oninput="updateBlockData(${id},'heading',this.value)">
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Überschrift-Größe (px)</label>
+                        <input type="number" value="${d.headingSize}" min="12" max="48" oninput="updateBlockData(${id},'headingSize',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Überschrift-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.headingColor}" oninput="updateBlockData(${id},'headingColor',this.value)">
+                            <input type="text" value="${esc(d.headingColor)}" oninput="updateBlockData(${id},'headingColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>Text</label>
+                    <textarea rows="4" placeholder="Ihr Text hier..." oninput="updateBlockData(${id},'text',this.value)">${esc(d.text)}</textarea>
+                    <span class="field-hint">Für Zeilenumbrüche einfach Enter drücken. Für Links: &lt;a href="URL"&gt;Text&lt;/a&gt;</span>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Text-Größe (px)</label>
+                        <input type="number" value="${d.textSize}" min="10" max="36" oninput="updateBlockData(${id},'textSize',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Text-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.textColor}" oninput="updateBlockData(${id},'textColor',this.value)">
+                            <input type="text" value="${esc(d.textColor)}" oninput="updateBlockData(${id},'textColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Ausrichtung</label>
+                        <select onchange="updateBlockData(${id},'textAlign',this.value)">
+                            <option value="left" ${d.textAlign==='left'?'selected':''}>Links</option>
+                            <option value="center" ${d.textAlign==='center'?'selected':''}>Zentriert</option>
+                            <option value="right" ${d.textAlign==='right'?'selected':''}>Rechts</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Abstand oben (px)</label>
+                        <input type="number" value="${d.paddingTop}" min="0" oninput="updateBlockData(${id},'paddingTop',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Abstand unten (px)</label>
+                        <input type="number" value="${d.paddingBottom}" min="0" oninput="updateBlockData(${id},'paddingBottom',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Abstand links (px)</label>
+                        <input type="number" value="${d.paddingLeft}" min="0" oninput="updateBlockData(${id},'paddingLeft',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Abstand rechts (px)</label>
+                        <input type="number" value="${d.paddingRight}" min="0" oninput="updateBlockData(${id},'paddingRight',this.value)">
+                    </div>
+                </div>
+            `;
+
+        case 'image':
+            return `
+                <div class="field-group">
+                    <label>Bild-URL</label>
+                    <input type="url" value="${esc(d.src)}" placeholder="https://example.com/bild.jpg" oninput="updateBlockData(${id},'src',this.value)">
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Alt-Text</label>
+                        <input type="text" value="${esc(d.alt)}" placeholder="Bildbeschreibung" oninput="updateBlockData(${id},'alt',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Breite</label>
+                        <input type="text" value="${esc(d.width)}" placeholder="100% oder 560" oninput="updateBlockData(${id},'width',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Ausrichtung</label>
+                        <select onchange="updateBlockData(${id},'align',this.value)">
+                            <option value="left" ${d.align==='left'?'selected':''}>Links</option>
+                            <option value="center" ${d.align==='center'?'selected':''}>Zentriert</option>
+                            <option value="right" ${d.align==='right'?'selected':''}>Rechts</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>Link (optional)</label>
+                    <input type="url" value="${esc(d.link)}" placeholder="https://..." oninput="updateBlockData(${id},'link',this.value)">
+                </div>
+            `;
+
+        case 'button':
+            return `
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Button-Text</label>
+                        <input type="text" value="${esc(d.text)}" placeholder="Jetzt kaufen" oninput="updateBlockData(${id},'text',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Link</label>
+                        <input type="url" value="${esc(d.link)}" placeholder="https://..." oninput="updateBlockData(${id},'link',this.value)">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Button-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.bgColor}" oninput="updateBlockData(${id},'bgColor',this.value)">
+                            <input type="text" value="${esc(d.bgColor)}" oninput="updateBlockData(${id},'bgColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Schriftfarbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.textColor}" oninput="updateBlockData(${id},'textColor',this.value)">
+                            <input type="text" value="${esc(d.textColor)}" oninput="updateBlockData(${id},'textColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Rundung (px)</label>
+                        <input type="number" value="${d.borderRadius}" min="0" max="50" oninput="updateBlockData(${id},'borderRadius',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Schriftgröße (px)</label>
+                        <input type="number" value="${d.fontSize}" min="10" max="30" oninput="updateBlockData(${id},'fontSize',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Ausrichtung</label>
+                        <select onchange="updateBlockData(${id},'align',this.value)">
+                            <option value="left" ${d.align==='left'?'selected':''}>Links</option>
+                            <option value="center" ${d.align==='center'?'selected':''}>Zentriert</option>
+                            <option value="right" ${d.align==='right'?'selected':''}>Rechts</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Innenabstand vertikal (px)</label>
+                        <input type="number" value="${d.paddingV}" min="4" max="30" oninput="updateBlockData(${id},'paddingV',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Innenabstand horizontal (px)</label>
+                        <input type="number" value="${d.paddingH}" min="8" max="60" oninput="updateBlockData(${id},'paddingH',this.value)">
+                    </div>
+                </div>
+            `;
+
+        case 'spacer':
+            return `
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Höhe (px)</label>
+                        <input type="number" value="${d.height}" min="5" max="100" oninput="updateBlockData(${id},'height',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Trennlinie anzeigen?</label>
+                        <select onchange="updateBlockData(${id},'showLine',this.value==='true')">
+                            <option value="false" ${!d.showLine?'selected':''}>Nein – nur Abstand</option>
+                            <option value="true" ${d.showLine?'selected':''}>Ja – mit Linie</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Linien-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.lineColor}" oninput="updateBlockData(${id},'lineColor',this.value)">
+                            <input type="text" value="${esc(d.lineColor)}" oninput="updateBlockData(${id},'lineColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+        case 'footer':
+            return `
+                <div class="field-group">
+                    <label>Footer-Text</label>
+                    <textarea rows="3" oninput="updateBlockData(${id},'text',this.value)">${esc(d.text)}</textarea>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Abmelde-Text</label>
+                        <input type="text" value="${esc(d.unsubscribeText)}" oninput="updateBlockData(${id},'unsubscribeText',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Abmelde-Link</label>
+                        <input type="text" value="${esc(d.unsubscribeLink)}" placeholder="#UNSUBSCRIBE#" oninput="updateBlockData(${id},'unsubscribeLink',this.value)">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Impressum-Text</label>
+                        <input type="text" value="${esc(d.imprintText)}" oninput="updateBlockData(${id},'imprintText',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Impressum-Link</label>
+                        <input type="url" value="${esc(d.imprintLink)}" oninput="updateBlockData(${id},'imprintLink',this.value)">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Schriftfarbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.textColor}" oninput="updateBlockData(${id},'textColor',this.value)">
+                            <input type="text" value="${esc(d.textColor)}" oninput="updateBlockData(${id},'textColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Hintergrund</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.bgColor}" oninput="updateBlockData(${id},'bgColor',this.value)">
+                            <input type="text" value="${esc(d.bgColor)}" oninput="updateBlockData(${id},'bgColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Schriftgröße (px)</label>
+                        <input type="number" value="${d.fontSize}" min="9" max="16" oninput="updateBlockData(${id},'fontSize',this.value)">
+                    </div>
+                </div>
+            `;
+
+        default:
+            return '<p>Unbekannter Block-Typ</p>';
+    }
+}
+
+// ===========================
+// HELPER: Escape HTML
+// ===========================
+function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ===========================
+// COLOR SYNC HELPERS
+// ===========================
+function syncColor(baseId) {
+    const picker = document.getElementById(baseId);
+    const text = document.getElementById(baseId + 'Text');
+    if (picker && text) {
+        text.value = picker.value;
+    }
+    updatePreview();
+}
+function syncColorText(baseId) {
+    const picker = document.getElementById(baseId);
+    const text = document.getElementById(baseId + 'Text');
+    if (picker && text && /^#[0-9a-fA-F]{6}$/.test(text.value)) {
+        picker.value = text.value;
+    }
+    updatePreview();
+}
+
+// ===========================
+// PREVIEW MODE
+// ===========================
+function setPreviewMode(mode) {
+    previewMode = mode;
+    document.querySelectorAll('.preview-toggle-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    const frame = document.getElementById('previewFrame');
+    const label = document.getElementById('previewSizeLabel');
+    const width = document.getElementById('settingWidth').value || 600;
+
+    if (mode === 'desktop') {
+        frame.style.width = width + 'px';
+        label.textContent = width + 'px';
+    } else {
+        frame.style.width = '375px';
+        label.textContent = '375px (Mobil)';
+    }
+    updatePreview();
+}
+
+// ===========================
+// GENERATE EMAIL HTML
+// ===========================
+function generateEmailHtml() {
+    const title = document.getElementById('settingTitle').value || 'Newsletter';
+    const width = document.getElementById('settingWidth').value || 600;
+    const bgColor = document.getElementById('settingBgColorText').value || '#f4f4f4';
+    const contentBg = document.getElementById('settingContentBgText').value || '#ffffff';
+    const font = document.getElementById('settingFont').value;
+    const customFont = document.getElementById('settingCustomFont').value;
+    const customFontUrl = document.getElementById('settingCustomFontUrl').value;
+    const templateType = document.getElementById('settingType').value;
+
+    // Build font-family string
+    let fontFamily = font;
+    if (customFont.trim()) {
+        fontFamily = "'" + customFont.trim() + "', " + font;
+    }
+
+    // Generate block HTML
+    let blocksHtml = '';
+    blocks.forEach(block => {
+        blocksHtml += generateBlockHtml(block, width, fontFamily);
+    });
+
+    // Custom font link
+    let fontLink = '';
+    if (customFontUrl.trim()) {
+        fontLink = `<link href="${esc(customFontUrl.trim())}" rel="stylesheet" type="text/css">`;
+    }
+
+    // Responsive media queries
+    const mediaQueries = `
+    <style type="text/css">
+        @media screen and (max-width: ${width}px) {
+            table[class="responsive-table"] { width: 100% !important; }
+            td[class="responsive-cell"] { width: 100% !important; display: block !important; }
+            img[class="responsive-img"] { width: 100% !important; height: auto !important; }
+        }
+    </style>`;
+
+    // DPL specific
+    let dplWrapperStart = '';
+    let dplWrapperEnd = '';
+    if (templateType === 'dpl') {
+        dplWrapperStart = `
+<!--[if mso]>
+<div style="background-color: #6B140F;">
+<![endif]-->
+<div style="background-color: #6B140F;">`;
+        dplWrapperEnd = `
+</div>
+<!--[if mso]>
+</div>
+<![endif]-->`;
+    }
+
+    const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="de" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>${esc(title)}</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    ${fontLink}
+    <style type="text/css">
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+        body { margin: 0; padding: 0; width: 100% !important; }
+        a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }
+        @media (prefers-color-scheme: dark) {
+            body, table, td { background-color: #1a1a1a !important; }
+        }
+    </style>
+    ${mediaQueries}
+</head>
+<body style="margin: 0; padding: 0; background-color: ${bgColor}; font-family: ${fontFamily};">
+${dplWrapperStart}
+    <!-- HEADER PLACEHOLDER -->
+
+    <!-- Email Container -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: ${bgColor};">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                <table role="presentation" class="responsive-table" cellpadding="0" cellspacing="0" border="0" width="${width}" style="max-width: ${width}px; background-color: ${contentBg};">
+${blocksHtml}
+                </table>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Tracking Pixel Placeholder -->
+    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="1" height="1" border="0" style="display:none;height:1px;width:1px;">
+
+    <!-- FOOTER PLACEHOLDER -->
+${dplWrapperEnd}
+</body>
+</html>`;
+
+    return html;
+}
+
+// ===========================
+// GENERATE SINGLE BLOCK HTML
+// ===========================
+function generateBlockHtml(block, width, fontFamily) {
+    const d = block.data;
+
+    switch(block.type) {
+        case 'header-image': {
+            const imgWidth = d.width.includes('%') ? width : d.width;
+            const widthAttr = d.width.includes('%') ? '100%' : d.width;
+            let imgTag = `<img src="${esc(d.src || 'https://via.placeholder.com/' + width + 'x200/f2a93b/ffffff?text=Header+Bild')}" alt="${esc(d.alt)}" width="${widthAttr}" class="responsive-img" style="display: block; width: ${d.width.includes('%') ? '100%' : d.width + 'px'}; max-width: 100%; height: auto;" border="0">`;
+            if (d.link) {
+                imgTag = `<a href="${esc(d.link)}" target="_blank">${imgTag}</a>`;
+            }
+            return `
+                    <tr>
+                        <td align="center" style="padding: 0; font-size: 0; line-height: 0;">
+                            ${imgTag}
+                        </td>
+                    </tr>`;
+        }
+
+        case 'text': {
+            let content = '';
+            if (d.heading) {
+                content += `<h1 style="margin: 0 0 10px 0; font-family: ${fontFamily}; font-size: ${d.headingSize}px; font-weight: 700; color: ${d.headingColor}; line-height: 1.3;">${escHtml(d.heading)}</h1>`;
+            }
+            if (d.text) {
+                const paragraphs = d.text.split('\n').filter(p => p.trim() !== '');
+                paragraphs.forEach(p => {
+                    content += `<p style="margin: 0 0 12px 0; font-family: ${fontFamily}; font-size: ${d.textSize}px; color: ${d.textColor}; line-height: 1.6;">${escHtml(p)}</p>`;
+                });
+            }
+            return `
+                    <tr>
+                        <td style="padding: ${d.paddingTop}px ${d.paddingRight}px ${d.paddingBottom}px ${d.paddingLeft}px; text-align: ${d.textAlign}; font-family: ${fontFamily};">
+                            ${content}
+                        </td>
+                    </tr>`;
+        }
+
+        case 'image': {
+            const imgWidth = d.width.includes('%') ? width : d.width;
+            const widthAttr = d.width.includes('%') ? '100%' : d.width;
+            let imgTag = `<img src="${esc(d.src || 'https://via.placeholder.com/' + width + 'x300/cccccc/666666?text=Bild')}" alt="${esc(d.alt)}" width="${widthAttr}" class="responsive-img" style="display: block; width: ${d.width.includes('%') ? '100%' : d.width + 'px'}; max-width: 100%; height: auto;" border="0">`;
+            if (d.link) {
+                imgTag = `<a href="${esc(d.link)}" target="_blank">${imgTag}</a>`;
+            }
+            return `
+                    <tr>
+                        <td align="${d.align}" style="padding: 10px 20px; font-size: 0; line-height: 0;">
+                            ${imgTag}
+                        </td>
+                    </tr>`;
+        }
+
+        case 'button': {
+            // Table-based button for Outlook compatibility
+            return `
+                    <tr>
+                        <td align="${d.align}" style="padding: 15px 20px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td align="center" style="background-color: ${d.bgColor}; border-radius: ${d.borderRadius}px; padding: ${d.paddingV}px ${d.paddingH}px;">
+                                        <!--[if mso]>
+                                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(d.link)}" style="height:auto;v-text-anchor:middle;width:auto;" arcsize="${Math.round(d.borderRadius / 40 * 100)}%" fillcolor="${d.bgColor}" stroke="false">
+                                        <w:anchorlock/>
+                                        <center style="font-family:${fontFamily};font-size:${d.fontSize}px;color:${d.textColor};font-weight:bold;">
+                                            ${esc(d.text)}
+                                        </center>
+                                        </v:roundrect>
+                                        <![endif]-->
+                                        <!--[if !mso]><!-->
+                                        <a href="${esc(d.link)}" target="_blank" style="display: inline-block; font-family: ${fontFamily}; font-size: ${d.fontSize}px; font-weight: bold; color: ${d.textColor}; text-decoration: none; line-height: 1;">
+                                            ${esc(d.text)}
+                                        </a>
+                                        <!--<![endif]-->
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>`;
+        }
+
+        case 'spacer': {
+            if (d.showLine) {
+                return `
+                    <tr>
+                        <td style="padding: ${Math.floor(d.height/2)}px 20px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td style="border-top: 1px solid ${d.lineColor}; font-size: 0; line-height: 0;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>`;
+            }
+            return `
+                    <tr>
+                        <td style="padding: 0; height: ${d.height}px; font-size: 0; line-height: 0;">&nbsp;</td>
+                    </tr>`;
+        }
+
+        case 'footer': {
+            return `
+                    <tr>
+                        <td style="padding: 20px 30px; background-color: ${d.bgColor}; text-align: center; font-family: ${fontFamily};">
+                            <p style="margin: 0 0 10px 0; font-size: ${d.fontSize}px; color: ${d.textColor}; line-height: 1.5;">${escHtml(d.text)}</p>
+                            <p style="margin: 0; font-size: ${d.fontSize}px; color: ${d.textColor}; line-height: 1.5;">
+                                <a href="${esc(d.unsubscribeLink)}" style="color: ${d.textColor}; text-decoration: underline;">${esc(d.unsubscribeText)}</a>
+                                &nbsp;|&nbsp;
+                                <a href="${esc(d.imprintLink)}" style="color: ${d.textColor}; text-decoration: underline;">${esc(d.imprintText)}</a>
+                            </p>
+                        </td>
+                    </tr>`;
+        }
+
+        default:
+            return '';
+    }
+}
+
+// Escape but allow basic HTML in text fields (for links)
+function escHtml(str) {
+    if (!str) return '';
+    // Allow <a> tags, escape everything else
+    return str.replace(/</g, '&lt;').replace(/&lt;a /gi, '<a ').replace(/&lt;\/a&gt;/gi, '</a>').replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+}
+
+// ===========================
+// UPDATE PREVIEW
+// ===========================
+let previewTimeout = null;
+function updatePreview() {
+    clearTimeout(previewTimeout);
+    previewTimeout = setTimeout(() => {
+        const html = generateEmailHtml();
+        const frame = document.getElementById('previewFrame');
+        frame.srcdoc = html;
+
+        // Update size info
+        const size = new Blob([html]).size;
+        const sizeKb = (size / 1024).toFixed(1);
+        const info = document.getElementById('templateSizeInfo');
+        if (size > 102000) {
+            info.className = 'template-size-info warn';
+            info.textContent = `⚠️ ${sizeKb} KB – Gmail schneidet bei ~102 KB ab!`;
+        } else {
+            info.className = 'template-size-info';
+            info.textContent = `📏 ${sizeKb} KB`;
+        }
+
+        // Update preview frame width
+        const width = document.getElementById('settingWidth').value || 600;
+        if (previewMode === 'desktop') {
+            frame.style.width = width + 'px';
+            document.getElementById('previewSizeLabel').textContent = width + 'px';
+        }
+
+        // Auto-resize iframe height
+        frame.onload = () => {
+            try {
+                const h = frame.contentDocument.documentElement.scrollHeight;
+                frame.style.height = Math.max(h, 400) + 'px';
+            } catch(e) {}
+        };
+    }, 150);
+}
+
+// ===========================
+// EXPORT HTML
+// ===========================
+function exportHtml() {
+    const html = generateEmailHtml();
+    const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const title = document.getElementById('settingTitle').value || 'template';
+    const safeName = title.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_').substring(0, 50);
+    a.href = url;
+    a.download = safeName + '.html';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ===========================
+// SAVE / LOAD TEMPLATE (localStorage)
+// ===========================
+function saveTemplate() {
+    const name = prompt('Name für diese Vorlage:', document.getElementById('settingTitle').value || 'Meine Vorlage');
+    if (!name) return;
+
+    const templateData = getTemplateData();
+    templateData.name = name;
+
+    const saved = JSON.parse(localStorage.getItem('pw_templates') || '[]');
+    // Check if name exists
+    const existingIdx = saved.findIndex(t => t.name === name);
+    if (existingIdx >= 0) {
+        if (!confirm(`Vorlage "${name}" existiert bereits. Überschreiben?`)) return;
+        saved[existingIdx] = templateData;
+    } else {
+        saved.push(templateData);
+    }
+    localStorage.setItem('pw_templates', JSON.stringify(saved));
+    alert(`✅ Vorlage "${name}" gespeichert!`);
+}
+
+function loadTemplate() {
+    const saved = JSON.parse(localStorage.getItem('pw_templates') || '[]');
+    if (saved.length === 0) {
+        alert('Keine gespeicherten Vorlagen vorhanden.');
+        return;
+    }
+
+    const names = saved.map((t, i) => `${i + 1}. ${t.name}`).join('\n');
+    const choice = prompt('Welche Vorlage laden?\n\n' + names + '\n\nNummer eingeben:');
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= saved.length) {
+        alert('Ungültige Auswahl.');
+        return;
+    }
+
+    applyTemplateData(saved[idx]);
+    alert(`✅ Vorlage "${saved[idx].name}" geladen!`);
+}
+
+// ===========================
+// EXPORT / IMPORT TEMPLATE FILE
+// ===========================
+function exportTemplateFile() {
+    const templateData = getTemplateData();
+    const name = document.getElementById('settingTitle').value || 'vorlage';
+    templateData.name = name;
+    const json = JSON.stringify(templateData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = name.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_').substring(0, 50);
+    a.href = url;
+    a.download = safeName + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importTemplateFile() {
+    document.getElementById('importFileInput').click();
+}
+
+function handleImportFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            applyTemplateData(data);
+            alert(`✅ Vorlage "${data.name || 'Unbenannt'}" importiert!`);
+        } catch(err) {
+            alert('❌ Fehler beim Importieren: Datei ist kein gültiges Vorlagen-Format.');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+// ===========================
+// TEMPLATE DATA HELPERS
+// ===========================
+function getTemplateData() {
+    return {
+        version: 1,
+        settings: {
+            title: document.getElementById('settingTitle').value,
+            width: document.getElementById('settingWidth').value,
+            bgColor: document.getElementById('settingBgColorText').value,
+            contentBg: document.getElementById('settingContentBgText').value,
+            font: document.getElementById('settingFont').value,
+            customFont: document.getElementById('settingCustomFont').value,
+            customFontUrl: document.getElementById('settingCustomFontUrl').value,
+            type: document.getElementById('settingType').value
+        },
+        blocks: blocks.map(b => ({ type: b.type, data: JSON.parse(JSON.stringify(b.data)) }))
+    };
+}
+
+function applyTemplateData(data) {
+    if (data.settings) {
+        const s = data.settings;
+        document.getElementById('settingTitle').value = s.title || '';
+        document.getElementById('settingWidth').value = s.width || 600;
+        document.getElementById('settingBgColorText').value = s.bgColor || '#f4f4f4';
+        document.getElementById('settingBgColor').value = s.bgColor || '#f4f4f4';
+        document.getElementById('settingContentBgText').value = s.contentBg || '#ffffff';
+        document.getElementById('settingContentBg').value = s.contentBg || '#ffffff';
+        document.getElementById('settingFont').value = s.font || 'Arial, Helvetica, sans-serif';
+        document.getElementById('settingCustomFont').value = s.customFont || '';
+        document.getElementById('settingCustomFontUrl').value = s.customFontUrl || '';
+        document.getElementById('settingType').value = s.type || 'standard';
+    }
+    if (data.blocks) {
+        blocks = [];
+        blockIdCounter = 0;
+        data.blocks.forEach(b => {
+            blocks.push({
+                id: ++blockIdCounter,
+                type: b.type,
+                data: JSON.parse(JSON.stringify(b.data)),
+                collapsed: false
+            });
+        });
+    }
+    renderBlocks();
+    updatePreview();
+}
+
+// ===========================
+// INIT
+// ===========================
+updatePreview();
+
+</script>
+</body>
+</html>
