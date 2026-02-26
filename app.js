@@ -4357,12 +4357,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // === MSO-Style Protection ===
-    // Browser-DOMParser entfernt proprietäre mso-* CSS Properties (z.B. mso-text-raise).
-    // Diese sind aber für Outlook essentiell. Lösung: vor DOM-Parsing als data-Attribut sichern,
-    // nach outerHTML-Serialisierung zurückschreiben.
+    // Browser-DOMParser entfernt proprietäre mso-* CSS Properties (z.B. mso-text-raise)
+    // und zerstört Outlook Conditional Comments (z.B. <!--[if mso]>...<![endif]-->).
+    // Lösung: Alles was der DOMParser nicht versteht wird VOR dem Parsing durch
+    // unsichtbare Placeholder-Elemente ersetzt und danach wiederhergestellt.
+    
+    // Shared Storage für Conditional Comment Blöcke
+    let _ccBlockStore = [];
+    
     function protectMsoStyles(html) {
-        // 1. MSO-* Inline-Styles schützen
-        let result = html.replace(/style="([^"]*)"/gi, (match, styleContent) => {
+        // === SCHRITT 0: Conditional Comments komplett schützen ===
+        // DOMParser versteht keine IE Conditional Comments und zerstört sie.
+        // Alle Blöcke werden durch indexierte Placeholder ersetzt.
+        _ccBlockStore = [];
+        let result = html;
+        
+        // 0a: Komplette Conditional Comment Blöcke: <!--[if ...]>INHALT<![endif]-->
+        // Matcht alle Varianten: [if mso], [if gte mso 9], [if (mso 16)], etc.
+        // WICHTIG: Non-greedy (lazy) damit verschachtelte Blöcke korrekt erfasst werden
+        result = result.replace(/<!--\[if\s[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, (match) => {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
+        });
+        
+        // 0b: Non-MSO Opener: <!--[if !mso]><!-- --> oder <!--[if !mso]><!-->
+        // (Falls nicht bereits als Teil eines kompletten Blocks in 0a erfasst)
+        result = result.replace(/<!--\[if\s+!mso\s*\]><!--\s*-->/gi, (match) => {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
+        });
+        result = result.replace(/<!--\[if\s+!mso\s*\]><!-->/gi, (match) => {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
+        });
+        
+        // 0c: Non-MSO Closer: <!--<![endif]-->
+        result = result.replace(/<!--<!\[endif\]-->/gi, (match) => {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
+        });
+        
+        // === SCHRITT 1: MSO-* Inline-Styles schützen ===
+        result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
             const msoProps = [];
             const otherProps = [];
             styleContent.split(';').forEach(prop => {
@@ -4382,24 +4422,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return `style="${otherProps.join('; ')};" data-mso-preserve="${preserved}"`;
         });
         
-        // 2. xml:lang Attribut schützen (DOMParser entfernt es)
+        // === SCHRITT 2: xml:lang Attribut schützen (DOMParser entfernt es) ===
         result = result.replace(/\sxml:lang="([^"]*)"/gi, (match, val) => {
             return ` data-xmllang-preserve="${val}"`;
         });
-        
-        // 3. Non-MSO Conditional Comments schützen
-        // <!--[if !mso]><!-- --> und <!--<![endif]--> verwirren den DOMParser.
-        // Der Browser versteht keine IE Conditional Comments und zerstört den Inhalt
-        // (z.B. Button-Code: border-width wird zu border-w<!--[if !mso]><!-- -->idth).
-        // Lösung: Ersetze die Comment-Marker durch unsichtbare Placeholder-Elemente,
-        // die DOMParser nicht beschädigt. Nach Serialisierung wiederherstellen.
-        // Varianten: <!--[if !mso]><!-- --> (mit Leerzeichen) und <!--[if !mso]><!--> (ohne)
-        result = result.replace(/<!--\[if\s+!mso\s*\]><!--\s*-->/gi, 
-            '<em data-mso-nonmso-open="1" style="display:none"></em>');
-        result = result.replace(/<!--\[if\s+!mso\s*\]><!-->/gi, 
-            '<em data-mso-nonmso-open="1" style="display:none"></em>');
-        result = result.replace(/<!--<!\[endif\]-->/gi, 
-            '<em data-mso-nonmso-close="1" style="display:none"></em>');
         
         return result;
     }
@@ -4437,10 +4463,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return ` xml:lang="${val}"`;
         });
         
-        // 3. Non-MSO Conditional Comments wiederherstellen
-        // Placeholder-Elemente zurück in originale Comment-Syntax wandeln
-        raw = raw.replace(/<em data-mso-nonmso-open="1"[^>]*><\/em>/gi, '<!--[if !mso]><!-- -->');
-        raw = raw.replace(/<em data-mso-nonmso-close="1"[^>]*><\/em>/gi, '<!--<![endif]-->');
+        // 3. Conditional Comment Blöcke wiederherstellen (aus _ccBlockStore)
+        raw = raw.replace(/<ins data-cc-idx="(\d+)"[^>]*><\/ins>/gi, (match, idxStr) => {
+            const idx = parseInt(idxStr);
+            if (idx >= 0 && idx < _ccBlockStore.length) {
+                return _ccBlockStore[idx];
+            }
+            console.warn('[safeDomSerialize] CC-Block index ' + idx + ' nicht gefunden');
+            return match;
+        });
         
         // 4. Browser-eingefügte <tbody>/<\/tbody> entfernen
         // Browser fügt automatisch <tbody> in <table> ein – das verändert das Email-HTML
