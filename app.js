@@ -186,6 +186,15 @@ class TemplateProcessor {
 
         // W06: Cloudflare Email Protection Links erkennen
         this.checkCloudflareEmailProtection();
+
+        // W07: Kaputte Zeichen (Unicode Replacement Character) erkennen
+        this.checkBrokenCharacters();
+
+        // W08: Base64-eingebettete Bilder erkennen (funktionieren in vielen E-Mail-Clients nicht)
+        this.checkBase64Images();
+
+        // W09: Fehlende # bei Hex-Farbcodes in Inline-Styles erkennen
+        this.checkMissingHashInColors();
     }
 
     // P01: DOCTYPE Check
@@ -2971,6 +2980,144 @@ class TemplateProcessor {
         }
     }
 
+    // W07: Kaputte Zeichen erkennen (Unicode Replacement Character U+FFFD)
+    // Entsteht wenn eine Datei z.B. über "Seite speichern unter" im Browser gesichert wird
+    // und dabei die Zeichenkodierung verloren geht (z.B. Umlaute ü→�, ö→�, ä→�, ß→�).
+    checkBrokenCharacters() {
+        const id = 'W07_BROKEN_CHARACTERS';
+        
+        // Unicode Replacement Character: U+FFFD (wird als \uFFFD oder als UTF-8 Bytes EF BF BD dargestellt)
+        const replacementChar = '\uFFFD';
+        
+        // Nur im sichtbaren Content suchen (nicht in Base64, Scripts etc.)
+        // Entferne <script>/<style> Blöcke und Base64-data-URIs für die Suche
+        let searchHtml = this.html
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/data:[^"'\s]+/gi, '');
+        
+        const brokenCount = (searchHtml.match(new RegExp(replacementChar, 'g')) || []).length;
+        
+        if (brokenCount > 0) {
+            // Finde Beispiele: Text um die kaputten Zeichen herum
+            const examples = [];
+            let idx = searchHtml.indexOf(replacementChar);
+            while (idx !== -1 && examples.length < 3) {
+                // Kontext: 10 Zeichen vor und nach dem kaputten Zeichen
+                const start = Math.max(0, idx - 10);
+                const end = Math.min(searchHtml.length, idx + 11);
+                let context = searchHtml.substring(start, end).replace(/\s+/g, ' ').replace(/<[^>]*>/g, '').trim();
+                if (context.length > 0) {
+                    examples.push('„' + context + '"');
+                }
+                idx = searchHtml.indexOf(replacementChar, idx + 1);
+            }
+            const exampleText = examples.length > 0 ? ' Beispiele: ' + examples.join(', ') : '';
+            this.addCheck(id, 'WARN', '⚠️ Kaputte Zeichen: ' + brokenCount + '× Ersetzungszeichen (�) gefunden – Umlaute/Sonderzeichen sind zerstört.' + exampleText + ' → AKTION: Template muss neu aus dem Originalsystem exportiert werden (NICHT über "Seite speichern unter" im Browser!).');
+        }
+    }
+
+    // W08: Base64-eingebettete Bilder erkennen
+    // Bilder die als data:image/... direkt im HTML stehen, werden von vielen E-Mail-Clients
+    // nicht angezeigt (Outlook, teilweise Gmail). Sie blähen außerdem die Dateigröße auf.
+    checkBase64Images() {
+        const id = 'W08_BASE64_IMAGES';
+        
+        // HTML-Kommentare entfernen (auskommentierte Varianten ignorieren)
+        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        
+        // Suche nach <img src="data:image/..."> und background:url(data:image/...)
+        const imgBase64Regex = /<img[^>]*src\s*=\s*["'](data:image\/[^"']+)["'][^>]*>/gi;
+        const bgBase64Regex = /(?:background(?:-image)?)\s*:\s*url\(\s*["']?(data:image\/[^"')]+)["']?\s*\)/gi;
+        
+        const base64Images = [];
+        let match;
+        
+        while ((match = imgBase64Regex.exec(htmlNoComments)) !== null) {
+            const dataUri = match[1];
+            // Größe berechnen: Base64-Daten nach dem Komma
+            const base64Part = dataUri.split(',')[1] || '';
+            const sizeKB = Math.round(base64Part.length * 0.75 / 1024); // Base64 → Bytes
+            base64Images.push({ type: 'img', sizeKB: sizeKB });
+        }
+        
+        while ((match = bgBase64Regex.exec(htmlNoComments)) !== null) {
+            const dataUri = match[1];
+            const base64Part = dataUri.split(',')[1] || '';
+            const sizeKB = Math.round(base64Part.length * 0.75 / 1024);
+            base64Images.push({ type: 'bg', sizeKB: sizeKB });
+        }
+        
+        if (base64Images.length > 0) {
+            const totalSizeKB = base64Images.reduce((sum, img) => sum + img.sizeKB, 0);
+            this.addCheck(id, 'WARN', '⚠️ Eingebettete Bilder: ' + base64Images.length + ' Bild(er) als Base64 direkt im HTML eingebettet (' + totalSizeKB + ' KB). Viele E-Mail-Clients (Outlook, Gmail) zeigen solche Bilder NICHT an. → AKTION: Bilder auf Server hosten und per URL einbinden (src="https://...").');
+        }
+    }
+
+    // W09: Fehlende # bei Hex-Farbcodes in Inline-Styles/Attributen erkennen
+    // z.B. border: 1px solid E31519 statt border: 1px solid #E31519
+    // oder bgcolor="FF0000" statt bgcolor="#FF0000"
+    checkMissingHashInColors() {
+        const id = 'W09_MISSING_HASH_COLORS';
+        
+        // HTML-Kommentare entfernen
+        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        
+        const issues = [];
+        
+        // Pattern 1: In style-Attributen - CSS-Eigenschaften die Farben erwarten
+        // Suche nach bekannten Farb-Properties gefolgt von 6-stelligem Hex OHNE #
+        const styleRegex = /style\s*=\s*["']([^"']+)["']/gi;
+        let styleMatch;
+        
+        // CSS-Properties die Farben als Wert erwarten
+        const colorProperties = [
+            'color', 'background-color', 'background', 'border', 'border-color',
+            'border-top', 'border-right', 'border-bottom', 'border-left',
+            'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+            'outline-color', 'outline'
+        ];
+        
+        while ((styleMatch = styleRegex.exec(htmlNoComments)) !== null) {
+            const styleContent = styleMatch[1];
+            // Für jede CSS-Property prüfen ob ein Hex-Code ohne # folgt
+            for (const prop of colorProperties) {
+                // Regex: property: [optionale Werte wie "1px solid "] dann 3 oder 6 Hex-Zeichen
+                // Wichtig: Nicht matchen wenn # davor steht oder wenn es Teil eines längeren Wortes ist
+                const propRegex = new RegExp(
+                    prop + '\\s*:\\s*(?:[^;]*?\\s)?(?<![#\\w])([A-Fa-f0-9]{6})(?![A-Fa-f0-9\\w])(?:\\s*[;"\\s]|$)',
+                    'gi'
+                );
+                let propMatch;
+                while ((propMatch = propRegex.exec(styleContent)) !== null) {
+                    const hexValue = propMatch[1];
+                    // Ausschluss: reine Zahlen (könnten andere Werte sein wie font-size etc.)
+                    if (/^[0-9]+$/.test(hexValue)) continue;
+                    // Ausschluss: Bekannte CSS-Keywords die wie Hex aussehen könnten
+                    if (/^(inherit|initial|revert)$/i.test(hexValue)) continue;
+                    issues.push(prop + ': ...' + hexValue + ' → sollte #' + hexValue + ' sein');
+                }
+            }
+        }
+        
+        // Pattern 2: bgcolor-Attribut ohne #
+        const bgcolorRegex = /bgcolor\s*=\s*["']([A-Fa-f0-9]{6})["']/gi;
+        let bgMatch;
+        while ((bgMatch = bgcolorRegex.exec(htmlNoComments)) !== null) {
+            const hexValue = bgMatch[1];
+            if (!/^[0-9]+$/.test(hexValue)) {
+                issues.push('bgcolor="' + hexValue + '" → sollte "#' + hexValue + '" sein');
+            }
+        }
+        
+        if (issues.length > 0) {
+            const unique = [...new Set(issues)]; // Duplikate entfernen
+            const examples = unique.slice(0, 3).join('; ');
+            const more = unique.length > 3 ? ' und ' + (unique.length - 3) + ' weitere' : '';
+            this.addCheck(id, 'WARN', '⚠️ Fehlende # bei Farbcodes: ' + unique.length + '× Hex-Farbe ohne Raute (#) gefunden. ' + examples + more + ' → In manchen E-Mail-Clients wird die Farbe nicht erkannt.');
+        }
+    }
+
     // Check hinzufügen
     addCheck(id, status, message) {
         this.checks.push({ id, status, message });
@@ -3011,8 +3158,11 @@ class TemplateProcessor {
             const warnChecks = this.checks.filter(c => c.status === 'WARN');
             // Deliverability-Checks werden separat behandelt
             const deliverabilityIds = ['P16_BROKEN_LINKS', 'P17_TEMPLATE_SIZE', 'P18_TEXT_IMAGE_RATIO', 'P19_LINK_COUNT', 'P21_TITLE_TAG'];
+            // W07-W09 werden separat bewertet (eigene Confidence-Abzüge + Attention Items)
+            const separatelyHandledIds = ['W07_BROKEN_CHARACTERS', 'W08_BASE64_IMAGES', 'W09_MISSING_HASH_COLORS'];
             warnChecks.forEach(c => {
                 if (deliverabilityIds.includes(c.id)) return; // separat behandelt
+                if (separatelyHandledIds.includes(c.id)) return; // separat behandelt
                 // Informelle Warnungen (optional/read-only) weniger abziehen
                 const isInfoOnly = /Read-only|optional|nicht optimal|generischen Phrasen/i.test(c.message);
                 confidence -= isInfoOnly ? 2 : 5;
@@ -3087,6 +3237,28 @@ class TemplateProcessor {
         const brokenLinkCheck = this.checks.find(c => c.id === 'P16_BROKEN_LINKS' && c.status === 'WARN');
         if (brokenLinkCheck) {
             attentionItems.push('🔗 Links ohne Ziel-URL → im Inspector (Tracking-Tab) URLs eintragen');
+        }
+        
+        // === Neue Qualitäts-Checks (W07-W09) ===
+        const brokenCharsCheck = this.checks.find(c => c.id === 'W07_BROKEN_CHARACTERS' && c.status === 'WARN');
+        if (brokenCharsCheck) {
+            confidence -= 15; // Sehr kritisch: Template ist unbrauchbar
+            const cleanMsg = brokenCharsCheck.message.replace(/^⚠️\s*/, '');
+            attentionItems.push('🔤 ' + cleanMsg);
+        }
+        
+        const base64ImgCheck = this.checks.find(c => c.id === 'W08_BASE64_IMAGES' && c.status === 'WARN');
+        if (base64ImgCheck) {
+            confidence -= 12; // Kritisch: Bilder werden in vielen Clients nicht angezeigt
+            const cleanMsg = base64ImgCheck.message.replace(/^⚠️\s*/, '');
+            attentionItems.push('🖼️ ' + cleanMsg);
+        }
+        
+        const missingHashCheck = this.checks.find(c => c.id === 'W09_MISSING_HASH_COLORS' && c.status === 'WARN');
+        if (missingHashCheck) {
+            // Normal 5 Punkte werden schon oben abgezogen, hier nur extra attention item
+            const cleanMsg = missingHashCheck.message.replace(/^⚠️\s*/, '');
+            attentionItems.push('🎨 ' + cleanMsg);
         }
         
         // Normalisieren: 0-100
@@ -3532,6 +3704,60 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         titleInput.value = '';
                         titleInput.placeholder = titleText ? 'Aktuell: "' + titleText + '" (leer/generisch)' : 'z.B. Markenname oder Betreffzeile (optional)';
+                    }
+                }
+                
+                // Pre-Header aus Template auslesen und ins Feld vorausfüllen
+                const preheaderInput = document.getElementById('preheaderText');
+                if (preheaderInput) {
+                    let preheaderText = '';
+                    const bodyMatch = selectedHtml.match(/<body[^>]*>/i);
+                    if (bodyMatch) {
+                        const bodyEndPos = selectedHtml.indexOf(bodyMatch[0]) + bodyMatch[0].length;
+                        const searchArea = selectedHtml.substring(bodyEndPos, bodyEndPos + 3000);
+                        
+                        // Gleiche Erkennung wie im Checker: versteckte Divs am Anfang des Body
+                        const preheaderPatterns = [
+                            /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+                            /<div[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+                            /<div[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+                            /<div[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+                            /<div[^>]*style="[^"]*mso-hide:\s*all[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+                        ];
+                        
+                        for (const pattern of preheaderPatterns) {
+                            const match = searchArea.match(pattern);
+                            if (match && match[1]) {
+                                const div = match[0];
+                                // Nur echte Preheader (keine Mobile-Blöcke mit Klasse/Tabelle/Bild)
+                                const hasClass = /class\s*=\s*["'][^"']+["']/i.test(div);
+                                const hasTable = /<table/i.test(div);
+                                const hasImg = /<img/i.test(div);
+                                if (!hasClass && !hasTable && !hasImg) {
+                                    // HTML-Tags entfernen, Text extrahieren
+                                    preheaderText = match[1]
+                                        .replace(/<[^>]*>/g, '')     // HTML-Tags entfernen
+                                        .replace(/&nbsp;/gi, ' ')    // &nbsp; → Leerzeichen
+                                        .replace(/&#8199;/g, '')     // Füllzeichen entfernen
+                                        .replace(/&#847;/g, '')      // Zero-width Joiner entfernen
+                                        .replace(/\u200B/g, '')      // Zero-width Space entfernen
+                                        .replace(/\u00AD/g, '')      // Soft Hyphen entfernen
+                                        .replace(/\s+/g, ' ')        // Mehrfache Leerzeichen zusammenfassen
+                                        .trim();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (preheaderText) {
+                        preheaderInput.value = preheaderText;
+                        preheaderInput.style.borderColor = '#4caf50';
+                        preheaderInput.title = 'Aus Template übernommen – bei Bedarf ändern';
+                        setTimeout(() => { preheaderInput.style.borderColor = ''; }, 2000);
+                    } else {
+                        preheaderInput.value = '';
+                        preheaderInput.placeholder = 'Freitextfeld';
                     }
                 }
             };
