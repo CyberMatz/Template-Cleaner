@@ -407,6 +407,86 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* ===========================
+           PHASE 2: Drop Zone Highlight
+           =========================== */
+        .block-card.drag-over {
+            border-top: 3px solid #f2a93b;
+            margin-top: -3px;
+        }
+        .blocks-list.drag-active .block-empty { display: none; }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .stat-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #78716c;
+            background: #faf9f7;
+            border: 1px solid #e7e5e4;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        .stat-chip.warn {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #dc2626;
+            font-weight: 600;
+        }
+        .stat-chip.good {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #16a34a;
+        }
+
+        /* ===========================
+           PHASE 3: Palette Section Headers
+           =========================== */
+        .palette-section {
+            font-size: 10px;
+            font-weight: 700;
+            color: #a8a29e;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+            margin-bottom: 2px;
+            padding-left: 4px;
+        }
+        .palette-section:first-child { margin-top: 0; }
+
+        /* Tracking row in link fields */
+        .tracking-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-top: 4px;
+        }
+        .tracking-row input {
+            flex: 1;
+            padding: 5px 8px;
+            border: 1px solid #d6d3d1;
+            border-radius: 4px;
+            font-size: 11px;
+            background: #faf9f7;
+            color: #44403c;
+        }
+        .tracking-row input:focus {
+            outline: none;
+            border-color: #f2a93b;
+        }
+        .tracking-row label {
+            font-size: 10px;
+            color: #a8a29e;
+            min-width: 55px;
+        }
     </style>
 </head>
 <body>
@@ -425,12 +505,17 @@
         <div class="panel">
             <div class="panel-header">➕ Bausteine</div>
             <div class="panel-body block-palette">
+                <div class="palette-section">Basis</div>
                 <button class="palette-btn" onclick="addBlock('header-image')"><span class="p-icon">🖼️</span> Header-Bild</button>
                 <button class="palette-btn" onclick="addBlock('text')"><span class="p-icon">📝</span> Textblock</button>
                 <button class="palette-btn" onclick="addBlock('image')"><span class="p-icon">🏞️</span> Bild</button>
                 <button class="palette-btn" onclick="addBlock('button')"><span class="p-icon">🔘</span> Button / CTA</button>
                 <button class="palette-btn" onclick="addBlock('spacer')"><span class="p-icon">↕️</span> Trenner / Abstand</button>
                 <button class="palette-btn" onclick="addBlock('footer')"><span class="p-icon">📋</span> Footer</button>
+                <div class="palette-section">Erweitert</div>
+                <button class="palette-btn" onclick="addBlock('image-text')"><span class="p-icon">🖼️📝</span> Bild + Text</button>
+                <button class="palette-btn" onclick="addBlock('columns')"><span class="p-icon">▥</span> Spalten (2/3)</button>
+                <button class="palette-btn" onclick="addBlock('social')"><span class="p-icon">🌐</span> Social Media</button>
             </div>
         </div>
 
@@ -488,6 +573,34 @@
                         <option value="dpl">DPL</option>
                     </select>
                 </div>
+                <div class="setting-item">
+                    <label>Öffnerpixel</label>
+                    <select id="settingPixel" onchange="updatePreview()">
+                        <option value="placeholder">Platzhalter (Pixel wird später eingesetzt)</option>
+                        <option value="none">Kein Öffnerpixel</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>Tracking-Platzhalter</label>
+                    <select id="settingTracking" onchange="toggleTrackingFields()">
+                        <option value="none">Keine (Links ohne UTM)</option>
+                        <option value="utm">UTM-Parameter an Links anfügen</option>
+                    </select>
+                </div>
+                <div id="trackingFields" style="display:none;">
+                    <div class="setting-item">
+                        <label>utm_source</label>
+                        <input type="text" id="settingUtmSource" placeholder="z.B. newsletter" oninput="updatePreview()">
+                    </div>
+                    <div class="setting-item">
+                        <label>utm_medium</label>
+                        <input type="text" id="settingUtmMedium" placeholder="z.B. email" oninput="updatePreview()">
+                    </div>
+                    <div class="setting-item">
+                        <label>utm_campaign</label>
+                        <input type="text" id="settingUtmCampaign" placeholder="z.B. maerz2026" oninput="updatePreview()">
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -531,7 +644,12 @@
     <button class="btn-secondary" onclick="importTemplateFile()">📥 Vorlage importieren</button>
     <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(event)">
     <div class="export-spacer"></div>
-    <span class="template-size-info" id="templateSizeInfo"></span>
+    <div class="stats-bar">
+        <span class="stat-chip" id="statBlocks">📦 0 Blöcke</span>
+        <span class="stat-chip" id="statRatio">📊 Text/Bild: –</span>
+        <span class="stat-chip" id="statLinks">🔗 0 Links</span>
+        <span class="template-size-info" id="templateSizeInfo"></span>
+    </div>
 </div>
 
 <script>
@@ -593,6 +711,45 @@ const BLOCK_DEFS = {
             textColor: '#999999',
             bgColor: '#f8f8f8',
             fontSize: '12'
+        }
+    },
+    'image-text': {
+        icon: '🖼️📝',
+        label: 'Bild + Text',
+        defaults: {
+            imageSrc: '', imageAlt: '', imageLink: '',
+            imageWidth: '200', imagePosition: 'left',
+            heading: '', headingSize: '18', headingColor: '#333333',
+            text: '', textSize: '14', textColor: '#555555',
+            paddingTop: '15', paddingBottom: '15',
+            paddingLeft: '20', paddingRight: '20'
+        }
+    },
+    'columns': {
+        icon: '▥',
+        label: 'Spalten',
+        defaults: {
+            count: '2',
+            col1Heading: '', col1Text: '', col1ImageSrc: '', col1ImageAlt: '', col1Link: '',
+            col2Heading: '', col2Text: '', col2ImageSrc: '', col2ImageAlt: '', col2Link: '',
+            col3Heading: '', col3Text: '', col3ImageSrc: '', col3ImageAlt: '', col3Link: '',
+            headingSize: '16', headingColor: '#333333',
+            textSize: '13', textColor: '#555555',
+            gap: '20', paddingTop: '15', paddingBottom: '15'
+        }
+    },
+    'social': {
+        icon: '🌐',
+        label: 'Social Media',
+        defaults: {
+            align: 'center',
+            iconSize: '32',
+            gap: '10',
+            facebook: '', instagram: '', linkedin: '',
+            twitter: '', youtube: '', tiktok: '',
+            website: '',
+            paddingTop: '15', paddingBottom: '15',
+            bgColor: ''
         }
     }
 };
@@ -1003,6 +1160,184 @@ function renderBlockFields(block) {
                 </div>
             `;
 
+        case 'image-text':
+            return `
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Bild-Position</label>
+                        <select onchange="updateBlockData(${id},'imagePosition',this.value)">
+                            <option value="left" ${d.imagePosition==='left'?'selected':''}>Bild links, Text rechts</option>
+                            <option value="right" ${d.imagePosition==='right'?'selected':''}>Bild rechts, Text links</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Bildbreite (px)</label>
+                        <input type="number" value="${d.imageWidth}" min="100" max="400" oninput="updateBlockData(${id},'imageWidth',this.value)">
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>Bild-URL</label>
+                    <input type="url" value="${esc(d.imageSrc)}" placeholder="https://example.com/bild.jpg" oninput="updateBlockData(${id},'imageSrc',this.value)">
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Alt-Text</label>
+                        <input type="text" value="${esc(d.imageAlt)}" oninput="updateBlockData(${id},'imageAlt',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Bild-Link (optional)</label>
+                        <input type="url" value="${esc(d.imageLink)}" oninput="updateBlockData(${id},'imageLink',this.value)">
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>Überschrift (optional)</label>
+                    <input type="text" value="${esc(d.heading)}" oninput="updateBlockData(${id},'heading',this.value)">
+                </div>
+                <div class="field-group">
+                    <label>Text</label>
+                    <textarea rows="3" oninput="updateBlockData(${id},'text',this.value)">${esc(d.text)}</textarea>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Überschrift-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.headingColor}" oninput="updateBlockData(${id},'headingColor',this.value)">
+                            <input type="text" value="${esc(d.headingColor)}" oninput="updateBlockData(${id},'headingColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Text-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.textColor}" oninput="updateBlockData(${id},'textColor',this.value)">
+                            <input type="text" value="${esc(d.textColor)}" oninput="updateBlockData(${id},'textColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+        case 'columns': {
+            const count = parseInt(d.count) || 2;
+            let colFields = '';
+            for (let i = 1; i <= count; i++) {
+                colFields += `
+                <div style="background:#faf9f7; border:1px solid #e7e5e4; border-radius:6px; padding:10px; margin-bottom:8px;">
+                    <div style="font-size:12px; font-weight:600; color:#78716c; margin-bottom:8px;">Spalte ${i}</div>
+                    <div class="field-group">
+                        <label>Bild-URL (optional)</label>
+                        <input type="url" value="${esc(d['col'+i+'ImageSrc'])}" placeholder="https://..." oninput="updateBlockData(${id},'col${i}ImageSrc',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Überschrift</label>
+                        <input type="text" value="${esc(d['col'+i+'Heading'])}" oninput="updateBlockData(${id},'col${i}Heading',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Text</label>
+                        <textarea rows="2" oninput="updateBlockData(${id},'col${i}Text',this.value)">${esc(d['col'+i+'Text'])}</textarea>
+                    </div>
+                    <div class="field-group">
+                        <label>Link (optional)</label>
+                        <input type="url" value="${esc(d['col'+i+'Link'])}" oninput="updateBlockData(${id},'col${i}Link',this.value)">
+                    </div>
+                </div>`;
+            }
+            return `
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Anzahl Spalten</label>
+                        <select onchange="updateBlockData(${id},'count',this.value); renderBlocks();">
+                            <option value="2" ${d.count==='2'?'selected':''}>2 Spalten</option>
+                            <option value="3" ${d.count==='3'?'selected':''}>3 Spalten</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Abstand zwischen Spalten (px)</label>
+                        <input type="number" value="${d.gap}" min="0" max="40" oninput="updateBlockData(${id},'gap',this.value)">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Überschrift-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.headingColor}" oninput="updateBlockData(${id},'headingColor',this.value)">
+                            <input type="text" value="${esc(d.headingColor)}" oninput="updateBlockData(${id},'headingColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Text-Farbe</label>
+                        <div class="color-row">
+                            <input type="color" value="${d.textColor}" oninput="updateBlockData(${id},'textColor',this.value)">
+                            <input type="text" value="${esc(d.textColor)}" oninput="updateBlockData(${id},'textColor',this.value)" style="flex:1">
+                        </div>
+                    </div>
+                </div>
+                ${colFields}
+            `;
+        }
+
+        case 'social':
+            return `
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Ausrichtung</label>
+                        <select onchange="updateBlockData(${id},'align',this.value)">
+                            <option value="left" ${d.align==='left'?'selected':''}>Links</option>
+                            <option value="center" ${d.align==='center'?'selected':''}>Zentriert</option>
+                            <option value="right" ${d.align==='right'?'selected':''}>Rechts</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Icon-Größe (px)</label>
+                        <input type="number" value="${d.iconSize}" min="20" max="64" oninput="updateBlockData(${id},'iconSize',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Abstand (px)</label>
+                        <input type="number" value="${d.gap}" min="4" max="30" oninput="updateBlockData(${id},'gap',this.value)">
+                    </div>
+                </div>
+                <span class="field-hint" style="margin-bottom:8px; display:block;">Nur ausgefüllte Felder werden angezeigt. URL leer lassen = Icon wird nicht angezeigt.</span>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>Facebook</label>
+                        <input type="url" value="${esc(d.facebook)}" placeholder="https://facebook.com/..." oninput="updateBlockData(${id},'facebook',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Instagram</label>
+                        <input type="url" value="${esc(d.instagram)}" placeholder="https://instagram.com/..." oninput="updateBlockData(${id},'instagram',this.value)">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>LinkedIn</label>
+                        <input type="url" value="${esc(d.linkedin)}" placeholder="https://linkedin.com/..." oninput="updateBlockData(${id},'linkedin',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>X / Twitter</label>
+                        <input type="url" value="${esc(d.twitter)}" placeholder="https://x.com/..." oninput="updateBlockData(${id},'twitter',this.value)">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>YouTube</label>
+                        <input type="url" value="${esc(d.youtube)}" placeholder="https://youtube.com/..." oninput="updateBlockData(${id},'youtube',this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>TikTok</label>
+                        <input type="url" value="${esc(d.tiktok)}" placeholder="https://tiktok.com/..." oninput="updateBlockData(${id},'tiktok',this.value)">
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>Website</label>
+                    <input type="url" value="${esc(d.website)}" placeholder="https://www.example.com" oninput="updateBlockData(${id},'website',this.value)">
+                </div>
+                <div class="field-group">
+                    <label>Hintergrundfarbe (optional)</label>
+                    <div class="color-row">
+                        <input type="color" value="${d.bgColor || '#ffffff'}" oninput="updateBlockData(${id},'bgColor',this.value)">
+                        <input type="text" value="${esc(d.bgColor)}" placeholder="leer = transparent" oninput="updateBlockData(${id},'bgColor',this.value)" style="flex:1">
+                    </div>
+                </div>
+            `;
+
         default:
             return '<p>Unbekannter Block-Typ</p>';
     }
@@ -1094,10 +1429,17 @@ function generateEmailHtml() {
     <style type="text/css">
         @media screen and (max-width: ${width}px) {
             table[class="responsive-table"] { width: 100% !important; }
-            td[class="responsive-cell"] { width: 100% !important; display: block !important; }
+            td[class="responsive-cell"] { width: 100% !important; display: block !important; padding-right: 0 !important; }
             img[class="responsive-img"] { width: 100% !important; height: auto !important; }
         }
     </style>`;
+
+    // Öffnerpixel
+    const pixelSetting = document.getElementById('settingPixel').value;
+    let trackingPixel = '';
+    if (pixelSetting === 'placeholder') {
+        trackingPixel = '\n    <!-- Öffnerpixel / Tracking Pixel -->\n    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="1" height="1" border="0" style="display:none;height:1px;width:1px;">';
+    }
 
     // DPL specific
     let dplWrapperStart = '';
@@ -1163,7 +1505,7 @@ ${blocksHtml}
     </table>
 
     <!-- Tracking Pixel Placeholder -->
-    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="1" height="1" border="0" style="display:none;height:1px;width:1px;">
+    ${trackingPixel}
 
     <!-- FOOTER PLACEHOLDER -->
 ${dplWrapperEnd}
@@ -1185,7 +1527,7 @@ function generateBlockHtml(block, width, fontFamily) {
             const widthAttr = d.width.includes('%') ? '100%' : d.width;
             let imgTag = `<img src="${esc(d.src || 'https://via.placeholder.com/' + width + 'x200/f2a93b/ffffff?text=Header+Bild')}" alt="${esc(d.alt)}" width="${widthAttr}" class="responsive-img" style="display: block; width: ${d.width.includes('%') ? '100%' : d.width + 'px'}; max-width: 100%; height: auto;" border="0">`;
             if (d.link) {
-                imgTag = `<a href="${esc(d.link)}" target="_blank">${imgTag}</a>`;
+                imgTag = `<a href="${esc(appendUtm(d.link))}" target="_blank">${imgTag}</a>`;
             }
             return `
                     <tr>
@@ -1219,7 +1561,7 @@ function generateBlockHtml(block, width, fontFamily) {
             const widthAttr = d.width.includes('%') ? '100%' : d.width;
             let imgTag = `<img src="${esc(d.src || 'https://via.placeholder.com/' + width + 'x300/cccccc/666666?text=Bild')}" alt="${esc(d.alt)}" width="${widthAttr}" class="responsive-img" style="display: block; width: ${d.width.includes('%') ? '100%' : d.width + 'px'}; max-width: 100%; height: auto;" border="0">`;
             if (d.link) {
-                imgTag = `<a href="${esc(d.link)}" target="_blank">${imgTag}</a>`;
+                imgTag = `<a href="${esc(appendUtm(d.link))}" target="_blank">${imgTag}</a>`;
             }
             return `
                     <tr>
@@ -1238,7 +1580,7 @@ function generateBlockHtml(block, width, fontFamily) {
                                 <tr>
                                     <td align="center" style="background-color: ${d.bgColor}; border-radius: ${d.borderRadius}px; padding: ${d.paddingV}px ${d.paddingH}px;">
                                         <!--[if mso]>
-                                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(d.link)}" style="height:auto;v-text-anchor:middle;width:auto;" arcsize="${Math.round(d.borderRadius / 40 * 100)}%" fillcolor="${d.bgColor}" stroke="false">
+                                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${esc(appendUtm(d.link))}" style="height:auto;v-text-anchor:middle;width:auto;" arcsize="${Math.round(d.borderRadius / 40 * 100)}%" fillcolor="${d.bgColor}" stroke="false">
                                         <w:anchorlock/>
                                         <center style="font-family:${fontFamily};font-size:${d.fontSize}px;color:${d.textColor};font-weight:bold;">
                                             ${esc(d.text)}
@@ -1246,7 +1588,7 @@ function generateBlockHtml(block, width, fontFamily) {
                                         </v:roundrect>
                                         <![endif]-->
                                         <!--[if !mso]><!-->
-                                        <a href="${esc(d.link)}" target="_blank" style="display: inline-block; font-family: ${fontFamily}; font-size: ${d.fontSize}px; font-weight: bold; color: ${d.textColor}; text-decoration: none; line-height: 1;">
+                                        <a href="${esc(appendUtm(d.link))}" target="_blank" style="display: inline-block; font-family: ${fontFamily}; font-size: ${d.fontSize}px; font-weight: bold; color: ${d.textColor}; text-decoration: none; line-height: 1;">
                                             ${esc(d.text)}
                                         </a>
                                         <!--<![endif]-->
@@ -1282,10 +1624,135 @@ function generateBlockHtml(block, width, fontFamily) {
                         <td style="padding: 20px 30px; background-color: ${d.bgColor}; text-align: center; font-family: ${fontFamily};">
                             <p style="margin: 0 0 10px 0; font-size: ${d.fontSize}px; color: ${d.textColor}; line-height: 1.5;">${escHtml(d.text)}</p>
                             <p style="margin: 0; font-size: ${d.fontSize}px; color: ${d.textColor}; line-height: 1.5;">
-                                <a href="${esc(d.unsubscribeLink)}" style="color: ${d.textColor}; text-decoration: underline;">${esc(d.unsubscribeText)}</a>
+                                <a href="${esc(appendUtm(d.unsubscribeLink))}" style="color: ${d.textColor}; text-decoration: underline;">${esc(d.unsubscribeText)}</a>
                                 &nbsp;|&nbsp;
-                                <a href="${esc(d.imprintLink)}" style="color: ${d.textColor}; text-decoration: underline;">${esc(d.imprintText)}</a>
+                                <a href="${esc(appendUtm(d.imprintLink))}" style="color: ${d.textColor}; text-decoration: underline;">${esc(d.imprintText)}</a>
                             </p>
+                        </td>
+                    </tr>`;
+        }
+
+        case 'image-text': {
+            const imgW = parseInt(d.imageWidth) || 200;
+            const textW = parseInt(width) - imgW - 40; // 40 for padding
+            const placeholderImg = `https://via.placeholder.com/${imgW}x${imgW}/cccccc/666666?text=Bild`;
+            let imgCell = `
+                <td class="responsive-cell" width="${imgW}" valign="top" style="padding: 0; width: ${imgW}px;">
+                    ${d.imageLink ? '<a href="' + esc(appendUtm(d.imageLink)) + '" target="_blank">' : ''}
+                    <img src="${esc(d.imageSrc || placeholderImg)}" alt="${esc(d.imageAlt)}" width="${imgW}" class="responsive-img" style="display: block; width: ${imgW}px; max-width: 100%; height: auto;" border="0">
+                    ${d.imageLink ? '</a>' : ''}
+                </td>`;
+            let textContent = '';
+            if (d.heading) {
+                textContent += `<h2 style="margin: 0 0 8px 0; font-family: ${fontFamily}; font-size: ${d.headingSize}px; font-weight: 700; color: ${d.headingColor}; line-height: 1.3;">${escHtml(d.heading)}</h2>`;
+            }
+            if (d.text) {
+                d.text.split('\n').filter(p => p.trim()).forEach(p => {
+                    textContent += `<p style="margin: 0 0 10px 0; font-family: ${fontFamily}; font-size: ${d.textSize}px; color: ${d.textColor}; line-height: 1.5;">${escHtml(p)}</p>`;
+                });
+            }
+            let textCell = `
+                <td class="responsive-cell" valign="top" style="padding: 10px 15px; font-family: ${fontFamily};">
+                    ${textContent}
+                </td>`;
+            const leftCell = d.imagePosition === 'left' ? imgCell : textCell;
+            const rightCell = d.imagePosition === 'left' ? textCell : imgCell;
+            return `
+                    <tr>
+                        <td style="padding: ${d.paddingTop}px ${d.paddingRight}px ${d.paddingBottom}px ${d.paddingLeft}px;">
+                            <table role="presentation" class="responsive-table" cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    ${leftCell}
+                                    ${rightCell}
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>`;
+        }
+
+        case 'columns': {
+            const count = parseInt(d.count) || 2;
+            const gapPx = parseInt(d.gap) || 20;
+            const colWidth = Math.floor((parseInt(width) - 40 - (gapPx * (count - 1))) / count);
+            let colsHtml = '';
+            for (let i = 1; i <= count; i++) {
+                const heading = d['col' + i + 'Heading'] || '';
+                const text = d['col' + i + 'Text'] || '';
+                const imgSrc = d['col' + i + 'ImageSrc'] || '';
+                const imgAlt = d['col' + i + 'ImageAlt'] || '';
+                const link = d['col' + i + 'Link'] || '';
+                let cellContent = '';
+                if (imgSrc) {
+                    let img = `<img src="${esc(imgSrc)}" alt="${esc(imgAlt)}" width="${colWidth}" class="responsive-img" style="display: block; width: 100%; max-width: 100%; height: auto; margin-bottom: 10px;" border="0">`;
+                    if (link) img = `<a href="${esc(appendUtm(link))}" target="_blank">${img}</a>`;
+                    cellContent += img;
+                }
+                if (heading) {
+                    cellContent += `<h3 style="margin: 0 0 6px 0; font-family: ${fontFamily}; font-size: ${d.headingSize}px; font-weight: 700; color: ${d.headingColor}; line-height: 1.3;">${escHtml(heading)}</h3>`;
+                }
+                if (text) {
+                    text.split('\n').filter(p => p.trim()).forEach(p => {
+                        cellContent += `<p style="margin: 0 0 8px 0; font-family: ${fontFamily}; font-size: ${d.textSize}px; color: ${d.textColor}; line-height: 1.5;">${escHtml(p)}</p>`;
+                    });
+                }
+                if (!cellContent) cellContent = `<p style="color:#ccc; font-size:12px;">Spalte ${i}</p>`;
+                const paddingRight = i < count ? `padding-right: ${gapPx}px;` : '';
+                colsHtml += `
+                    <td class="responsive-cell" width="${colWidth}" valign="top" style="width: ${colWidth}px; ${paddingRight} font-family: ${fontFamily};">
+                        ${cellContent}
+                    </td>`;
+            }
+            return `
+                    <tr>
+                        <td style="padding: ${d.paddingTop}px 20px ${d.paddingBottom}px 20px;">
+                            <table role="presentation" class="responsive-table" cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    ${colsHtml}
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>`;
+        }
+
+        case 'social': {
+            const iconPx = parseInt(d.iconSize) || 32;
+            const gapPx = parseInt(d.gap) || 10;
+            const bgStyle = d.bgColor ? `background-color: ${d.bgColor};` : '';
+            const platforms = [
+                { key: 'facebook', label: 'Fb', color: '#1877F2' },
+                { key: 'instagram', label: 'Ig', color: '#E4405F' },
+                { key: 'linkedin', label: 'Li', color: '#0A66C2' },
+                { key: 'twitter', label: '𝕏', color: '#000000' },
+                { key: 'youtube', label: 'Yt', color: '#FF0000' },
+                { key: 'tiktok', label: 'Tk', color: '#000000' },
+                { key: 'website', label: '🌐', color: '#555555' }
+            ];
+            let icons = '';
+            platforms.forEach(p => {
+                if (d[p.key]) {
+                    icons += `
+                    <td style="padding: 0 ${gapPx/2}px;">
+                        <a href="${esc(appendUtm(d[p.key]))}" target="_blank" style="text-decoration: none;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td style="background-color: ${p.color}; border-radius: ${Math.round(iconPx/2)}px; width: ${iconPx}px; height: ${iconPx}px; text-align: center; vertical-align: middle; font-size: ${Math.round(iconPx*0.4)}px; color: #ffffff; font-family: ${fontFamily}; font-weight: bold;">
+                                        ${p.label}
+                                    </td>
+                                </tr>
+                            </table>
+                        </a>
+                    </td>`;
+                }
+            });
+            if (!icons) icons = '<td style="color:#aaa; font-size:12px;">Keine Social-Links eingetragen</td>';
+            return `
+                    <tr>
+                        <td align="${d.align}" style="padding: ${d.paddingTop}px 20px ${d.paddingBottom}px 20px; ${bgStyle}">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    ${icons}
+                                </tr>
+                            </table>
                         </td>
                     </tr>`;
         }
@@ -1339,6 +1806,9 @@ function updatePreview() {
                 frame.style.height = Math.max(h, 400) + 'px';
             } catch(e) {}
         };
+
+        // Update stats bar
+        updateStats();
     }, 150);
 }
 
@@ -1441,11 +1911,111 @@ function handleImportFile(event) {
 }
 
 // ===========================
+// UTM TRACKING HELPER
+// ===========================
+function appendUtm(url) {
+    if (!url || url.startsWith('#') || url.startsWith('data:')) return url;
+    const tracking = document.getElementById('settingTracking').value;
+    if (tracking !== 'utm') return url;
+    const source = document.getElementById('settingUtmSource').value;
+    const medium = document.getElementById('settingUtmMedium').value;
+    const campaign = document.getElementById('settingUtmCampaign').value;
+    if (!source && !medium && !campaign) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    let params = [];
+    if (source) params.push('utm_source=' + encodeURIComponent(source));
+    if (medium) params.push('utm_medium=' + encodeURIComponent(medium));
+    if (campaign) params.push('utm_campaign=' + encodeURIComponent(campaign));
+    return url + sep + params.join('&');
+}
+
+function toggleTrackingFields() {
+    const val = document.getElementById('settingTracking').value;
+    document.getElementById('trackingFields').style.display = val === 'utm' ? 'block' : 'none';
+    updatePreview();
+}
+
+// ===========================
+// STATS UPDATE
+// ===========================
+function updateStats() {
+    // Block count
+    document.getElementById('statBlocks').textContent = '📦 ' + blocks.length + ' Blöcke';
+
+    // Count images and text
+    let imgCount = 0;
+    let textLength = 0;
+    let linkCount = 0;
+
+    blocks.forEach(b => {
+        const d = b.data;
+        switch(b.type) {
+            case 'header-image':
+            case 'image':
+                imgCount++;
+                if (d.link) linkCount++;
+                break;
+            case 'image-text':
+                imgCount++;
+                textLength += (d.heading || '').length + (d.text || '').length;
+                if (d.imageLink) linkCount++;
+                break;
+            case 'text':
+                textLength += (d.heading || '').length + (d.text || '').length;
+                break;
+            case 'button':
+                linkCount++;
+                break;
+            case 'columns': {
+                const cnt = parseInt(d.count) || 2;
+                for (let i = 1; i <= cnt; i++) {
+                    if (d['col'+i+'ImageSrc']) imgCount++;
+                    textLength += (d['col'+i+'Heading'] || '').length + (d['col'+i+'Text'] || '').length;
+                    if (d['col'+i+'Link']) linkCount++;
+                }
+                break;
+            }
+            case 'social':
+                ['facebook','instagram','linkedin','twitter','youtube','tiktok','website'].forEach(k => {
+                    if (d[k]) linkCount++;
+                });
+                break;
+            case 'footer':
+                linkCount += 2;
+                textLength += (d.text || '').length;
+                break;
+        }
+    });
+
+    // Ratio
+    const ratioEl = document.getElementById('statRatio');
+    if (imgCount === 0 && textLength === 0) {
+        ratioEl.textContent = '📊 Text/Bild: –';
+        ratioEl.className = 'stat-chip';
+    } else if (imgCount === 0) {
+        ratioEl.textContent = '📊 Nur Text (kein Bild)';
+        ratioEl.className = 'stat-chip';
+    } else {
+        const ratio = textLength > 0 ? (textLength / (imgCount * 100)).toFixed(1) : 0;
+        if (ratio < 0.5) {
+            ratioEl.textContent = '📊 Wenig Text, viele Bilder';
+            ratioEl.className = 'stat-chip warn';
+        } else {
+            ratioEl.textContent = '📊 Text/Bild-Verhältnis OK';
+            ratioEl.className = 'stat-chip good';
+        }
+    }
+
+    // Links
+    document.getElementById('statLinks').textContent = '🔗 ' + linkCount + ' Links';
+}
+
+// ===========================
 // TEMPLATE DATA HELPERS
 // ===========================
 function getTemplateData() {
     return {
-        version: 1,
+        version: 2,
         settings: {
             title: document.getElementById('settingTitle').value,
             width: document.getElementById('settingWidth').value,
@@ -1454,7 +2024,12 @@ function getTemplateData() {
             font: document.getElementById('settingFont').value,
             customFont: document.getElementById('settingCustomFont').value,
             customFontUrl: document.getElementById('settingCustomFontUrl').value,
-            type: document.getElementById('settingType').value
+            type: document.getElementById('settingType').value,
+            pixel: document.getElementById('settingPixel').value,
+            tracking: document.getElementById('settingTracking').value,
+            utmSource: document.getElementById('settingUtmSource').value,
+            utmMedium: document.getElementById('settingUtmMedium').value,
+            utmCampaign: document.getElementById('settingUtmCampaign').value
         },
         blocks: blocks.map(b => ({ type: b.type, data: JSON.parse(JSON.stringify(b.data)) }))
     };
@@ -1473,6 +2048,12 @@ function applyTemplateData(data) {
         document.getElementById('settingCustomFont').value = s.customFont || '';
         document.getElementById('settingCustomFontUrl').value = s.customFontUrl || '';
         document.getElementById('settingType').value = s.type || 'standard';
+        document.getElementById('settingPixel').value = s.pixel || 'placeholder';
+        document.getElementById('settingTracking').value = s.tracking || 'none';
+        document.getElementById('settingUtmSource').value = s.utmSource || '';
+        document.getElementById('settingUtmMedium').value = s.utmMedium || '';
+        document.getElementById('settingUtmCampaign').value = s.utmCampaign || '';
+        toggleTrackingFields();
     }
     if (data.blocks) {
         blocks = [];
