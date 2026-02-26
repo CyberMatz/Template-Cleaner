@@ -53,6 +53,11 @@ class TemplateProcessor {
         // Manche Templates (z.B. EVO Heizungen) haben zwei verschachtelte HTML-Dokumente
         // mit doppeltem <html>, <head>, <body> – das muss VOR allem anderen bereinigt werden
         this.fixDuplicateDocumentStructure();
+
+        // S11: Doppelt-kodierte UTF-8 Zeichen reparieren (Mojibake)
+        // Entsteht wenn UTF-8 fälschlich als ISO-8859-1/Windows-1252 interpretiert und erneut
+        // als UTF-8 gespeichert wird. Dann wird z.B. ü (UTF-8: C3 BC) zu Ã¼ (C3 83 C2 BC).
+        this.fixDoubleEncodedUtf8();
         
         // S04: </br> zu <br /> korrigieren (falsches Closing-Tag)
         const brCloseCount = (this.html.match(/<\/br\s*>/gi) || []).length;
@@ -894,6 +899,14 @@ class TemplateProcessor {
             fixCount += altNullCount;
         }
         
+        // 7. Browser "saved from url" Kommentar entfernen
+        // Entsteht wenn jemand eine Webseite über "Seite speichern unter" im Browser sichert
+        const savedFromCount = (this.html.match(/<!--\s*saved from url=\([^)]*\)[^-]*-->\s*\n?/gi) || []).length;
+        if (savedFromCount > 0) {
+            this.html = this.html.replace(/<!--\s*saved from url=\([^)]*\)[^-]*-->\s*\n?/gi, '');
+            fixCount += savedFromCount;
+        }
+        
         if (fixCount > 0) {
             const details = [];
             if (ceCount > 0) details.push(ceCount + '× contenteditable');
@@ -902,6 +915,7 @@ class TemplateProcessor {
             if (editorStyleCount > 0) details.push(editorStyleCount + '× Editor-Styles');
             if (emptyClassCount + emptyClassBare > 0) details.push((emptyClassCount + emptyClassBare) + '× leere class-Attribute');
             if (altNullCount > 0) details.push(altNullCount + '× alt="null" korrigiert');
+            if (savedFromCount > 0) details.push(savedFromCount + '× Browser "saved from url" Kommentar');
             this.addCheck('S06_CMS_ARTIFACTS', 'FIXED', 'CMS-/Template-Reste entfernt: ' + details.join(', '));
         }
     }
@@ -1053,6 +1067,73 @@ class TemplateProcessor {
         
         if (removals.length > 0) {
             this.addCheck('S10_USELESS_META', 'FIXED', 'Nutzlose Meta-Tags entfernt: ' + removals.join(', '));
+        }
+    }
+
+    // S11: Doppelt-kodierte UTF-8 Zeichen reparieren (Mojibake)
+    // Problem: UTF-8-Datei wird als ISO-8859-1 gelesen und erneut als UTF-8 gespeichert.
+    // Dann werden z.B. ü (UTF-8: C3 BC) zu den Zeichen Ã¼ (Ã=C3, ¼=BC in Latin-1).
+    // Die Ersetzungstabelle deckt alle deutschen Umlaute, Sonderzeichen und häufige
+    // typografische Zeichen ab.
+    fixDoubleEncodedUtf8() {
+        // Mapping: Doppelt-kodierte Sequenz → korrektes UTF-8 Zeichen
+        const mojibakeMap = [
+            // Deutsche Umlaute und ß
+            { broken: '\u00C3\u00BC', fixed: 'ü' },  // Ã¼ → ü
+            { broken: '\u00C3\u00A4', fixed: 'ä' },  // Ã¤ → ä
+            { broken: '\u00C3\u00B6', fixed: 'ö' },  // Ã¶ → ö
+            { broken: '\u00C3\u009F', fixed: 'ß' },  // Ã\u009F → ß
+            { broken: '\u00C3\u0084', fixed: 'Ä' },  // Ã\u0084 → Ä
+            { broken: '\u00C3\u0096', fixed: 'Ö' },  // Ã\u0096 → Ö
+            { broken: '\u00C3\u009C', fixed: 'Ü' },  // Ã\u009C → Ü
+            
+            // Häufige Sonderzeichen
+            { broken: '\u00C3\u00A9', fixed: 'é' },  // Ã© → é
+            { broken: '\u00C3\u00A8', fixed: 'è' },  // Ã¨ → è
+            { broken: '\u00C3\u00AA', fixed: 'ê' },  // Ãª → ê
+            { broken: '\u00C3\u00AB', fixed: 'ë' },  // Ã« → ë
+            { broken: '\u00C3\u00A0', fixed: 'à' },  // Ã  → à
+            { broken: '\u00C3\u00A2', fixed: 'â' },  // Ã¢ → â
+            { broken: '\u00C3\u00AE', fixed: 'î' },  // Ã® → î
+            { broken: '\u00C3\u00AF', fixed: 'ï' },  // Ã¯ → ï
+            { broken: '\u00C3\u00B4', fixed: 'ô' },  // Ã´ → ô
+            { broken: '\u00C3\u00BB', fixed: 'û' },  // Ã» → û
+            { broken: '\u00C3\u00A7', fixed: 'ç' },  // Ã§ → ç
+            { broken: '\u00C3\u00B1', fixed: 'ñ' },  // Ã± → ñ
+            
+            // Typografische Zeichen (über Windows-1252)
+            { broken: '\u00C3\u00A2\u00C2\u0080\u00C2\u0093', fixed: '–' },  // Gedankenstrich
+            { broken: '\u00C3\u00A2\u00C2\u0080\u00C2\u0094', fixed: '—' },  // Langer Strich
+            { broken: '\u00C3\u00A2\u00C2\u0080\u00C2\u0099', fixed: '\u2019' },  // ' Apostroph
+            { broken: '\u00C3\u00A2\u00C2\u0080\u00C2\u009C', fixed: '\u201C' },  // " Anführungszeichen
+            { broken: '\u00C3\u00A2\u00C2\u0080\u00C2\u009D', fixed: '\u201D' },  // " Anführungszeichen
+            { broken: '\u00C3\u00A2\u00C2\u0080\u00C2\u00A6', fixed: '…' },  // Ellipsis
+            { broken: '\u00C2\u00A0', fixed: '\u00A0' },  // geschütztes Leerzeichen
+            { broken: '\u00C2\u00AB', fixed: '«' },  // Guillemets
+            { broken: '\u00C2\u00BB', fixed: '»' },  // Guillemets
+            { broken: '\u00C2\u00A9', fixed: '©' },  // Copyright
+            { broken: '\u00C2\u00AE', fixed: '®' },  // Registered
+            { broken: '\u00C2\u00B0', fixed: '°' },  // Grad-Zeichen
+            { broken: '\u00C3\u0082\u00C2\u00A0', fixed: '\u00A0' },  // doppelt-kodiertes &nbsp;
+        ];
+        
+        let totalFixes = 0;
+        const fixedChars = new Set();
+        
+        // Längere Sequenzen zuerst ersetzen (z.B. 6-Byte Gedankenstrich vor 2-Byte Umlauten)
+        const sortedMap = [...mojibakeMap].sort((a, b) => b.broken.length - a.broken.length);
+        
+        for (const entry of sortedMap) {
+            const count = this.html.split(entry.broken).length - 1;
+            if (count > 0) {
+                this.html = this.html.split(entry.broken).join(entry.fixed);
+                totalFixes += count;
+                fixedChars.add(entry.fixed + ' (' + count + '×)');
+            }
+        }
+        
+        if (totalFixes > 0) {
+            this.addCheck('S11_MOJIBAKE', 'FIXED', 'Encoding-Fehler repariert (Mojibake): ' + totalFixes + '× doppelt-kodierte UTF-8 Zeichen korrigiert – ' + [...fixedChars].join(', '));
         }
     }
 
@@ -3302,7 +3383,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.7.6-2026-02-25';
+const APP_VERSION = 'v3.8.0-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4189,6 +4270,8 @@ document.addEventListener('DOMContentLoaded', () => {
         result = result.replace(/<([a-z][a-z0-9]*)\s+>/gi, '<$1>');
         // Doppelte Leerzeichen in Tags: <p  class → <p class
         result = result.replace(/<([a-z][a-z0-9]*)\s{2,}/gi, '<$1 ');
+        // Browser "saved from url" Kommentar entfernen
+        result = result.replace(/<!--\s*saved from url=\([^)]*\)[^-]*-->\s*\n?/gi, '');
         return result;
     }
 
