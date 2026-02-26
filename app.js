@@ -330,9 +330,10 @@ class TemplateProcessor {
         // Preheader-Erkennung: Nur ECHTE Preheader, keine Mobile-Content-Blöcke
         // Ein echter Preheader:
         //   - Hat display:none (oder max-height:0, visibility:hidden, font-size:0)
-        //   - Befindet sich in den ersten 2000 Zeichen nach <body>
+        //   - Befindet sich in den ersten 5000 Zeichen nach <body>
         //   - Enthält KEINE <table> Tags (Mobile-Blöcke enthalten Tabellen)
         //   - Hat typischerweise KEINE CSS-Klasse (Mobile-Blöcke haben class="m" etc.)
+        // Pflicht-Position: Direkt nach <body>, VOR %header% und VOR Outlook Comments
         
         const bodyMatch = this.html.match(/<body[^>]*>/i);
         if (!bodyMatch) {
@@ -342,8 +343,8 @@ class TemplateProcessor {
         
         const bodyEndPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
         
-        // Suche nur in den ersten 5000 Zeichen nach <body> (Preheader steht immer ganz oben)
-        // (5000 statt 3000: manche Preheader haben lange Spacer-Sequenzen wie &zwnj;&nbsp;&#847; ×80+)
+        // Suche in den ersten 5000 Zeichen nach <body>
+        // (5000: manche Preheader haben lange Spacer-Sequenzen wie &zwnj;&nbsp;&#847; ×80+)
         const searchArea = this.html.substring(bodyEndPos, bodyEndPos + 5000);
         
         // Breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all
@@ -381,30 +382,98 @@ class TemplateProcessor {
         }
         
         const preheaderCount = candidates.length;
+        let fixes = [];
         
-        if (preheaderCount === 1) {
+        if (preheaderCount >= 1) {
+            // Mehrere Preheader? Auf 1 reduzieren (alle außer dem ersten entfernen)
+            if (preheaderCount > 1) {
+                for (let i = candidates.length - 1; i >= 1; i--) {
+                    this.html = this.html.replace(candidates[i].match, '');
+                }
+                fixes.push(`${preheaderCount} → 1 reduziert`);
+            }
+            
+            // Text ersetzen wenn angegeben
+            const currentPreheader = candidates[0].match;
+            const newPreheaderHtml = this.preheaderText 
+                ? this._buildPreheaderHtml(this.preheaderText) 
+                : currentPreheader;
+            
             if (this.preheaderText) {
-                const original = candidates[0].match;
-                this.html = this.html.replace(original, this._buildPreheaderHtml(this.preheaderText));
-                this.addCheck(id, 'FIXED', 'Pre-Header Text ersetzt');
+                this.html = this.html.replace(currentPreheader, newPreheaderHtml);
+                fixes.push('Text ersetzt');
+            }
+            
+            // === POSITIONS-PRÜFUNG ===
+            // Pflicht: Preheader muss direkt nach <body> stehen, VOR %header%
+            // Prüfe ob zwischen <body> und Preheader sichtbarer Inhalt steht
+            const updatedBodyMatch = this.html.match(/<body[^>]*>/i);
+            const updatedBodyEndPos = this.html.indexOf(updatedBodyMatch[0]) + updatedBodyMatch[0].length;
+            
+            // Finde den aktuellen Preheader (nach eventuellem Text-Ersatz)
+            const preheaderToFind = this.preheaderText ? newPreheaderHtml : currentPreheader;
+            const currentPos = this.html.indexOf(preheaderToFind);
+            
+            if (currentPos > -1) {
+                // Prüfe was zwischen <body> und Preheader steht
+                const betweenBodyAndPreheader = this.html.substring(updatedBodyEndPos, currentPos);
+                
+                // Ist dazwischen nur Whitespace/Kommentare? Dann ist die Position OK
+                const stripped = betweenBodyAndPreheader
+                    .replace(/<!--[\s\S]*?-->/g, '')  // HTML-Kommentare entfernen
+                    .replace(/\s+/g, '')               // Whitespace entfernen
+                    .trim();
+                
+                if (stripped.length > 0) {
+                    // Es steht sichtbarer Content VOR dem Preheader → Position falsch!
+                    // Preheader entfernen und direkt nach <body> neu einfügen
+                    
+                    // Auch umgebende Kommentare mit entfernen (z.B. "<!-- Preheader -->")
+                    let removePattern = preheaderToFind;
+                    const preheaderIdx = this.html.indexOf(preheaderToFind);
+                    
+                    // Prüfe auf Kommentar davor (<!-- Preheader ... -->)
+                    const before200 = this.html.substring(Math.max(0, preheaderIdx - 200), preheaderIdx);
+                    const commentBefore = before200.match(/<!--[^>]*[Pp]re-?[Hh]eader[^>]*-->\s*$/);
+                    
+                    // Prüfe auf Kommentar danach (<!-- End Preheader ... -->)
+                    const after200 = this.html.substring(preheaderIdx + preheaderToFind.length, preheaderIdx + preheaderToFind.length + 200);
+                    const commentAfter = after200.match(/^\s*<!--[^>]*[Ee]nd\s*[Pp]re-?[Hh]eader[^>]*-->/);
+                    
+                    // Entferne Preheader inkl. umgebender Kommentare
+                    let removeStart = preheaderIdx;
+                    let removeEnd = preheaderIdx + preheaderToFind.length;
+                    
+                    if (commentBefore) {
+                        removeStart = preheaderIdx - commentBefore[0].length;
+                    }
+                    if (commentAfter) {
+                        removeEnd = preheaderIdx + preheaderToFind.length + commentAfter[0].length;
+                    }
+                    
+                    // Entferne von alter Position
+                    this.html = this.html.slice(0, removeStart) + this.html.slice(removeEnd);
+                    
+                    // Einfügen direkt nach <body>
+                    const finalBodyMatch = this.html.match(/<body[^>]*>/i);
+                    const finalBodyEndPos = this.html.indexOf(finalBodyMatch[0]) + finalBodyMatch[0].length;
+                    this.html = this.html.slice(0, finalBodyEndPos) + '\n' + preheaderToFind + this.html.slice(finalBodyEndPos);
+                    
+                    fixes.push('Position korrigiert (nach <body> verschoben)');
+                }
+            }
+            
+            if (fixes.length > 0) {
+                this.addCheck(id, 'FIXED', 'Pre-Header: ' + fixes.join(', '));
             } else {
-                this.addCheck(id, 'PASS', 'Pre-Header korrekt');
+                this.addCheck(id, 'PASS', 'Pre-Header korrekt (Position & Format OK)');
             }
-        } else if (preheaderCount > 1) {
-            // Mehrere echte Preheader - auf 1 reduzieren
-            // Behalte den ersten, entferne die anderen
-            for (let i = candidates.length - 1; i >= 1; i--) {
-                this.html = this.html.replace(candidates[i].match, '');
-            }
-            if (this.preheaderText) {
-                this.html = this.html.replace(candidates[0].match, this._buildPreheaderHtml(this.preheaderText));
-            }
-            this.addCheck(id, 'FIXED', `Pre-Header reduziert (${preheaderCount} → 1)`);
+            
         } else if (preheaderCount === 0) {
             if (this.preheaderText) {
                 const insertPos = bodyEndPos;
                 this.html = this.html.slice(0, insertPos) + '\n' + this._buildPreheaderHtml(this.preheaderText) + '\n' + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (Preheader-Text angegeben)');
+                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (direkt nach <body>)');
             } else {
                 this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional, kein Text angegeben)');
             }
@@ -3607,7 +3676,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.10-2026-02-26';
+const APP_VERSION = 'v3.8.11-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
