@@ -10028,7 +10028,7 @@ td[width] { width: auto !important; }
         browserEl.innerHTML = '<div class="folder-browser-loading">⏳ Ordner werden geladen...</div>';
         
         try {
-            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/folders', { signal: AbortSignal.timeout(5000) });
+            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/folders', { signal: AbortSignal.timeout(15000) });
             if (!resp.ok) throw new Error('Server-Fehler');
             
             const data = await resp.json();
@@ -10096,7 +10096,7 @@ td[width] { width: auto !important; }
         browserEl.innerHTML = '<div class="folder-browser-loading">⏳ Bilder in <strong>' + escapeHtml(folderName) + '</strong> werden geladen...</div>';
         
         try {
-            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/folders/' + encodeURIComponent(folderName), { signal: AbortSignal.timeout(5000) });
+            const resp = await fetch(IMAGE_UPLOAD_SERVER + '/folders/' + encodeURIComponent(folderName), { signal: AbortSignal.timeout(15000) });
             if (!resp.ok) throw new Error('Ordner nicht gefunden');
             
             const data = await resp.json();
