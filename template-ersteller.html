@@ -487,6 +487,258 @@
             color: #a8a29e;
             min-width: 55px;
         }
+
+        /* ===========================
+           PHASE 4: Dark Mode Preview
+           =========================== */
+        .preview-container.dark-mode-sim {
+            background: #1a1a1a;
+        }
+
+        /* Starter Templates Dropdown */
+        .starter-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .starter-menu {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: #fff;
+            border: 1px solid #e7e5e4;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            min-width: 260px;
+            z-index: 100;
+            margin-bottom: 6px;
+            overflow: hidden;
+        }
+        .starter-menu.open { display: block; }
+        .starter-menu-header {
+            padding: 10px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #a8a29e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #e7e5e4;
+        }
+        .starter-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 13px;
+            color: #44403c;
+            transition: background 0.1s;
+        }
+        .starter-item:hover { background: #faf9f7; }
+        .starter-item .starter-icon { font-size: 18px; }
+        .starter-item-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .starter-item-name { font-weight: 600; font-size: 13px; }
+        .starter-item-desc { font-size: 11px; color: #a8a29e; }
+
+        /* ===========================
+           PHASE 5: AI Import Modal
+           =========================== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+            max-width: 720px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 24px;
+            border-bottom: 2px solid #f2a93b;
+        }
+        .modal-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #44403c;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #a8a29e;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .modal-close:hover { background: #f5f3f0; color: #44403c; }
+        .modal-body {
+            padding: 24px;
+        }
+        .modal-step {
+            display: flex;
+            gap: 14px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+        .step-num {
+            min-width: 32px;
+            height: 32px;
+            background: #f2a93b;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-content h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #44403c;
+            margin-bottom: 6px;
+        }
+        .step-content p {
+            font-size: 13px;
+            color: #78716c;
+            line-height: 1.5;
+        }
+        .prompt-box {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .btn-copy-prompt {
+            background: #f2a93b;
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-copy-prompt:hover { background: #e09930; }
+        .ai-response-area {
+            width: 100%;
+            min-height: 200px;
+            border: 2px dashed #d6d3d1;
+            border-radius: 8px;
+            padding: 14px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            transition: border-color 0.2s;
+            background: #faf9f7;
+            color: #44403c;
+        }
+        .ai-response-area:focus {
+            outline: none;
+            border-color: #f2a93b;
+            background: #fff;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            padding: 16px 24px;
+            border-top: 1px solid #e7e5e4;
+        }
+        .import-status {
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+        }
+        .import-status.success {
+            display: block;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+        }
+        .import-status.error {
+            display: block;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        /* ===========================
+           PHASE 6: Integration Buttons
+           =========================== */
+        .integration-bar {
+            background: #fff;
+            border-radius: 8px;
+            padding: 12px 20px;
+            margin-top: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .integration-bar .int-label {
+            font-size: 12px;
+            color: #a8a29e;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-integration {
+            background: #faf9f7;
+            color: #57534e;
+            border: 1px solid #d6d3d1;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-integration:hover {
+            background: #f5f3f0;
+            border-color: #f2a93b;
+            color: #44403c;
+        }
     </style>
 </head>
 <body>
@@ -624,8 +876,9 @@
         <div class="panel-header">👁️ Vorschau</div>
         <div class="preview-toolbar">
             <div class="preview-toggle">
-                <button class="preview-toggle-btn active" onclick="setPreviewMode('desktop')">🖥️ Desktop</button>
-                <button class="preview-toggle-btn" onclick="setPreviewMode('mobile')">📱 Mobil</button>
+                <button class="preview-toggle-btn active" data-mode="desktop" onclick="setPreviewMode('desktop')">🖥️ Desktop</button>
+                <button class="preview-toggle-btn" data-mode="mobile" onclick="setPreviewMode('mobile')">📱 Mobil</button>
+                <button class="preview-toggle-btn" data-mode="dark" onclick="toggleDarkPreview()" id="darkModeBtn">🌙 Dark</button>
             </div>
             <span class="preview-size-label" id="previewSizeLabel">600px</span>
         </div>
@@ -643,12 +896,96 @@
     <button class="btn-secondary" onclick="exportTemplateFile()">📤 Vorlage als Datei</button>
     <button class="btn-secondary" onclick="importTemplateFile()">📥 Vorlage importieren</button>
     <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(event)">
+    <div class="starter-dropdown">
+        <button class="btn-secondary" onclick="toggleStarterMenu()">📋 Starter-Vorlagen</button>
+        <div class="starter-menu" id="starterMenu">
+            <div class="starter-menu-header">Vorlage wählen</div>
+            <button class="starter-item" onclick="loadStarter('newsletter')">
+                <span class="starter-icon">📰</span>
+                <div class="starter-item-info">
+                    <span class="starter-item-name">Newsletter (Standard)</span>
+                    <span class="starter-item-desc">Header, Text, Bild, Button, Footer</span>
+                </div>
+            </button>
+            <button class="starter-item" onclick="loadStarter('promo')">
+                <span class="starter-icon">🎯</span>
+                <div class="starter-item-info">
+                    <span class="starter-item-name">Produkt-Promo</span>
+                    <span class="starter-item-desc">Header, 3 Spalten, CTA, Footer</span>
+                </div>
+            </button>
+            <button class="starter-item" onclick="loadStarter('minimal')">
+                <span class="starter-icon">✉️</span>
+                <div class="starter-item-info">
+                    <span class="starter-item-name">Minimal</span>
+                    <span class="starter-item-desc">Nur Text und Button</span>
+                </div>
+            </button>
+            <button class="starter-item" onclick="loadStarter('event')">
+                <span class="starter-icon">🎉</span>
+                <div class="starter-item-info">
+                    <span class="starter-item-name">Event / Einladung</span>
+                    <span class="starter-item-desc">Header, Info-Spalten, Social, Footer</span>
+                </div>
+            </button>
+        </div>
+    </div>
     <div class="export-spacer"></div>
     <div class="stats-bar">
         <span class="stat-chip" id="statBlocks">📦 0 Blöcke</span>
         <span class="stat-chip" id="statRatio">📊 Text/Bild: –</span>
         <span class="stat-chip" id="statLinks">🔗 0 Links</span>
         <span class="template-size-info" id="templateSizeInfo"></span>
+    </div>
+</div>
+
+<!-- Integration Bar (Phase 6) -->
+<div class="integration-bar">
+    <span class="int-label">Integration:</span>
+    <button class="btn-integration" onclick="sendToChecker()">🔍 An Template Checker senden</button>
+    <button class="btn-integration" onclick="openAiImport()">🤖 Import aus KI (PDF-Analyse)</button>
+    <button class="btn-integration" onclick="openImageUpload()">🖼️ Bild-Upload Server</button>
+</div>
+
+<!-- AI Import Modal (Phase 5) -->
+<div class="modal-overlay" id="aiImportModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2>🤖 Template aus PDF importieren (KI-gestützt)</h2>
+            <button class="modal-close" onclick="closeAiImport()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>Prompt kopieren</h3>
+                    <p>Klicke auf den Button unten, um den optimierten Prompt in die Zwischenablage zu kopieren.</p>
+                    <div class="prompt-box" id="aiPromptBox">Wird generiert...</div>
+                    <button class="btn-copy-prompt" onclick="copyAiPrompt()">📋 Prompt kopieren</button>
+                    <span id="copyFeedback" style="margin-left:10px; font-size:12px; color:#16a34a; display:none;">✓ Kopiert!</span>
+                </div>
+            </div>
+            <div class="modal-step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>In Claude einfügen</h3>
+                    <p>Öffne <a href="https://claude.ai" target="_blank" style="color:#f2a93b; font-weight:600;">claude.ai</a>, lade dein PDF hoch und füge den kopierten Prompt ein. Claude analysiert das PDF und gibt dir eine strukturierte Beschreibung zurück.</p>
+                </div>
+            </div>
+            <div class="modal-step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <h3>Antwort hier einfügen</h3>
+                    <p>Kopiere die komplette Antwort von Claude und füge sie hier ein:</p>
+                    <textarea class="ai-response-area" id="aiResponseArea" placeholder="Claude-Antwort hier einfügen...&#10;&#10;Das Tool erkennt die Struktur automatisch und erstellt die Bausteine."></textarea>
+                    <div class="import-status" id="importStatus"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="closeAiImport()">Abbrechen</button>
+            <button class="btn-export" onclick="parseAiResponse()">🚀 Bausteine generieren</button>
+        </div>
     </div>
 </div>
 
@@ -1376,8 +1713,9 @@ function syncColorText(baseId) {
 // ===========================
 function setPreviewMode(mode) {
     previewMode = mode;
-    document.querySelectorAll('.preview-toggle-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    // Only toggle desktop/mobile buttons, leave dark mode button alone
+    document.querySelectorAll('.preview-toggle-btn[data-mode="desktop"], .preview-toggle-btn[data-mode="mobile"]').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.preview-toggle-btn[data-mode="${mode}"]`).classList.add('active');
 
     const frame = document.getElementById('previewFrame');
     const label = document.getElementById('previewSizeLabel');
@@ -2075,6 +2413,264 @@ function applyTemplateData(data) {
 // INIT
 // ===========================
 updatePreview();
+
+// Close starter menu when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.starter-dropdown')) {
+        document.getElementById('starterMenu').classList.remove('open');
+    }
+});
+
+// ===========================
+// PHASE 4: DARK MODE PREVIEW
+// ===========================
+let darkPreviewActive = false;
+function toggleDarkPreview() {
+    darkPreviewActive = !darkPreviewActive;
+    const btn = document.getElementById('darkModeBtn');
+    const container = document.getElementById('previewContainer');
+    if (darkPreviewActive) {
+        btn.classList.add('active');
+        container.classList.add('dark-mode-sim');
+    } else {
+        btn.classList.remove('active');
+        container.classList.remove('dark-mode-sim');
+    }
+    updatePreview();
+}
+
+// ===========================
+// PHASE 4: STARTER TEMPLATES
+// ===========================
+function toggleStarterMenu() {
+    document.getElementById('starterMenu').classList.toggle('open');
+}
+
+const STARTER_TEMPLATES = {
+    newsletter: {
+        name: 'Newsletter (Standard)',
+        settings: { title: 'Newsletter', width: '600', bgColor: '#f4f4f4', contentBg: '#ffffff', font: 'Arial, Helvetica, sans-serif', customFont: '', customFontUrl: '', type: 'standard', pixel: 'placeholder', tracking: 'none', utmSource: '', utmMedium: '', utmCampaign: '' },
+        blocks: [
+            { type: 'header-image', data: { src: '', alt: 'Newsletter Header', link: '', width: '100%' } },
+            { type: 'text', data: { heading: 'Willkommen!', headingSize: '24', headingColor: '#333333', text: 'Hier kommt der Begrüßungstext für Ihren Newsletter. Schreiben Sie eine persönliche Einleitung.', textSize: '15', textColor: '#555555', textAlign: 'left', paddingTop: '20', paddingBottom: '10', paddingLeft: '30', paddingRight: '30' } },
+            { type: 'image', data: { src: '', alt: 'Artikelbild', link: '', width: '100%', align: 'center' } },
+            { type: 'text', data: { heading: '', headingSize: '22', headingColor: '#333333', text: 'Hier steht der Haupttext Ihres Newsletters. Erzählen Sie von Neuigkeiten, Produkten oder Aktionen.', textSize: '15', textColor: '#555555', textAlign: 'left', paddingTop: '10', paddingBottom: '10', paddingLeft: '30', paddingRight: '30' } },
+            { type: 'button', data: { text: 'Mehr erfahren', link: '#', bgColor: '#f2a93b', textColor: '#ffffff', borderRadius: '5', fontSize: '16', paddingV: '14', paddingH: '35', align: 'center' } },
+            { type: 'spacer', data: { height: '20', showLine: true, lineColor: '#e0e0e0' } },
+            { type: 'footer', data: { text: 'Sie erhalten diese E-Mail, weil Sie sich für unseren Newsletter angemeldet haben.', unsubscribeText: 'Abmelden', unsubscribeLink: '#UNSUBSCRIBE#', imprintText: 'Impressum', imprintLink: '#', textColor: '#999999', bgColor: '#f8f8f8', fontSize: '12' } }
+        ]
+    },
+    promo: {
+        name: 'Produkt-Promo',
+        settings: { title: 'Aktion', width: '600', bgColor: '#f4f4f4', contentBg: '#ffffff', font: 'Arial, Helvetica, sans-serif', customFont: '', customFontUrl: '', type: 'standard', pixel: 'placeholder', tracking: 'utm', utmSource: 'newsletter', utmMedium: 'email', utmCampaign: 'promo' },
+        blocks: [
+            { type: 'header-image', data: { src: '', alt: 'Promo Header', link: '', width: '100%' } },
+            { type: 'text', data: { heading: 'Unsere Top-Produkte', headingSize: '26', headingColor: '#333333', text: 'Entdecken Sie unsere aktuellen Highlights – nur für kurze Zeit!', textSize: '15', textColor: '#555555', textAlign: 'center', paddingTop: '25', paddingBottom: '15', paddingLeft: '30', paddingRight: '30' } },
+            { type: 'columns', data: { count: '3', col1Heading: 'Produkt 1', col1Text: 'Beschreibung des ersten Produkts.', col1ImageSrc: '', col1ImageAlt: 'Produkt 1', col1Link: '#', col2Heading: 'Produkt 2', col2Text: 'Beschreibung des zweiten Produkts.', col2ImageSrc: '', col2ImageAlt: 'Produkt 2', col2Link: '#', col3Heading: 'Produkt 3', col3Text: 'Beschreibung des dritten Produkts.', col3ImageSrc: '', col3ImageAlt: 'Produkt 3', col3Link: '#', headingSize: '16', headingColor: '#333333', textSize: '13', textColor: '#666666', gap: '20', paddingTop: '10', paddingBottom: '15' } },
+            { type: 'button', data: { text: 'Alle Produkte ansehen', link: '#', bgColor: '#f2a93b', textColor: '#ffffff', borderRadius: '5', fontSize: '16', paddingV: '14', paddingH: '35', align: 'center' } },
+            { type: 'spacer', data: { height: '15', showLine: false, lineColor: '#e0e0e0' } },
+            { type: 'footer', data: { text: 'Sie erhalten diese E-Mail, weil Sie sich für unseren Newsletter angemeldet haben.', unsubscribeText: 'Abmelden', unsubscribeLink: '#UNSUBSCRIBE#', imprintText: 'Impressum', imprintLink: '#', textColor: '#999999', bgColor: '#f8f8f8', fontSize: '12' } }
+        ]
+    },
+    minimal: {
+        name: 'Minimal',
+        settings: { title: 'Nachricht', width: '600', bgColor: '#ffffff', contentBg: '#ffffff', font: 'Georgia, "Times New Roman", serif', customFont: '', customFontUrl: '', type: 'standard', pixel: 'placeholder', tracking: 'none', utmSource: '', utmMedium: '', utmCampaign: '' },
+        blocks: [
+            { type: 'spacer', data: { height: '30', showLine: false, lineColor: '#e0e0e0' } },
+            { type: 'text', data: { heading: 'Betreff / Überschrift', headingSize: '28', headingColor: '#222222', text: 'Hallo,\n\nhier steht Ihre Nachricht. Einfach, direkt und persönlich.\n\nMit freundlichen Grüßen\nIhr Team', textSize: '16', textColor: '#444444', textAlign: 'left', paddingTop: '10', paddingBottom: '20', paddingLeft: '40', paddingRight: '40' } },
+            { type: 'button', data: { text: 'Zur Website', link: '#', bgColor: '#333333', textColor: '#ffffff', borderRadius: '3', fontSize: '15', paddingV: '12', paddingH: '30', align: 'center' } },
+            { type: 'spacer', data: { height: '30', showLine: true, lineColor: '#e0e0e0' } },
+            { type: 'footer', data: { text: 'Diese E-Mail wurde an Sie gesendet.', unsubscribeText: 'Abmelden', unsubscribeLink: '#UNSUBSCRIBE#', imprintText: 'Impressum', imprintLink: '#', textColor: '#bbbbbb', bgColor: '#ffffff', fontSize: '11' } }
+        ]
+    },
+    event: {
+        name: 'Event / Einladung',
+        settings: { title: 'Einladung', width: '600', bgColor: '#f4f4f4', contentBg: '#ffffff', font: 'Arial, Helvetica, sans-serif', customFont: '', customFontUrl: '', type: 'standard', pixel: 'placeholder', tracking: 'utm', utmSource: 'newsletter', utmMedium: 'email', utmCampaign: 'event' },
+        blocks: [
+            { type: 'header-image', data: { src: '', alt: 'Event Header', link: '', width: '100%' } },
+            { type: 'text', data: { heading: 'Sie sind eingeladen! 🎉', headingSize: '28', headingColor: '#333333', text: 'Wir laden Sie herzlich ein zu unserem exklusiven Event.', textSize: '16', textColor: '#555555', textAlign: 'center', paddingTop: '25', paddingBottom: '10', paddingLeft: '30', paddingRight: '30' } },
+            { type: 'columns', data: { count: '2', col1Heading: '📅 Datum & Zeit', col1Text: 'Donnerstag, 15. Mai 2026\n18:00 – 21:00 Uhr', col1ImageSrc: '', col1ImageAlt: '', col1Link: '', col2Heading: '📍 Ort', col2Text: 'Eventlocation\nMusterstraße 1\n12345 Berlin', col2ImageSrc: '', col2ImageAlt: '', col2Link: '', col3Heading: '', col3Text: '', col3ImageSrc: '', col3ImageAlt: '', col3Link: '', headingSize: '16', headingColor: '#333333', textSize: '14', textColor: '#555555', gap: '20', paddingTop: '10', paddingBottom: '15' } },
+            { type: 'button', data: { text: 'Jetzt anmelden', link: '#', bgColor: '#f2a93b', textColor: '#ffffff', borderRadius: '5', fontSize: '16', paddingV: '14', paddingH: '40', align: 'center' } },
+            { type: 'spacer', data: { height: '15', showLine: false, lineColor: '#e0e0e0' } },
+            { type: 'social', data: { align: 'center', iconSize: '32', gap: '10', facebook: '#', instagram: '#', linkedin: '#', twitter: '', youtube: '', tiktok: '', website: '#', paddingTop: '15', paddingBottom: '15', bgColor: '' } },
+            { type: 'footer', data: { text: 'Sie erhalten diese Einladung als Partner unseres Netzwerks.', unsubscribeText: 'Abmelden', unsubscribeLink: '#UNSUBSCRIBE#', imprintText: 'Impressum', imprintLink: '#', textColor: '#999999', bgColor: '#f8f8f8', fontSize: '12' } }
+        ]
+    }
+};
+
+function loadStarter(key) {
+    const tpl = STARTER_TEMPLATES[key];
+    if (!tpl) return;
+    if (blocks.length > 0 && !confirm('Aktuelle Bausteine werden ersetzt. Fortfahren?')) return;
+    applyTemplateData(tpl);
+    document.getElementById('starterMenu').classList.remove('open');
+}
+
+// ===========================
+// PHASE 5: AI IMPORT
+// ===========================
+function openAiImport() {
+    generateAiPrompt();
+    document.getElementById('aiImportModal').classList.add('open');
+    document.getElementById('aiResponseArea').value = '';
+    document.getElementById('importStatus').style.display = 'none';
+}
+
+function closeAiImport() {
+    document.getElementById('aiImportModal').classList.remove('open');
+}
+
+function generateAiPrompt() {
+    const prompt = `Ich habe ein PDF mit einem E-Mail-Template-Design. Bitte analysiere es und beschreibe die Struktur als JSON, das ich in mein Template-Builder-Tool importieren kann.
+
+Antworte NUR mit einem JSON-Objekt im folgenden Format (kein anderer Text, keine Markdown-Backticks):
+
+{
+  "title": "Template-Titel",
+  "blocks": [
+    {
+      "type": "BLOCKTYP",
+      "data": { ... }
+    }
+  ]
+}
+
+Verfügbare Blocktypen und ihre Daten:
+
+1. "header-image" → { "src": "", "alt": "Beschreibung", "link": "", "width": "100%" }
+2. "text" → { "heading": "Überschrift", "headingSize": "22", "headingColor": "#333333", "text": "Absatztext", "textSize": "15", "textColor": "#555555", "textAlign": "left|center|right", "paddingTop": "10", "paddingBottom": "10", "paddingLeft": "20", "paddingRight": "20" }
+3. "image" → { "src": "", "alt": "Beschreibung", "link": "", "width": "100%", "align": "center" }
+4. "button" → { "text": "Button-Text", "link": "#", "bgColor": "#f2a93b", "textColor": "#ffffff", "borderRadius": "5", "fontSize": "16", "paddingV": "12", "paddingH": "30", "align": "center" }
+5. "spacer" → { "height": "20", "showLine": false, "lineColor": "#e0e0e0" }
+6. "image-text" → { "imageSrc": "", "imageAlt": "", "imageLink": "", "imageWidth": "200", "imagePosition": "left|right", "heading": "", "headingSize": "18", "headingColor": "#333333", "text": "", "textSize": "14", "textColor": "#555555", "paddingTop": "15", "paddingBottom": "15", "paddingLeft": "20", "paddingRight": "20" }
+7. "columns" → { "count": "2|3", "col1Heading": "", "col1Text": "", "col1ImageSrc": "", "col1ImageAlt": "", "col1Link": "", "col2Heading": "", "col2Text": "", ... (analog col3), "headingSize": "16", "headingColor": "#333333", "textSize": "13", "textColor": "#555555", "gap": "20", "paddingTop": "15", "paddingBottom": "15" }
+8. "social" → { "align": "center", "iconSize": "32", "gap": "10", "facebook": "", "instagram": "", "linkedin": "", "twitter": "", "youtube": "", "tiktok": "", "website": "", "paddingTop": "15", "paddingBottom": "15", "bgColor": "" }
+9. "footer" → { "text": "Footer-Text", "unsubscribeText": "Abmelden", "unsubscribeLink": "#UNSUBSCRIBE#", "imprintText": "Impressum", "imprintLink": "#", "textColor": "#999999", "bgColor": "#f8f8f8", "fontSize": "12" }
+
+Wichtige Regeln:
+- Beschreibe das Layout von oben nach unten
+- Schätze Farben als Hex-Werte (#RRGGBB)
+- Bild-URLs leer lassen (src: ""), ich füge sie manuell ein
+- Übernimm alle sichtbaren Texte aus dem PDF
+- Nutze den am besten passenden Blocktyp
+- Antworte ausschließlich mit dem JSON`;
+
+    document.getElementById('aiPromptBox').textContent = prompt;
+}
+
+function copyAiPrompt() {
+    const text = document.getElementById('aiPromptBox').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const fb = document.getElementById('copyFeedback');
+        fb.style.display = 'inline';
+        setTimeout(() => fb.style.display = 'none', 2000);
+    });
+}
+
+function parseAiResponse() {
+    const raw = document.getElementById('aiResponseArea').value.trim();
+    const statusEl = document.getElementById('importStatus');
+
+    if (!raw) {
+        statusEl.className = 'import-status error';
+        statusEl.textContent = '❌ Bitte füge die Antwort von Claude ein.';
+        statusEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        // Try to extract JSON from response (handle markdown backticks)
+        let jsonStr = raw;
+        const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+            jsonStr = jsonMatch[1].trim();
+        }
+        // Also try to find JSON object directly
+        const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+            jsonStr = objMatch[0];
+        }
+
+        const data = JSON.parse(jsonStr);
+
+        if (!data.blocks || !Array.isArray(data.blocks)) {
+            throw new Error('Keine Blöcke gefunden');
+        }
+
+        // Validate and clean blocks
+        const validTypes = Object.keys(BLOCK_DEFS);
+        const cleanBlocks = data.blocks.filter(b => validTypes.includes(b.type)).map(b => {
+            // Merge with defaults to fill missing fields
+            const defaults = JSON.parse(JSON.stringify(BLOCK_DEFS[b.type].defaults));
+            const mergedData = { ...defaults, ...b.data };
+            return { type: b.type, data: mergedData };
+        });
+
+        if (cleanBlocks.length === 0) {
+            throw new Error('Keine gültigen Blocktypen erkannt');
+        }
+
+        // Apply
+        if (blocks.length > 0 && !confirm(`${cleanBlocks.length} Bausteine erkannt. Aktuelle Bausteine ersetzen?`)) {
+            return;
+        }
+
+        if (data.title) {
+            document.getElementById('settingTitle').value = data.title;
+        }
+
+        blocks = [];
+        blockIdCounter = 0;
+        cleanBlocks.forEach(b => {
+            blocks.push({
+                id: ++blockIdCounter,
+                type: b.type,
+                data: b.data,
+                collapsed: false
+            });
+        });
+
+        renderBlocks();
+        updatePreview();
+
+        statusEl.className = 'import-status success';
+        statusEl.textContent = `✅ ${cleanBlocks.length} Bausteine erfolgreich importiert! Du kannst das Modal jetzt schließen und die Bilder/Details anpassen.`;
+        statusEl.style.display = 'block';
+
+    } catch(err) {
+        statusEl.className = 'import-status error';
+        statusEl.textContent = '❌ Konnte die Antwort nicht verarbeiten: ' + err.message + '. Stelle sicher, dass Claude ein JSON-Objekt zurückgegeben hat.';
+        statusEl.style.display = 'block';
+    }
+}
+
+// ===========================
+// PHASE 6: INTEGRATION
+// ===========================
+function sendToChecker() {
+    const html = generateEmailHtml();
+    // Store HTML in sessionStorage and open checker
+    try {
+        sessionStorage.setItem('pw_template_for_checker', html);
+        const title = document.getElementById('settingTitle').value || 'Template';
+        sessionStorage.setItem('pw_template_name', title);
+        window.open('checker.html?fromErsteller=1', '_blank');
+    } catch(e) {
+        // Fallback: Download and let user upload to checker
+        alert('Template wird als Datei heruntergeladen. Lade sie anschließend im Template Checker hoch.');
+        exportHtml();
+    }
+}
+
+function openImageUpload() {
+    // Placeholder - this would link to the actual image upload server
+    const url = prompt('Bild-Upload Server URL eingeben:', 'https://');
+    if (url && url !== 'https://') {
+        window.open(url, '_blank');
+    } else {
+        alert('ℹ️ Bild-Upload Server URL kann in den Einstellungen hinterlegt werden.\n\nBilder dort hochladen und die URL im Template-Baustein einfügen.');
+    }
+}
 
 </script>
 </body>
