@@ -3383,7 +3383,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.0-2026-02-26';
+const APP_VERSION = 'v3.8.3-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4983,7 +4983,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     <div class="edit-panel-field" id="insertUrlField">
                         <label>Pixel URL:</label>
-                        <input type="text" id="insertPixelUrl" placeholder="https://example.com/pixel.gif">
+                        <input type="text" id="insertPixelUrl" value="https://pixel.de" placeholder="https://example.com/pixel.gif">
                     </div>
                     
                     <div class="edit-panel-field" id="insertTagField" style="display: none;">
@@ -5038,7 +5038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     <div class="edit-panel-field" id="insertUrlFieldFound">
                         <label>Pixel URL:</label>
-                        <input type="text" id="insertPixelUrlFound" placeholder="https://example.com/pixel.gif">
+                        <input type="text" id="insertPixelUrlFound" value="https://pixel.de" placeholder="https://example.com/pixel.gif">
                     </div>
                     
                     <div class="edit-panel-field" id="insertTagFieldFound" style="display: none;">
@@ -5220,28 +5220,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Vor Änderung: History speichern
         assetReviewHistory.push(assetReviewStagedHtml);
         
-        // Finde Einfügepunkt: direkt nach <body> oder nach Preheader
-        const bodyMatch = assetReviewStagedHtml.match(/<body[^>]*>/i);
-        if (!bodyMatch) {
-            showInspectorToast('❌ Kein <body> Tag gefunden. Einfügung nicht möglich.');
+        // Finde Einfügepunkt: vor </body>
+        const bodyCloseMatch = assetReviewStagedHtml.match(/<\/body>/i);
+        if (!bodyCloseMatch) {
+            showInspectorToast('❌ Kein </body> Tag gefunden. Einfügung nicht möglich.');
             return;
         }
         
-        const bodyEndPos = bodyMatch.index + bodyMatch[0].length;
-        
-        // Prüfe ob direkt nach <body> ein Preheader-Block existiert (breite Erkennung)
-        const afterBody = assetReviewStagedHtml.substring(bodyEndPos);
-        const preheaderRegex = /^\s*<div[^>]*style=["'][^"]*(?:display\s*:\s*none|max-height\s*:\s*0|visibility\s*:\s*hidden|mso-hide\s*:\s*all|font-size\s*:\s*0)[^"]*["'][^>]*>.*?<\/div>/i;
-        const preheaderMatch = afterBody.match(preheaderRegex);
-        
-        let insertPosition = bodyEndPos;
-        if (preheaderMatch) {
-            // Nach Preheader einfügen
-            insertPosition = bodyEndPos + preheaderMatch[0].length;
-            console.log('[ASSET] Preheader found, inserting after preheader');
-        } else {
-            console.log('[ASSET] No preheader found, inserting directly after <body>');
-        }
+        const insertPosition = bodyCloseMatch.index;
         
         // Einfügen
         const before = assetReviewStagedHtml.substring(0, insertPosition);
@@ -5594,6 +5580,181 @@ document.addEventListener('DOMContentLoaded', () => {
         assetCommitBtn.disabled = !assetReviewDirty;
     });
     
+    // === Post-Commit Metriken-Neuberechnung ===
+    // Berechnet Template-Größe (P17), Bild/Text-Verhältnis (P18) und Base64-Status (W08) neu
+    // und aktualisiert die Confidence-Anzeige nach Asset-Änderungen
+    function recalculatePostCommitMetrics(newHtml) {
+        if (!processingResult) return null;
+        
+        const changes = [];
+        let confidenceDelta = 0;
+        
+        // --- P17: Template-Größe neu berechnen ---
+        const newSizeBytes = new Blob([newHtml]).size;
+        const newSizeKB = Math.round(newSizeBytes / 1024);
+        
+        // Alte Größe aus attentionItem extrahieren
+        const oldSizeItem = processingResult.attentionItems.find(item => item.startsWith('📦'));
+        const oldSizeMatch = oldSizeItem ? oldSizeItem.match(/(\d+)\s*KB/) : null;
+        const oldSizeKB = oldSizeMatch ? parseInt(oldSizeMatch[1]) : null;
+        
+        // Alten Confidence-Impact rückgängig machen, neuen berechnen
+        const oldSizeWarn = oldSizeKB !== null && oldSizeKB > 102;
+        const newSizeWarn = newSizeKB > 102;
+        if (oldSizeWarn && !newSizeWarn) confidenceDelta += 10; // War WARN, jetzt OK
+        if (!oldSizeWarn && newSizeWarn) confidenceDelta -= 10; // War OK, jetzt WARN
+        
+        // Neues attentionItem für P17
+        let newSizeMsg;
+        if (newSizeKB > 102) {
+            newSizeMsg = '📦 Template-Größe: ' + newSizeKB + ' KB – Gmail schneidet E-Mails über ~102 KB ab!';
+        } else if (newSizeKB > 80) {
+            newSizeMsg = '📦 Template-Größe: ' + newSizeKB + ' KB (Gmail-Grenze: ~102 KB, noch ' + (102 - newSizeKB) + ' KB Puffer)';
+        } else {
+            newSizeMsg = '📦 Template-Größe: ' + newSizeKB + ' KB (Gmail-Grenze: ~102 KB)';
+        }
+        
+        // Vorher/Nachher für Toast
+        if (oldSizeKB !== null && oldSizeKB !== newSizeKB) {
+            const diff = oldSizeKB - newSizeKB;
+            const arrow = diff > 0 ? '↓' : '↑';
+            changes.push('📦 Größe: ' + oldSizeKB + ' KB → ' + newSizeKB + ' KB (' + arrow + Math.abs(diff) + ' KB)');
+        }
+        
+        // --- W08: Base64-Bilder neu prüfen ---
+        const htmlNoComments = newHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        const imgBase64Regex = /<img[^>]*src\s*=\s*["'](data:image\/[^"']+)["'][^>]*>/gi;
+        const bgBase64Regex = /(?:background(?:-image)?)\s*:\s*url\(\s*["']?(data:image\/[^"')]+)["']?\s*\)/gi;
+        
+        const base64Images = [];
+        let match;
+        while ((match = imgBase64Regex.exec(htmlNoComments)) !== null) {
+            const base64Part = (match[1].split(',')[1] || '');
+            base64Images.push({ sizeKB: Math.round(base64Part.length * 0.75 / 1024) });
+        }
+        while ((match = bgBase64Regex.exec(htmlNoComments)) !== null) {
+            const base64Part = (match[1].split(',')[1] || '');
+            base64Images.push({ sizeKB: Math.round(base64Part.length * 0.75 / 1024) });
+        }
+        
+        // Alter W08-Status
+        const oldBase64Item = processingResult.attentionItems.find(item => item.startsWith('🖼️'));
+        const hadBase64Warn = !!oldBase64Item;
+        const hasBase64Warn = base64Images.length > 0;
+        
+        if (hadBase64Warn && !hasBase64Warn) confidenceDelta += 12; // Base64 behoben!
+        if (!hadBase64Warn && hasBase64Warn) confidenceDelta -= 12; // Neue Base64 (unwahrscheinlich)
+        
+        if (hadBase64Warn && !hasBase64Warn) {
+            changes.push('🖼️ Base64-Bilder: entfernt ✓');
+        } else if (hasBase64Warn) {
+            const totalSizeKB = base64Images.reduce((sum, img) => sum + img.sizeKB, 0);
+            changes.push('🖼️ Base64-Bilder: noch ' + base64Images.length + ' vorhanden (' + totalSizeKB + ' KB)');
+        }
+        
+        // --- P18: Text/Bild-Verhältnis neu berechnen ---
+        let visibleHtml = newHtml;
+        visibleHtml = visibleHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        visibleHtml = visibleHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+        visibleHtml = visibleHtml.replace(/<!--\[if\s[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
+        visibleHtml = visibleHtml.replace(/<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+        const textOnly = visibleHtml.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+        const words = textOnly.split(/\s+/).filter(w => w.length >= 2);
+        const wordCount = words.length;
+        
+        const htmlForImgs = newHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        const imgRegex = /<img\b[^>]*>/gi;
+        let imgMatch;
+        let visibleImages = 0;
+        while ((imgMatch = imgRegex.exec(htmlForImgs)) !== null) {
+            const tag = imgMatch[0];
+            const w = (tag.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
+            const h = (tag.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
+            if (w === '1' && h === '1') continue;
+            if (/display\s*:\s*none/i.test(tag)) continue;
+            visibleImages++;
+        }
+        
+        // Text/Image-Ratio alten Impact rückgängig machen
+        const oldTextImgItem = processingResult.attentionItems.find(item => item.startsWith('📊'));
+        const oldTextImgWarn = oldTextImgItem ? (oldTextImgItem.includes('Wenig Text') || oldTextImgItem.includes('Sehr wenig')) : false;
+        const newTextImgWarn = (wordCount < 50 && visibleImages >= 3) || (wordCount < 20 && visibleImages >= 1);
+        if (oldTextImgWarn && !newTextImgWarn) confidenceDelta += 5;
+        if (!oldTextImgWarn && newTextImgWarn) confidenceDelta -= 5;
+        
+        let newTextImgMsg;
+        if (visibleImages === 0) {
+            newTextImgMsg = '📊 Reines Text-Template (' + wordCount + ' Wörter, keine Bilder)';
+        } else if (wordCount < 50 && visibleImages >= 3) {
+            newTextImgMsg = '📊 Wenig Text im Verhältnis zu Bildern (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder)';
+        } else if (wordCount < 20 && visibleImages >= 1) {
+            newTextImgMsg = '📊 Sehr wenig Text (' + wordCount + ' Wörter, ' + visibleImages + ' Bilder)';
+        } else {
+            newTextImgMsg = '📊 Text-Bild-Verhältnis: ' + wordCount + ' Wörter, ' + visibleImages + ' Bilder – OK';
+        }
+        
+        // --- AttentionItems aktualisieren ---
+        const newItems = processingResult.attentionItems.map(item => {
+            if (item.startsWith('📦')) return newSizeMsg;
+            if (item.startsWith('📊')) return newTextImgMsg;
+            return item;
+        });
+        
+        // W08 Base64-Item entfernen wenn behoben, oder aktualisieren
+        const base64Idx = newItems.findIndex(item => item.startsWith('🖼️'));
+        if (hadBase64Warn && !hasBase64Warn && base64Idx !== -1) {
+            // Base64 behoben → Item durch Erfolgs-Nachricht ersetzen
+            newItems[base64Idx] = '🖼️ ✅ Base64-Bilder erfolgreich durch URLs ersetzt';
+        } else if (hasBase64Warn && base64Idx !== -1) {
+            const totalSizeKB = base64Images.reduce((sum, img) => sum + img.sizeKB, 0);
+            newItems[base64Idx] = '🖼️ Eingebettete Bilder: noch ' + base64Images.length + ' als Base64 (' + totalSizeKB + ' KB)';
+        }
+        
+        processingResult.attentionItems = newItems;
+        
+        // --- Confidence Score aktualisieren ---
+        processingResult.confidence = Math.max(0, Math.min(100, processingResult.confidence + confidenceDelta));
+        if (processingResult.confidence >= 80) {
+            processingResult.confidenceLevel = 'high';
+        } else if (processingResult.confidence >= 50) {
+            processingResult.confidenceLevel = 'medium';
+        } else {
+            processingResult.confidenceLevel = 'low';
+        }
+        
+        // --- Confidence-Anzeige neu rendern ---
+        const confidenceEl = document.getElementById('confidenceScore');
+        if (confidenceEl) {
+            const conf = processingResult.confidence;
+            const level = processingResult.confidenceLevel;
+            const levelLabel = level === 'high' ? 'HOCH' : level === 'medium' ? 'MITTEL' : 'NIEDRIG';
+            const levelIcon = level === 'high' ? '🟢' : level === 'medium' ? '🟡' : '🔴';
+            const levelColor = level === 'high' ? '#4caf50' : level === 'medium' ? '#ff9800' : '#f44336';
+            
+            let confHtml = '<div class="confidence-wrapper">';
+            confHtml += '<div class="confidence-header">';
+            confHtml += '<span class="confidence-label">' + levelIcon + ' Zuverlässigkeit: <strong>' + levelLabel + '</strong> (' + conf + '%)</span>';
+            confHtml += '<div class="confidence-bar"><div class="confidence-fill" style="width:' + conf + '%;background:' + levelColor + ';"></div></div>';
+            confHtml += '</div>';
+            
+            if (processingResult.attentionItems.length > 0) {
+                confHtml += '<div class="confidence-attention">';
+                confHtml += '<div class="confidence-attention-title">Bitte besonders prüfen:</div>';
+                processingResult.attentionItems.forEach(function(item) {
+                    confHtml += '<div class="confidence-attention-item">' + item + '</div>';
+                });
+                confHtml += '</div>';
+            }
+            
+            confHtml += '</div>';
+            confidenceEl.innerHTML = confHtml;
+        }
+        
+        console.log('[ASSET] Post-Commit Metriken aktualisiert: Δconfidence=' + confidenceDelta + ', newSize=' + newSizeKB + 'KB, base64=' + base64Images.length + ', images=' + visibleImages);
+        
+        return { changes, confidenceDelta, newSizeKB, oldSizeKB };
+    }
+    
     // Änderungen übernehmen (Commit)
     assetCommitBtn.addEventListener('click', () => {
         if (!assetReviewDirty) {
@@ -5607,8 +5768,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Erweitere Report mit Phase C Informationen
         extendReportWithPhaseC();
         
-        // Bestätigung
-        showInspectorToast('✅ Änderungen übernommen.');
+        // Post-Commit: Metriken neu berechnen und Anzeige aktualisieren
+        const metrics = recalculatePostCommitMetrics(assetReviewStagedHtml);
+        
+        // Toast mit Änderungs-Details
+        let toastMsg = '✅ Änderungen übernommen.';
+        if (metrics && metrics.changes.length > 0) {
+            toastMsg += '\n' + metrics.changes.join('\n');
+        }
+        showInspectorToast(toastMsg);
         
         // Reset dirty flag
         assetReviewDirty = false;
@@ -7399,10 +7567,10 @@ td[width] { width: auto !important; }
             html += '<div class="tracking-pixel-info">';
             html += '<div class="tracking-pixel-status tracking-pixel-missing">⚠ Kein Öffnerpixel gefunden</div>';
             html += '<div class="tracking-pixel-insert-controls">';
-            html += '<input type="text" id="trackingPixelInsertInput" class="tracking-pixel-input" placeholder="Pixel-URL eingeben...">';
+            html += '<input type="text" id="trackingPixelInsertInput" class="tracking-pixel-input" value="https://pixel.de" placeholder="Pixel-URL eingeben...">';
             html += '<button id="trackingPixelInsert" class="btn-tracking-insert-apply">➕ Pixel einfügen</button>';
             html += '</div>';
-            html += '<p class="tracking-note">ℹ️ Pixel wird nach &lt;body&gt; eingefügt (unsichtbarer 1x1 Block).</p>';
+            html += '<p class="tracking-note">ℹ️ Pixel wird vor &lt;/body&gt; eingefügt (unsichtbarer 1x1 Block).</p>';
             html += '</div>';
         }
         
@@ -7964,10 +8132,10 @@ td[width] { width: auto !important; }
             }
         }
         
-        // Prüfe ob <body> Tag vorhanden
-        const bodyTagRegex = /(<body[^>]*>)/i;
-        if (!bodyTagRegex.test(trackingTabHtml)) {
-            showInspectorToast('\u274c Kein <body> Tag gefunden.');
+        // Prüfe ob </body> Tag vorhanden
+        const bodyCloseRegex = /(<\/body>)/i;
+        if (!bodyCloseRegex.test(trackingTabHtml)) {
+            showInspectorToast('\u274c Kein </body> Tag gefunden.');
             trackingHistory.pop();
             return;
         }
@@ -7977,8 +8145,8 @@ td[width] { width: auto !important; }
             '<img src="' + pixelUrl.replace(/"/g, '&quot;') + '" width="1" height="1" style="display:block;" alt="" />' +
             '</div>';
         
-        // Füge nach <body> ein
-        trackingTabHtml = trackingTabHtml.replace(bodyTagRegex, '$1\n' + pixelBlock);
+        // Füge vor </body> ein
+        trackingTabHtml = trackingTabHtml.replace(bodyCloseRegex, pixelBlock + '\n$1');
         
         checkTrackingPending();
         updateInspectorPreview();
