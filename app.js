@@ -3676,7 +3676,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.11-2026-02-27';
+const APP_VERSION = 'v3.8.12-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4589,21 +4589,23 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 0a: Komplette Conditional Comment Blöcke: <!--[if ...]>INHALT<![endif]-->
         // Matcht alle Varianten: [if mso], [if gte mso 9], [if (mso 16)], etc.
-        // WICHTIG: Non-greedy (lazy) damit verschachtelte Blöcke korrekt erfasst werden
-        result = result.replace(/<!--\[if\s[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, (match) => {
+        // WICHTIG: Nur MSO-positive Blöcke! NICHT [if !mso...] – diese enthalten
+        // Mobile-Content (z.B. Mobile-Bilder) der sichtbar bleiben muss.
+        result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, (match) => {
             const idx = _ccBlockStore.length;
             _ccBlockStore.push(match);
             return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
         });
         
         // 0b: Non-MSO Opener: <!--[if !mso]><!-- --> oder <!--[if !mso]><!-->
+        // Auch Varianten wie <!--[if !mso 9]><!--> werden erkannt
         // (Falls nicht bereits als Teil eines kompletten Blocks in 0a erfasst)
-        result = result.replace(/<!--\[if\s+!mso\s*\]><!--\s*-->/gi, (match) => {
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, (match) => {
             const idx = _ccBlockStore.length;
             _ccBlockStore.push(match);
             return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
         });
-        result = result.replace(/<!--\[if\s+!mso\s*\]><!-->/gi, (match) => {
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, (match) => {
             const idx = _ccBlockStore.length;
             _ccBlockStore.push(match);
             return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
