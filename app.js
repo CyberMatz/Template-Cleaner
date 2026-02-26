@@ -4043,8 +4043,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                     preheaderText = match[1]
                                         .replace(/<[^>]*>/g, '')     // HTML-Tags entfernen
                                         .replace(/&nbsp;/gi, ' ')    // &nbsp; → Leerzeichen
+                                        .replace(/&zwnj;/gi, '')     // Zero-width Non-Joiner (named) entfernen
+                                        .replace(/&#8204;/g, '')     // Zero-width Non-Joiner (numeric) entfernen
                                         .replace(/&#8199;/g, '')     // Füllzeichen entfernen
-                                        .replace(/&#847;/g, '')      // Zero-width Joiner entfernen
+                                        .replace(/&#847;/g, '')      // Combining Grapheme Joiner entfernen
+                                        .replace(/\u200C/g, '')      // ZWNJ Unicode entfernen
                                         .replace(/\u200B/g, '')      // Zero-width Space entfernen
                                         .replace(/\u00AD/g, '')      // Soft Hyphen entfernen
                                         .replace(/\s+/g, ' ')        // Mehrfache Leerzeichen zusammenfassen
