@@ -1627,6 +1627,11 @@ class TemplateProcessor {
         let emptyAlt = 0;
 
         images.forEach(img => {
+            // 1x1 Tracking-Pixel überspringen – leeres alt="" ist dort korrekt
+            const w = (img.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
+            const h = (img.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
+            if (w === '1' && h === '1') return;
+            
             if (!img.includes('alt=')) {
                 // Alt-Attribut fehlt - hinzufügen mit generischem Text
                 const newImg = img.replace(/<img/, '<img alt="Image"');
@@ -3383,7 +3388,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.3-2026-02-26';
+const APP_VERSION = 'v3.8.4-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
