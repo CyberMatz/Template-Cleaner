@@ -3464,7 +3464,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.5-2026-02-26';
+const APP_VERSION = 'v3.8.6-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4387,6 +4387,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return ` data-xmllang-preserve="${val}"`;
         });
         
+        // 3. Non-MSO Conditional Comments schützen
+        // <!--[if !mso]><!-- --> und <!--<![endif]--> verwirren den DOMParser.
+        // Der Browser versteht keine IE Conditional Comments und zerstört den Inhalt
+        // (z.B. Button-Code: border-width wird zu border-w<!--[if !mso]><!-- -->idth).
+        // Lösung: Ersetze die Comment-Marker durch unsichtbare Placeholder-Elemente,
+        // die DOMParser nicht beschädigt. Nach Serialisierung wiederherstellen.
+        // Varianten: <!--[if !mso]><!-- --> (mit Leerzeichen) und <!--[if !mso]><!--> (ohne)
+        result = result.replace(/<!--\[if\s+!mso\s*\]><!--\s*-->/gi, 
+            '<em data-mso-nonmso-open="1" style="display:none"></em>');
+        result = result.replace(/<!--\[if\s+!mso\s*\]><!-->/gi, 
+            '<em data-mso-nonmso-open="1" style="display:none"></em>');
+        result = result.replace(/<!--<!\[endif\]-->/gi, 
+            '<em data-mso-nonmso-close="1" style="display:none"></em>');
+        
         return result;
     }
 
@@ -4423,12 +4437,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return ` xml:lang="${val}"`;
         });
         
-        // 3. Browser-eingefügte <tbody>/<\/tbody> entfernen
+        // 3. Non-MSO Conditional Comments wiederherstellen
+        // Placeholder-Elemente zurück in originale Comment-Syntax wandeln
+        raw = raw.replace(/<em data-mso-nonmso-open="1"[^>]*><\/em>/gi, '<!--[if !mso]><!-- -->');
+        raw = raw.replace(/<em data-mso-nonmso-close="1"[^>]*><\/em>/gi, '<!--<![endif]-->');
+        
+        // 4. Browser-eingefügte <tbody>/<\/tbody> entfernen
         // Browser fügt automatisch <tbody> in <table> ein – das verändert das Email-HTML
         raw = raw.replace(/<tbody>/gi, '');
         raw = raw.replace(/<\/tbody>/gi, '');
         
-        // 4. Font-Family Quotes reparieren: &quot;Segoe UI&quot; → 'Segoe UI'
+        // 5. Font-Family Quotes reparieren: &quot;Segoe UI&quot; → 'Segoe UI'
         // DOMParser encodiert einfache Anführungszeichen in style-Attributen als &quot;
         raw = raw.replace(/style="([^"]*)"/gi, (match, styleContent) => {
             if (/&quot;/i.test(styleContent)) {
@@ -4438,7 +4457,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 5. CSS-Normalisierungen rückgängig: 0px → 0 (Browser fügt px hinzu)
+        // 6. CSS-Normalisierungen rückgängig: 0px → 0 (Browser fügt px hinzu)
         raw = raw.replace(/style="([^"]*)"/gi, (match, styleContent) => {
             if (/:\s*0px/i.test(styleContent)) {
                 const fixed = styleContent.replace(/:\s*0px\b/gi, ': 0');
