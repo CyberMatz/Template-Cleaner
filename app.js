@@ -1502,6 +1502,7 @@ class TemplateProcessor {
         
         const originalHtml = this.html;
         let totalFixed = 0;
+        let skippedMixed = 0;
         const details = [];
         
         // Alle Blöcke sammeln (rückwärts verarbeiten damit Positionen stimmen)
@@ -1525,6 +1526,22 @@ class TemplateProcessor {
             }
             
             if (parts.length < 3) continue;
+            
+            // SICHERHEITSCHECK: Nicht umsortieren wenn div/span und table-Tags gemischt sind.
+            // Template-Ersteller verschachteln absichtlich <div> innerhalb von <table> auf
+            // eine Weise die technisch "falsch" aber für Mobile-Rendering nötig ist.
+            // Umsortierung würde die DOM-Struktur und damit CSS-Regeln verändern.
+            const tableTags = new Set(['table', 'tr', 'td', 'th', 'thead', 'tbody', 'tfoot']);
+            const blockTags = new Set(['div', 'span', 'section', 'article', 'nav', 'aside']);
+            const partTags = parts.map(p => p.tag);
+            const hasTableTags = partTags.some(t => tableTags.has(t));
+            const hasBlockTags = partTags.some(t => blockTags.has(t));
+            
+            if (hasTableTags && hasBlockTags) {
+                console.log('[TAG-NESTING] Block ' + (bi + 1) + ' übersprungen (div/table gemischt): ' + partTags.join(', '));
+                skippedMixed++;
+                continue;
+            }
             
             // Stack aufbauen: Was ist VOR diesem Block alles offen?
             // (Kommentare entfernen für saubere Analyse)
@@ -1573,8 +1590,10 @@ class TemplateProcessor {
         
         if (totalFixed > 0) {
             this.html = html;
-            this.addCheck(id, 'FIXED', 'Tag-Verschachtelung korrigiert: ' + totalFixed + ' Block(s) umsortiert');
+            this.addCheck(id, 'FIXED', 'Tag-Verschachtelung korrigiert: ' + totalFixed + ' Block(s) umsortiert' + (skippedMixed > 0 ? ' (' + skippedMixed + ' gemischte div/table-Blöcke übersprungen)' : ''));
             console.log('[TAG-NESTING] Details:', details);
+        } else if (skippedMixed > 0) {
+            this.addCheck(id, 'INFO', 'Tag-Verschachtelung: ' + skippedMixed + ' Block(s) mit gemischter div/table-Struktur erkannt (bewusst nicht korrigiert – könnte Mobile-Layout beeinflussen)');
         }
     }
     
@@ -3587,7 +3606,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.8-2026-02-26';
+const APP_VERSION = 'v3.8.9-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
