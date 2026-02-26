@@ -342,8 +342,9 @@ class TemplateProcessor {
         
         const bodyEndPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
         
-        // Suche nur in den ersten 3000 Zeichen nach <body> (Preheader steht immer ganz oben)
-        const searchArea = this.html.substring(bodyEndPos, bodyEndPos + 3000);
+        // Suche nur in den ersten 5000 Zeichen nach <body> (Preheader steht immer ganz oben)
+        // (5000 statt 3000: manche Preheader haben lange Spacer-Sequenzen wie &zwnj;&nbsp;&#847; ×80+)
+        const searchArea = this.html.substring(bodyEndPos, bodyEndPos + 5000);
         
         // Breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all
         const preheaderPatterns = [
@@ -3606,7 +3607,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.9-2026-02-26';
+const APP_VERSION = 'v3.8.10-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4018,7 +4019,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const bodyMatch = selectedHtml.match(/<body[^>]*>/i);
                     if (bodyMatch) {
                         const bodyEndPos = selectedHtml.indexOf(bodyMatch[0]) + bodyMatch[0].length;
-                        const searchArea = selectedHtml.substring(bodyEndPos, bodyEndPos + 3000);
+                        const searchArea = selectedHtml.substring(bodyEndPos, bodyEndPos + 5000);
                         
                         // Gleiche Erkennung wie im Checker: versteckte Divs am Anfang des Body
                         const preheaderPatterns = [
