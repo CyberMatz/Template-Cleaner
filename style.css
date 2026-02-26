@@ -578,6 +578,15 @@ body {
 .btn-card-action.action-primary:hover {
     background: #1d4ed8;
 }
+.btn-card-action.btn-tracking-unlink {
+    color: #dc2626;
+    border-color: #fca5a5;
+}
+.btn-card-action.btn-tracking-unlink:hover {
+    background: #fef2f2;
+    border-color: #dc2626;
+    color: #dc2626;
+}
 
 /* ═══════════════════════════════════════
    IMAGE CARDS (Images Tab – NEU)

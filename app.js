@@ -85,6 +85,11 @@ class TemplateProcessor {
         // S10: Nutzlose Meta-Tags entfernen (darkreader-lock etc.)
         this.removeUselessMetaTags();
 
+        // S12: URL-Hygiene – Zeilenumbrüche/Whitespace in href-Attributen bereinigen
+        // Viele Templates haben Newlines in URLs (z.B. href="https://...↵"), die von
+        // Versandsystemen als separate leere Links interpretiert und mit Redirects befüllt werden
+        this.fixHrefWhitespace();
+
         // P01: DOCTYPE
         this.checkDoctype();
 
@@ -1134,6 +1139,77 @@ class TemplateProcessor {
         
         if (totalFixes > 0) {
             this.addCheck('S11_MOJIBAKE', 'FIXED', 'Encoding-Fehler repariert (Mojibake): ' + totalFixes + '× doppelt-kodierte UTF-8 Zeichen korrigiert – ' + [...fixedChars].join(', '));
+        }
+    }
+
+    // S12: URL-Hygiene – Zeilenumbrüche und Whitespace in href-Attributen bereinigen
+    // Problem: Templates werden oft mit Zeilenumbrüchen in URLs angeliefert, z.B.:
+    //   href="https://example.com/redi?sid=123&kid=456
+    //   "
+    // Versandsysteme interpretieren den Newline als separaten leeren Link und belegen
+    // ihn automatisch mit Tracking-Redirects → sichtbare kaputte Links in der E-Mail.
+    // Zusätzlich werden leere href="" erkannt und gewarnt.
+    fixHrefWhitespace() {
+        let cleanedCount = 0;
+        let emptyHrefCount = 0;
+        const emptyHrefElements = [];
+
+        // 1. Zeilenumbrüche und Whitespace in href-Werten bereinigen
+        // Matcht href="..." wobei der Inhalt Newlines/Carriage Returns enthält
+        this.html = this.html.replace(/href="([^"]*?)"/gi, (match, url) => {
+            // Prüfe ob die URL Zeilenumbrüche oder Carriage Returns enthält
+            if (/[\r\n]/.test(url)) {
+                // Entferne alle \r, \n und trimme das Ergebnis
+                const cleanUrl = url.replace(/[\r\n]+/g, '').trim();
+                cleanedCount++;
+                return 'href="' + cleanUrl + '"';
+            }
+            
+            // Prüfe ob die URL führende/abschließende Leerzeichen hat
+            const trimmed = url.trim();
+            if (trimmed !== url && trimmed.length > 0) {
+                cleanedCount++;
+                return 'href="' + trimmed + '"';
+            }
+            
+            // Leere hrefs zählen (für Warnung)
+            if (trimmed === '') {
+                emptyHrefCount++;
+                // Kontext sammeln: versuche das Element zu identifizieren
+                const context = match;
+                emptyHrefElements.push(context);
+            }
+            
+            return match; // Unverändert
+        });
+
+        // Auch single-quoted hrefs behandeln: href='...'
+        this.html = this.html.replace(/href='([^']*?)'/gi, (match, url) => {
+            if (/[\r\n]/.test(url)) {
+                const cleanUrl = url.replace(/[\r\n]+/g, '').trim();
+                cleanedCount++;
+                return "href='" + cleanUrl + "'";
+            }
+            const trimmed = url.trim();
+            if (trimmed !== url && trimmed.length > 0) {
+                cleanedCount++;
+                return "href='" + trimmed + "'";
+            }
+            if (trimmed === '') {
+                emptyHrefCount++;
+            }
+            return match;
+        });
+
+        // Ergebnis-Checks
+        if (cleanedCount > 0) {
+            this.addCheck('S12_HREF_WHITESPACE', 'FIXED', cleanedCount + '× Zeilenumbrüche/Whitespace aus href-URLs entfernt (verhindert fehlerhafte Tracking-Redirects im Versandsystem)');
+        } else {
+            this.addCheck('S12_HREF_WHITESPACE', 'PASS', 'Keine Zeilenumbrüche in href-URLs gefunden');
+        }
+
+        if (emptyHrefCount > 0) {
+            this.addCheck('S12b_EMPTY_HREF', 'WARN', emptyHrefCount + '× leere href="" gefunden – Versandsysteme belegen diese ggf. automatisch mit Redirects. Prüfung empfohlen im Tracking-Tab.');
         }
     }
 
@@ -3388,7 +3464,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.4-2026-02-26';
+const APP_VERSION = 'v3.8.5-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -7536,6 +7612,7 @@ td[width] { width: auto !important; }
                     html += '<div class="link-card-actions">';
                     html += '<button class="btn-card-action btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">📍 Finden</button>';
                     html += '<button class="btn-card-action btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
+                    html += '<button class="btn-card-action btn-tracking-unlink" data-link-id="' + link.id + '" title="Link-Tag entfernen, Inhalt behalten">🔗✕ Ent-linken</button>';
                     html += '</div>';
                     
                     // Edit Input Row
@@ -7720,6 +7797,15 @@ td[width] { width: auto !important; }
             });
         });
         
+        // Unlink Buttons (Link-Tag entfernen, Inhalt behalten)
+        document.querySelectorAll('.btn-tracking-unlink').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const linkId = this.getAttribute('data-link-id');
+                handleTrackingLinkUnlink(linkId);
+            });
+        });
+        
         // Pixel Apply Button
         const pixelApplyBtn = document.getElementById('trackingPixelApply');
         if (pixelApplyBtn) {
@@ -7899,6 +7985,49 @@ td[width] { width: auto !important; }
         } else {
             console.error('[INSPECTOR] Link ' + linkId + ' not found (index ' + linkIndex + ')');
             trackingHistory.pop(); // Undo history entry
+            showInspectorToast('⚠️ Link nicht gefunden');
+        }
+    }
+    
+    // Handle Link Unlink (Link-Tag entfernen, Inhalt behalten)
+    // Entfernt das <a>-Tag komplett, behält aber den gesamten Inhalt (Bilder, Text etc.)
+    function handleTrackingLinkUnlink(linkId) {
+        console.log('[INSPECTOR] Unlinking', linkId);
+        
+        // linkId = "L001" → Index 0
+        const linkIndex = parseInt(linkId.substring(1)) - 1;
+        
+        // Speichere in History (für Undo)
+        trackingHistory.push(trackingTabHtml);
+        
+        let html = trackingTabHtml;
+        let removed = false;
+        let currentIdx = 0;
+        
+        // Strategie: Finde das N-te <a href="...">...</a> und ersetze es mit seinem innerHTML
+        // Wir nutzen Regex statt DOMParser um MSO-Strukturen nicht zu zerstören
+        const aTagRegex = /<a\b[^>]*href\s*=\s*["'][^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+        
+        html = html.replace(aTagRegex, (match, innerHTML) => {
+            if (currentIdx === linkIndex) {
+                removed = true;
+                currentIdx++;
+                console.log('[INSPECTOR] Link ' + linkId + ' unlinked, kept innerHTML (' + innerHTML.trim().substring(0, 50) + '...)');
+                return innerHTML; // Nur den Inhalt behalten, <a>-Wrapper weg
+            }
+            currentIdx++;
+            return match;
+        });
+        
+        if (removed) {
+            trackingTabHtml = html;
+            checkTrackingPending();
+            updateInspectorPreview();
+            showTrackingTab(trackingContent);
+            showInspectorToast('✅ Link ' + linkId + ' ent-linkt (Inhalt beibehalten)');
+        } else {
+            console.error('[INSPECTOR] Link ' + linkId + ' not found for unlinking');
+            trackingHistory.pop();
             showInspectorToast('⚠️ Link nicht gefunden');
         }
     }
