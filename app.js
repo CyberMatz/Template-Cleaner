@@ -121,6 +121,9 @@ class TemplateProcessor {
         // P07/P08: Tag-Balancing
         this.checkTagBalancing();
 
+        // S13: Tag-Verschachtelung korrigieren (nach Tag-Balancing)
+        this.fixTagNesting();
+
         // P08/P09: Image Alt-Attribute
         this.checkImageAltAttributes();
 
@@ -1484,6 +1487,126 @@ class TemplateProcessor {
     
     // HTML-Kommentare entfernen (fuer saubere Tag-Zaehlung)
     // Entfernt: <!-- ... -->, <!--[if ...]>...<![endif]-->, etc.
+    // S13: Tag-Verschachtelung korrigieren
+    // Prüft ob Closing-Tags in der richtigen Reihenfolge stehen.
+    // Beispiel-Problem: </center></div></div></td></tr></table>
+    //   → Korrekt wäre: </center></td></tr></table></div></div>
+    // Wenn Tags zwar alle vorhanden aber falsch verschachtelt sind,
+    // können E-Mail-Clients Bausteine verschieben/falsch rendern.
+    fixTagNesting() {
+        const id = 'S13_TAG_NESTING';
+        
+        // Finde Blöcke von 3+ aufeinanderfolgenden Closing-Tags
+        // (nur Whitespace dazwischen erlaubt)
+        const blockPattern = /([ \t]*<\/[a-z][a-z0-9]*\s*>(?:\s*<\/[a-z][a-z0-9]*\s*>){2,})/gi;
+        
+        const originalHtml = this.html;
+        let totalFixed = 0;
+        const details = [];
+        
+        // Alle Blöcke sammeln (rückwärts verarbeiten damit Positionen stimmen)
+        const blocks = [];
+        let bm;
+        while ((bm = blockPattern.exec(originalHtml)) !== null) {
+            blocks.push({ start: bm.index, end: bm.index + bm[0].length, text: bm[0] });
+        }
+        
+        // Rückwärts verarbeiten (damit Positionen nicht verrutschen)
+        let html = this.html;
+        for (let bi = blocks.length - 1; bi >= 0; bi--) {
+            const block = blocks[bi];
+            
+            // Einzelne Closing-Tags aus dem Block extrahieren
+            const parts = [];
+            const partRegex = /(\s*)(<\/([a-z][a-z0-9]*)\s*>)/gi;
+            let pm;
+            while ((pm = partRegex.exec(block.text)) !== null) {
+                parts.push({ whitespace: pm[1], fullTag: pm[2], tag: pm[3].toLowerCase() });
+            }
+            
+            if (parts.length < 3) continue;
+            
+            // Stack aufbauen: Was ist VOR diesem Block alles offen?
+            // (Kommentare entfernen für saubere Analyse)
+            const beforeClean = this._stripHtmlComments(html.substring(0, block.start));
+            const stack = this._buildTagStack(beforeClean);
+            
+            // Korrekte Reihenfolge bestimmen:
+            // Stack-Top (innerster Tag) muss zuerst geschlossen werden
+            const correctOrder = [];
+            const remainingParts = [...parts];
+            
+            // Vom Stack-Top (innermost) nach unten: passendes Part finden
+            for (let si = stack.length - 1; si >= 0 && remainingParts.length > 0; si--) {
+                const stackTag = stack[si];
+                const partIdx = remainingParts.findIndex(p => p.tag === stackTag);
+                if (partIdx >= 0) {
+                    correctOrder.push(remainingParts[partIdx]);
+                    remainingParts.splice(partIdx, 1);
+                }
+            }
+            // Übrige Parts (nicht im Stack gefunden) hinten anhängen
+            correctOrder.push(...remainingParts);
+            
+            // Hat sich die Reihenfolge geändert?
+            const originalOrder = parts.map(p => p.tag).join(',');
+            const correctedOrder = correctOrder.map(p => p.tag).join(',');
+            
+            if (originalOrder === correctedOrder) continue; // Bereits korrekt
+            
+            // Neuen Block zusammenbauen (Whitespace-Muster beibehalten)
+            let newBlock = '';
+            for (let i = 0; i < correctOrder.length; i++) {
+                newBlock += parts[i].whitespace + correctOrder[i].fullTag;
+            }
+            
+            // Im HTML ersetzen
+            html = html.substring(0, block.start) + newBlock + html.substring(block.end);
+            totalFixed++;
+            
+            const oldTags = parts.map(p => '</' + p.tag + '>').join(' ');
+            const newTags = correctOrder.map(p => '</' + p.tag + '>').join(' ');
+            details.push(oldTags + '  →  ' + newTags);
+            
+            console.log('[TAG-NESTING] Block ' + (bi + 1) + ' korrigiert: ' + oldTags + ' → ' + newTags);
+        }
+        
+        if (totalFixed > 0) {
+            this.html = html;
+            this.addCheck(id, 'FIXED', 'Tag-Verschachtelung korrigiert: ' + totalFixed + ' Block(s) umsortiert');
+            console.log('[TAG-NESTING] Details:', details);
+        }
+    }
+    
+    // Hilfsfunktion: Tag-Stack aufbauen (für Verschachtelungs-Analyse)
+    // Gibt Array zurück: [äußerstes Tag, ..., innerstes Tag]
+    _buildTagStack(html) {
+        const voidTags = new Set(['br','hr','img','input','meta','link','area','base','col',
+                                   'embed','param','source','track','wbr']);
+        const tagRegex = /<(\/?)([a-z][a-z0-9]*)\b[^>]*?\s*(\/?)\s*>/gi;
+        const stack = [];
+        let m;
+        while ((m = tagRegex.exec(html)) !== null) {
+            const isClose = m[1] === '/';
+            const tag = m[2].toLowerCase();
+            const selfClose = m[3] === '/';
+            if (voidTags.has(tag) || selfClose) continue;
+            
+            if (!isClose) {
+                stack.push(tag);
+            } else {
+                // Passendes öffnendes Tag finden (vom Stack-Top abwärts)
+                for (let j = stack.length - 1; j >= 0; j--) {
+                    if (stack[j] === tag) {
+                        stack.splice(j, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        return stack;
+    }
+    
     _stripHtmlComments(html) {
         // 1. Standard HTML-Kommentare: <!-- ... -->
         //    Inkludiert: <!--[if mso]>...<![endif]-->, <!--[if !mso]><!-->...<!--<![endif]-->
@@ -3464,7 +3587,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.7-2026-02-26';
+const APP_VERSION = 'v3.8.8-2026-02-26';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
