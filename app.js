@@ -3676,7 +3676,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.12-2026-02-27';
+const APP_VERSION = 'v3.8.13-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4357,13 +4357,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
+            let downloadHtml = currentWorkingHtml;
+            
+            // Sicherheitsnetz: CC-Platzhalter (<ins data-cc-idx>) dürfen NIE im Export landen
+            if (/<ins\s+data-cc-idx=/i.test(downloadHtml)) {
+                console.warn('[DOWNLOAD] CC-Platzhalter im HTML gefunden! Versuche Wiederherstellung...');
+                
+                // Wiederherstellen: Primär aus data-cc-content, Fallback auf _ccBlockStore
+                downloadHtml = downloadHtml.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
+                    const idx = parseInt(idxStr);
+                    // Versuch 1: data-cc-content (selbst-wiederherstellend)
+                    if (encoded) {
+                        try { return decodeURIComponent(encoded); } catch(e) {}
+                    }
+                    // Versuch 2: _ccBlockStore
+                    if (_ccBlockStore && idx >= 0 && idx < _ccBlockStore.length) {
+                        return _ccBlockStore[idx];
+                    }
+                    return match;
+                });
+                
+                // Finale Prüfung: Sind noch Platzhalter übrig?
+                const remaining = (downloadHtml.match(/<ins\s+data-cc-idx=/gi) || []).length;
+                if (remaining > 0) {
+                    showInspectorToast('⚠️ WARNUNG: ' + remaining + ' Outlook-Conditional-Comments konnten nicht wiederhergestellt werden. Das Template wird in Outlook möglicherweise nicht korrekt angezeigt.');
+                    console.error('[DOWNLOAD] ' + remaining + ' CC-Platzhalter konnten NICHT wiederhergestellt werden!');
+                } else {
+                    showInspectorToast('✅ Outlook-Conditional-Comments wiederhergestellt.');
+                }
+            }
+            
             // Originalnamen verwenden und "_optimized" anhängen
             const originalName = selectedFilename;
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
             const newName = `${baseName}_optimized.${extension}`;
-            downloadFile(currentWorkingHtml, newName, 'text/html');
+            downloadFile(downloadHtml, newName, 'text/html');
         }
     });
 
@@ -4584,39 +4614,32 @@ document.addEventListener('DOMContentLoaded', () => {
         // === SCHRITT 0: Conditional Comments komplett schützen ===
         // DOMParser versteht keine IE Conditional Comments und zerstört sie.
         // Alle Blöcke werden durch indexierte Placeholder ersetzt.
+        // WICHTIG: Der Originalinhalt wird als data-cc-content im Placeholder gespeichert,
+        // damit er auch wiederhergestellt werden kann wenn _ccBlockStore verloren geht.
         _ccBlockStore = [];
         let result = html;
+        
+        function ccPlaceholder(match) {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            const encoded = encodeURIComponent(match);
+            return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
+        }
         
         // 0a: Komplette Conditional Comment Blöcke: <!--[if ...]>INHALT<![endif]-->
         // Matcht alle Varianten: [if mso], [if gte mso 9], [if (mso 16)], etc.
         // WICHTIG: Nur MSO-positive Blöcke! NICHT [if !mso...] – diese enthalten
         // Mobile-Content (z.B. Mobile-Bilder) der sichtbar bleiben muss.
-        result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, (match) => {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
-        });
+        result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
         // 0b: Non-MSO Opener: <!--[if !mso]><!-- --> oder <!--[if !mso]><!-->
         // Auch Varianten wie <!--[if !mso 9]><!--> werden erkannt
         // (Falls nicht bereits als Teil eines kompletten Blocks in 0a erfasst)
-        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, (match) => {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
-        });
-        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, (match) => {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
-        });
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, ccPlaceholder);
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, ccPlaceholder);
         
         // 0c: Non-MSO Closer: <!--<![endif]-->
-        result = result.replace(/<!--<!\[endif\]-->/gi, (match) => {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<ins data-cc-idx="' + idx + '" style="display:none"></ins>';
-        });
+        result = result.replace(/<!--<!\[endif\]-->/gi, ccPlaceholder);
         
         // === SCHRITT 1: MSO-* Inline-Styles schützen ===
         result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
@@ -4680,13 +4703,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return ` xml:lang="${val}"`;
         });
         
-        // 3. Conditional Comment Blöcke wiederherstellen (aus _ccBlockStore)
-        raw = raw.replace(/<ins data-cc-idx="(\d+)"[^>]*><\/ins>/gi, (match, idxStr) => {
+        // 3. Conditional Comment Blöcke wiederherstellen (aus _ccBlockStore, mit Fallback auf data-cc-content)
+        raw = raw.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
+            // Primär: aus _ccBlockStore wiederherstellen
             if (idx >= 0 && idx < _ccBlockStore.length) {
                 return _ccBlockStore[idx];
             }
-            console.warn('[safeDomSerialize] CC-Block index ' + idx + ' nicht gefunden');
+            // Fallback: aus data-cc-content dekodieren
+            if (encoded) {
+                try {
+                    const decoded = decodeURIComponent(encoded);
+                    console.log('[safeDomSerialize] CC-Block ' + idx + ' aus data-cc-content wiederhergestellt');
+                    return decoded;
+                } catch(e) {
+                    console.warn('[safeDomSerialize] CC-Block ' + idx + ' konnte nicht dekodiert werden');
+                }
+            }
+            console.warn('[safeDomSerialize] CC-Block index ' + idx + ' nicht gefunden (weder Store noch Content)');
             return match;
         });
         
