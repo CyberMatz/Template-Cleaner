@@ -942,9 +942,11 @@
 <!-- Integration Bar (Phase 6) -->
 <div class="integration-bar">
     <span class="int-label">Integration:</span>
+    <button class="btn-integration" onclick="openHtmlImport()">📄 HTML-Template importieren</button>
     <button class="btn-integration" onclick="sendToChecker()">🔍 An Template Checker senden</button>
     <button class="btn-integration" onclick="openAiImport()">🤖 Import aus KI (PDF-Analyse)</button>
     <button class="btn-integration" onclick="openImageUpload()">🖼️ Bild-Upload Server</button>
+    <input type="file" id="htmlImportInput" accept=".html,.htm" style="display:none" onchange="handleHtmlImport(event)">
 </div>
 
 <!-- AI Import Modal (Phase 5) -->
@@ -985,6 +987,42 @@
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeAiImport()">Abbrechen</button>
             <button class="btn-export" onclick="parseAiResponse()">🚀 Bausteine generieren</button>
+        </div>
+    </div>
+</div>
+
+<!-- HTML Import Modal -->
+<div class="modal-overlay" id="htmlImportModal">
+    <div class="modal-box" style="max-width: 900px;">
+        <div class="modal-header">
+            <h2>📄 HTML-Template importieren & umbauen</h2>
+            <button class="modal-close" onclick="closeHtmlImport()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>HTML-Datei auswählen</h3>
+                    <p>Lade ein fertiges E-Mail-Template hoch. Das Tool erkennt automatisch die Struktur (Bilder, Texte, Buttons, Spalten, etc.) und wandelt sie in bearbeitbare Bausteine um.</p>
+                    <div style="margin-top:10px;">
+                        <button class="btn-export" onclick="document.getElementById('htmlImportInput').click()">📁 HTML-Datei wählen</button>
+                        <span id="htmlImportFileName" style="margin-left:10px; font-size:13px; color:#78716c;"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-step" id="htmlImportPreviewStep" style="display:none;">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>Erkannte Struktur prüfen</h3>
+                    <p>Folgende Bausteine wurden erkannt. Du kannst sie übernehmen und dann im Editor frei umbauen.</p>
+                    <div id="htmlImportPreview" style="margin-top:10px; max-height:350px; overflow-y:auto;"></div>
+                    <div class="import-status" id="htmlImportStatus"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="closeHtmlImport()">Abbrechen</button>
+            <button class="btn-export" id="htmlImportConfirmBtn" onclick="confirmHtmlImport()" style="display:none;">✅ Bausteine übernehmen & im Editor bearbeiten</button>
         </div>
     </div>
 </div>
@@ -2407,6 +2445,609 @@ function applyTemplateData(data) {
     }
     renderBlocks();
     updatePreview();
+}
+
+// ===========================
+// HTML TEMPLATE IMPORT & PARSER
+// ===========================
+let parsedImportBlocks = [];
+
+function openHtmlImport() {
+    document.getElementById('htmlImportModal').classList.add('open');
+    document.getElementById('htmlImportPreviewStep').style.display = 'none';
+    document.getElementById('htmlImportConfirmBtn').style.display = 'none';
+    document.getElementById('htmlImportFileName').textContent = '';
+    document.getElementById('htmlImportStatus').style.display = 'none';
+    parsedImportBlocks = [];
+}
+
+function closeHtmlImport() {
+    document.getElementById('htmlImportModal').classList.remove('open');
+}
+
+function handleHtmlImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    document.getElementById('htmlImportFileName').textContent = file.name;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const html = e.target.result;
+            parsedImportBlocks = parseHtmlTemplate(html);
+
+            // Show preview
+            const previewDiv = document.getElementById('htmlImportPreview');
+            const statusEl = document.getElementById('htmlImportStatus');
+            document.getElementById('htmlImportPreviewStep').style.display = 'flex';
+
+            if (parsedImportBlocks.length === 0) {
+                previewDiv.innerHTML = '<p style="color:#a8a29e;">Keine Bausteine erkannt. Das Template hat möglicherweise eine ungewöhnliche Struktur.</p>';
+                statusEl.className = 'import-status error';
+                statusEl.textContent = '⚠️ Konnte keine Bausteine erkennen. Du kannst es mit dem KI-Import (PDF-Analyse) versuchen.';
+                statusEl.style.display = 'block';
+                document.getElementById('htmlImportConfirmBtn').style.display = 'none';
+            } else {
+                let previewHtml = '<div style="display:flex; flex-direction:column; gap:6px;">';
+                parsedImportBlocks.forEach((b, i) => {
+                    const def = BLOCK_DEFS[b.type];
+                    let detail = '';
+                    switch(b.type) {
+                        case 'header-image': detail = b.data.alt || 'Header-Bild'; break;
+                        case 'text': detail = (b.data.heading || '') + ' ' + (b.data.text || '').substring(0, 60); break;
+                        case 'image': detail = b.data.alt || 'Bild'; break;
+                        case 'button': detail = b.data.text || 'Button'; break;
+                        case 'spacer': detail = b.data.showLine ? 'Trennlinie' : b.data.height + 'px Abstand'; break;
+                        case 'footer': detail = (b.data.text || '').substring(0, 60); break;
+                        case 'image-text': detail = (b.data.heading || '') + ' (Bild ' + b.data.imagePosition + ')'; break;
+                        case 'columns': detail = b.data.count + ' Spalten'; break;
+                        case 'social': detail = 'Social Media Icons'; break;
+                        default: detail = '';
+                    }
+                    if (detail.length > 80) detail = detail.substring(0, 80) + '…';
+                    previewHtml += `<div style="display:flex; align-items:center; gap:10px; padding:8px 12px; background:#faf9f7; border:1px solid #e7e5e4; border-radius:6px;">
+                        <span style="font-size:16px;">${def ? def.icon : '❓'}</span>
+                        <span style="font-weight:600; font-size:13px; color:#44403c; min-width:100px;">${def ? def.label : b.type}</span>
+                        <span style="font-size:12px; color:#a8a29e; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(detail)}</span>
+                    </div>`;
+                });
+                previewHtml += '</div>';
+                previewDiv.innerHTML = previewHtml;
+
+                statusEl.className = 'import-status success';
+                statusEl.textContent = `✅ ${parsedImportBlocks.length} Bausteine erkannt. Du kannst sie jetzt übernehmen und im Editor frei umbauen.`;
+                statusEl.style.display = 'block';
+                document.getElementById('htmlImportConfirmBtn').style.display = 'inline-block';
+            }
+        } catch(err) {
+            document.getElementById('htmlImportStatus').className = 'import-status error';
+            document.getElementById('htmlImportStatus').textContent = '❌ Fehler beim Analysieren: ' + err.message;
+            document.getElementById('htmlImportStatus').style.display = 'block';
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function confirmHtmlImport() {
+    if (parsedImportBlocks.length === 0) return;
+    if (blocks.length > 0 && !confirm('Aktuelle Bausteine werden ersetzt. Fortfahren?')) return;
+
+    blocks = [];
+    blockIdCounter = 0;
+    parsedImportBlocks.forEach(b => {
+        blocks.push({
+            id: ++blockIdCounter,
+            type: b.type,
+            data: JSON.parse(JSON.stringify(b.data)),
+            collapsed: true
+        });
+    });
+
+    renderBlocks();
+    updatePreview();
+    closeHtmlImport();
+}
+
+// ===========================
+// HTML PARSER CORE
+// ===========================
+function parseHtmlTemplate(htmlString) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    const foundBlocks = [];
+
+    // Extract title
+    const titleEl = doc.querySelector('title');
+    if (titleEl && titleEl.textContent.trim()) {
+        document.getElementById('settingTitle').value = titleEl.textContent.trim();
+    }
+
+    // Extract body background color
+    const bodyEl = doc.body;
+    if (bodyEl) {
+        const bgMatch = (bodyEl.getAttribute('style') || '').match(/background-color:\s*([^;]+)/i);
+        if (bgMatch) {
+            const c = normalizeColor(bgMatch[1].trim());
+            if (c) {
+                document.getElementById('settingBgColor').value = c;
+                document.getElementById('settingBgColorText').value = c;
+            }
+        }
+    }
+
+    // Find the main content table (usually the centered one with a fixed width)
+    const allTables = doc.querySelectorAll('table');
+    let contentTable = null;
+    allTables.forEach(t => {
+        const w = t.getAttribute('width');
+        if (w && parseInt(w) >= 400 && parseInt(w) <= 800) {
+            if (!contentTable || t.querySelectorAll('tr').length > contentTable.querySelectorAll('tr').length) {
+                contentTable = t;
+            }
+        }
+    });
+
+    if (!contentTable) {
+        // Fallback: try the largest nested table
+        let maxRows = 0;
+        allTables.forEach(t => {
+            const rows = t.querySelectorAll(':scope > tbody > tr, :scope > tr').length;
+            if (rows > maxRows) {
+                maxRows = rows;
+                contentTable = t;
+            }
+        });
+    }
+
+    if (!contentTable) return foundBlocks;
+
+    // Extract content background
+    const contentBgMatch = (contentTable.getAttribute('style') || '').match(/background-color:\s*([^;]+)/i);
+    if (contentBgMatch) {
+        const c = normalizeColor(contentBgMatch[1].trim());
+        if (c) {
+            document.getElementById('settingContentBg').value = c;
+            document.getElementById('settingContentBgText').value = c;
+        }
+    }
+
+    // Walk through rows
+    const rows = contentTable.querySelectorAll(':scope > tbody > tr, :scope > tr');
+    rows.forEach(row => {
+        const cells = row.querySelectorAll(':scope > td');
+        if (cells.length === 0) return;
+
+        // Multi-column detection: more than 1 direct td child
+        if (cells.length >= 2) {
+            const block = parseMultiColumn(cells, row);
+            if (block) {
+                foundBlocks.push(block);
+                return;
+            }
+        }
+
+        const cell = cells[0];
+        const block = parseSingleCell(cell);
+        if (block) {
+            foundBlocks.push(block);
+        }
+    });
+
+    return foundBlocks;
+}
+
+function parseSingleCell(cell) {
+    const html = cell.innerHTML.trim();
+    const text = cell.textContent.trim();
+    const style = cell.getAttribute('style') || '';
+
+    // Empty or tracking pixel
+    if (!text && !cell.querySelector('img[width]:not([width="1"])')) {
+        // Check if spacer
+        const heightMatch = style.match(/height:\s*(\d+)px/i);
+        if (heightMatch && parseInt(heightMatch[1]) >= 5) {
+            return {
+                type: 'spacer',
+                data: { ...BLOCK_DEFS.spacer.defaults, height: heightMatch[1] }
+            };
+        }
+        // Check for horizontal line
+        const hr = cell.querySelector('hr') || cell.querySelector('table td[style*="border-top"]') || cell.querySelector('[style*="border-top"]');
+        if (hr) {
+            const lineColorMatch = (hr.getAttribute('style') || '').match(/border-top[^:]*:\s*\d+px\s+\w+\s+([^;]+)/i);
+            return {
+                type: 'spacer',
+                data: { ...BLOCK_DEFS.spacer.defaults, showLine: true, lineColor: normalizeColor(lineColorMatch ? lineColorMatch[1].trim() : '#e0e0e0') || '#e0e0e0' }
+            };
+        }
+        // Tiny spacer
+        if (!text && html.length < 50) {
+            return { type: 'spacer', data: { ...BLOCK_DEFS.spacer.defaults, height: '15' } };
+        }
+        return null;
+    }
+
+    // Detect social media links (multiple icon-like links in a row)
+    const allLinks = cell.querySelectorAll('a[href]');
+    if (allLinks.length >= 3) {
+        const socialData = detectSocialLinks(allLinks);
+        if (socialData) return { type: 'social', data: { ...BLOCK_DEFS.social.defaults, ...socialData } };
+    }
+
+    // Detect image-only cell (header image or standalone image)
+    const imgs = cell.querySelectorAll('img:not([width="1"])');
+    const directImg = cell.querySelector(':scope > img, :scope > a > img, :scope > div > img, :scope > a > div > img');
+    if (directImg && text.replace(/\s/g, '').length < 5) {
+        return parseImageBlock(cell, directImg);
+    }
+
+    // Detect button (a with background-color styled like a button)
+    const buttonEl = detectButton(cell);
+    if (buttonEl) return buttonEl;
+
+    // Detect nested table with image + text side by side
+    const nestedTable = cell.querySelector('table');
+    if (nestedTable) {
+        const nestedCells = nestedTable.querySelectorAll(':scope > tbody > tr > td, :scope > tr > td');
+        if (nestedCells.length >= 2) {
+            const block = parseMultiColumn(nestedCells, nestedTable.querySelector('tr'));
+            if (block) return block;
+        }
+        // Check for button inside nested table
+        const nestedBtn = detectButton(nestedTable);
+        if (nestedBtn) return nestedBtn;
+    }
+
+    // Detect footer (small text with unsubscribe/impressum links)
+    if (isFooterLike(cell)) {
+        return parseFooter(cell);
+    }
+
+    // Default: Text block
+    return parseTextBlock(cell);
+}
+
+function parseImageBlock(cell, img) {
+    const src = img.getAttribute('src') || '';
+    const alt = img.getAttribute('alt') || '';
+    const link = img.closest('a') ? img.closest('a').getAttribute('href') || '' : '';
+    const width = img.getAttribute('width') || '100%';
+    const style = img.getAttribute('style') || '';
+
+    // Determine if it's a header image (first large image, full width)
+    const isHeader = (width === '100%' || parseInt(width) >= 500);
+
+    return {
+        type: isHeader ? 'header-image' : 'image',
+        data: {
+            ...(isHeader ? BLOCK_DEFS['header-image'].defaults : BLOCK_DEFS.image.defaults),
+            src: src,
+            alt: alt,
+            link: link,
+            width: width.includes('%') ? width : width
+        }
+    };
+}
+
+function parseTextBlock(cell) {
+    const style = cell.getAttribute('style') || '';
+    const data = { ...BLOCK_DEFS.text.defaults };
+
+    // Extract alignment
+    const alignMatch = style.match(/text-align:\s*(\w+)/i);
+    if (alignMatch) data.textAlign = alignMatch[1];
+
+    // Extract padding
+    const paddingMatch = style.match(/padding:\s*(\d+)px\s+(\d+)px\s+(\d+)px\s+(\d+)px/i);
+    if (paddingMatch) {
+        data.paddingTop = paddingMatch[1];
+        data.paddingRight = paddingMatch[2];
+        data.paddingBottom = paddingMatch[3];
+        data.paddingLeft = paddingMatch[4];
+    }
+
+    // Find heading (h1, h2, h3 or large bold text)
+    const heading = cell.querySelector('h1, h2, h3');
+    if (heading) {
+        data.heading = heading.textContent.trim();
+        const hStyle = heading.getAttribute('style') || '';
+        const hSizeMatch = hStyle.match(/font-size:\s*(\d+)px/i);
+        if (hSizeMatch) data.headingSize = hSizeMatch[1];
+        const hColorMatch = hStyle.match(/color:\s*([^;]+)/i);
+        if (hColorMatch) {
+            const c = normalizeColor(hColorMatch[1].trim());
+            if (c) data.headingColor = c;
+        }
+    }
+
+    // Gather text from paragraphs or direct text
+    const paragraphs = cell.querySelectorAll('p');
+    let textParts = [];
+    if (paragraphs.length > 0) {
+        paragraphs.forEach(p => {
+            const pText = p.textContent.trim();
+            if (pText && pText !== data.heading) {
+                textParts.push(pText);
+            }
+        });
+    } else {
+        // Direct text content (exclude heading)
+        let fullText = cell.textContent.trim();
+        if (data.heading) {
+            fullText = fullText.replace(data.heading, '').trim();
+        }
+        if (fullText) textParts.push(fullText);
+    }
+    data.text = textParts.join('\n');
+
+    // Extract text styles from first paragraph
+    const firstP = cell.querySelector('p') || cell;
+    const pStyle = firstP.getAttribute('style') || '';
+    const tSizeMatch = pStyle.match(/font-size:\s*(\d+)px/i);
+    if (tSizeMatch) data.textSize = tSizeMatch[1];
+    const tColorMatch = pStyle.match(/color:\s*([^;]+)/i);
+    if (tColorMatch) {
+        const c = normalizeColor(tColorMatch[1].trim());
+        if (c) data.textColor = c;
+    }
+
+    if (!data.heading && !data.text) return null;
+    return { type: 'text', data: data };
+}
+
+function detectButton(container) {
+    // Look for link styled as button (background-color + padding)
+    const links = container.querySelectorAll('a[href]');
+    for (const a of links) {
+        const aStyle = a.getAttribute('style') || '';
+        const parentTd = a.closest('td');
+        const parentStyle = parentTd ? parentTd.getAttribute('style') || '' : '';
+        const combinedStyle = aStyle + ';' + parentStyle;
+
+        const hasBg = combinedStyle.match(/background-color:\s*([^;]+)/i) || combinedStyle.match(/background:\s*([^;]+)/i);
+        const hasPadding = combinedStyle.includes('padding');
+        const text = a.textContent.trim();
+
+        if (hasBg && text && text.length < 50 && !text.includes('@')) {
+            const bgColor = normalizeColor(hasBg[1].trim()) || '#f2a93b';
+            const textColorMatch = aStyle.match(/color:\s*([^;]+)/i);
+            const textColor = textColorMatch ? (normalizeColor(textColorMatch[1].trim()) || '#ffffff') : '#ffffff';
+            const fontSizeMatch = combinedStyle.match(/font-size:\s*(\d+)px/i);
+            const radiusMatch = combinedStyle.match(/border-radius:\s*(\d+)px/i);
+
+            // Check alignment from parent
+            let align = 'center';
+            const parentAlign = container.querySelector('td[align]');
+            if (parentAlign) align = parentAlign.getAttribute('align') || 'center';
+
+            return {
+                type: 'button',
+                data: {
+                    ...BLOCK_DEFS.button.defaults,
+                    text: text,
+                    link: a.getAttribute('href') || '#',
+                    bgColor: bgColor,
+                    textColor: textColor,
+                    fontSize: fontSizeMatch ? fontSizeMatch[1] : '16',
+                    borderRadius: radiusMatch ? radiusMatch[1] : '5',
+                    align: align
+                }
+            };
+        }
+    }
+    return null;
+}
+
+function isFooterLike(cell) {
+    const text = cell.textContent.toLowerCase();
+    const style = cell.getAttribute('style') || '';
+    const fontSize = style.match(/font-size:\s*(\d+)px/i);
+    const isSmall = fontSize && parseInt(fontSize[1]) <= 13;
+    const hasFooterWords = text.includes('abmeld') || text.includes('unsubscribe') ||
+                           text.includes('impressum') || text.includes('datenschutz') ||
+                           text.includes('privacy') || text.includes('erhalten diese');
+    return hasFooterWords && (isSmall || text.length < 500);
+}
+
+function parseFooter(cell) {
+    const data = { ...BLOCK_DEFS.footer.defaults };
+    const style = cell.getAttribute('style') || '';
+
+    // Background
+    const bgMatch = style.match(/background-color:\s*([^;]+)/i);
+    if (bgMatch) {
+        const c = normalizeColor(bgMatch[1].trim());
+        if (c) data.bgColor = c;
+    }
+
+    // Text color
+    const colorMatch = style.match(/color:\s*([^;]+)/i);
+    if (colorMatch) {
+        const c = normalizeColor(colorMatch[1].trim());
+        if (c) data.textColor = c;
+    }
+
+    // Font size
+    const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
+    if (sizeMatch) data.fontSize = sizeMatch[1];
+
+    // Find links
+    const links = cell.querySelectorAll('a[href]');
+    links.forEach(a => {
+        const text = a.textContent.trim().toLowerCase();
+        const href = a.getAttribute('href') || '#';
+        if (text.includes('abmeld') || text.includes('unsubscribe')) {
+            data.unsubscribeText = a.textContent.trim();
+            data.unsubscribeLink = href;
+        } else if (text.includes('impressum') || text.includes('imprint')) {
+            data.imprintText = a.textContent.trim();
+            data.imprintLink = href;
+        }
+    });
+
+    // Text (exclude links text approach - just use full text)
+    const paragraphs = cell.querySelectorAll('p');
+    if (paragraphs.length > 0) {
+        // Use first paragraph as main footer text
+        const firstP = paragraphs[0].textContent.trim();
+        if (firstP) data.text = firstP;
+    } else {
+        data.text = cell.textContent.trim().substring(0, 200);
+    }
+
+    return { type: 'footer', data: data };
+}
+
+function parseMultiColumn(cells, row) {
+    // Check if it's an image+text layout (2 cells: one with image, one with text)
+    if (cells.length === 2) {
+        const cell1Img = cells[0].querySelector('img:not([width="1"])');
+        const cell2Img = cells[1].querySelector('img:not([width="1"])');
+        const cell1Text = cells[0].textContent.trim();
+        const cell2Text = cells[1].textContent.trim();
+
+        // Image + Text pattern
+        if (cell1Img && cell2Text.length > 20 && cell1Text.length < 10) {
+            return createImageTextBlock(cells[0], cells[1], 'left');
+        }
+        if (cell2Img && cell1Text.length > 20 && cell2Text.length < 10) {
+            return createImageTextBlock(cells[1], cells[0], 'right');
+        }
+    }
+
+    // Generic column layout
+    const count = Math.min(cells.length, 3);
+    if (count < 2) return null;
+
+    const data = { ...BLOCK_DEFS.columns.defaults, count: String(count) };
+
+    for (let i = 0; i < count; i++) {
+        const cell = cells[i];
+        const idx = i + 1;
+        const img = cell.querySelector('img:not([width="1"])');
+        const heading = cell.querySelector('h1, h2, h3, h4');
+        const paragraphs = cell.querySelectorAll('p');
+
+        if (img) data['col' + idx + 'ImageSrc'] = img.getAttribute('src') || '';
+        if (img) data['col' + idx + 'ImageAlt'] = img.getAttribute('alt') || '';
+        if (heading) data['col' + idx + 'Heading'] = heading.textContent.trim();
+
+        let textParts = [];
+        paragraphs.forEach(p => {
+            const t = p.textContent.trim();
+            if (t && t !== (heading ? heading.textContent.trim() : '')) textParts.push(t);
+        });
+        if (textParts.length === 0 && !heading) {
+            let t = cell.textContent.trim();
+            if (t.length > 0) textParts.push(t);
+        }
+        data['col' + idx + 'Text'] = textParts.join('\n');
+
+        const link = cell.querySelector('a[href]');
+        if (link) data['col' + idx + 'Link'] = link.getAttribute('href') || '';
+    }
+
+    // Extract styles
+    const firstCell = cells[0];
+    const cStyle = firstCell.getAttribute('style') || '';
+    const hEl = firstCell.querySelector('h1,h2,h3,h4');
+    if (hEl) {
+        const hStyle = hEl.getAttribute('style') || '';
+        const sizeMatch = hStyle.match(/font-size:\s*(\d+)px/i);
+        if (sizeMatch) data.headingSize = sizeMatch[1];
+        const colorMatch = hStyle.match(/color:\s*([^;]+)/i);
+        if (colorMatch) { const c = normalizeColor(colorMatch[1].trim()); if (c) data.headingColor = c; }
+    }
+
+    return { type: 'columns', data: data };
+}
+
+function createImageTextBlock(imgCell, textCell, imagePosition) {
+    const img = imgCell.querySelector('img');
+    const data = { ...BLOCK_DEFS['image-text'].defaults };
+    data.imagePosition = imagePosition;
+
+    if (img) {
+        data.imageSrc = img.getAttribute('src') || '';
+        data.imageAlt = img.getAttribute('alt') || '';
+        data.imageWidth = img.getAttribute('width') || '200';
+        const link = img.closest('a');
+        if (link) data.imageLink = link.getAttribute('href') || '';
+    }
+
+    const heading = textCell.querySelector('h1, h2, h3, h4');
+    if (heading) {
+        data.heading = heading.textContent.trim();
+        const hStyle = heading.getAttribute('style') || '';
+        const sizeMatch = hStyle.match(/font-size:\s*(\d+)px/i);
+        if (sizeMatch) data.headingSize = sizeMatch[1];
+    }
+
+    const paragraphs = textCell.querySelectorAll('p');
+    let textParts = [];
+    paragraphs.forEach(p => {
+        const t = p.textContent.trim();
+        if (t && t !== data.heading) textParts.push(t);
+    });
+    if (textParts.length === 0) {
+        let t = textCell.textContent.trim();
+        if (data.heading) t = t.replace(data.heading, '').trim();
+        if (t) textParts.push(t);
+    }
+    data.text = textParts.join('\n');
+
+    return { type: 'image-text', data: data };
+}
+
+function detectSocialLinks(links) {
+    const socialMap = {
+        facebook: /facebook\.com|fb\.com/i,
+        instagram: /instagram\.com/i,
+        linkedin: /linkedin\.com/i,
+        twitter: /twitter\.com|x\.com/i,
+        youtube: /youtube\.com|youtu\.be/i,
+        tiktok: /tiktok\.com/i
+    };
+    const result = {};
+    let socialCount = 0;
+
+    links.forEach(a => {
+        const href = a.getAttribute('href') || '';
+        for (const [platform, regex] of Object.entries(socialMap)) {
+            if (regex.test(href)) {
+                result[platform] = href;
+                socialCount++;
+            }
+        }
+    });
+
+    if (socialCount >= 2) {
+        return result;
+    }
+    return null;
+}
+
+function normalizeColor(colorStr) {
+    if (!colorStr) return null;
+    colorStr = colorStr.trim();
+    // Already hex
+    if (/^#[0-9a-fA-F]{6}$/.test(colorStr)) return colorStr;
+    if (/^#[0-9a-fA-F]{3}$/.test(colorStr)) {
+        return '#' + colorStr[1] + colorStr[1] + colorStr[2] + colorStr[2] + colorStr[3] + colorStr[3];
+    }
+    // rgb()
+    const rgbMatch = colorStr.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+    if (rgbMatch) {
+        const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+        const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+        const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+        return '#' + r + g + b;
+    }
+    // Named colors (common ones)
+    const named = { white: '#ffffff', black: '#000000', red: '#ff0000', blue: '#0000ff', green: '#008000', gray: '#808080', grey: '#808080', transparent: null };
+    if (named[colorStr.toLowerCase()] !== undefined) return named[colorStr.toLowerCase()];
+    return null;
 }
 
 // ===========================
