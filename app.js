@@ -2899,7 +2899,20 @@ class TemplateProcessor {
             
             props.width = parseInt((style.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
             const heightMatch = style.match(/height\s*:\s*(\d+)/i);
-            props.height = heightMatch ? parseInt(heightMatch[1]) : (parseInt((style.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12') * 2 + 20);
+            // Auch Parent-TD height-Attribut prüfen (z.B. <td height="48">)
+            let tdHeight = 0;
+            if (cta.index > 0) {
+                const beforeBtn = this.html.substring(Math.max(0, cta.index - 300), cta.index);
+                const tdHeightMatch = beforeBtn.match(/<td[^>]*\sheight\s*=\s*["']?(\d+)/i);
+                if (tdHeightMatch) tdHeight = parseInt(tdHeightMatch[1]);
+            }
+            if (heightMatch) {
+                props.height = parseInt(heightMatch[1]);
+            } else if (tdHeight > 0) {
+                props.height = tdHeight; // Nutze TD-Höhe als beste Referenz
+            } else {
+                props.height = (parseInt((style.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12') * 2 + 20);
+            }
             props.borderRadius = parseInt((style.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
             props.fontSize = parseInt((style.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
             props.fontFamily = ((style.match(/font-family\s*:\s*([^;'"]+)/i) || [])[1] || 'Arial').trim().split(',')[0].replace(/['"]/g, '');
@@ -2914,14 +2927,15 @@ class TemplateProcessor {
         // Höhe intelligent berechnen wenn Text lang ist
         let height = props.height;
         if (props.text && props.width && props.fontSize) {
-            // Schätze Zeichenbreite: ~0.6 × fontSize für Durchschnittsbuchstaben
-            const charWidth = props.fontSize * 0.6;
-            const availWidth = props.width - 40; // Padding abziehen
+            // Schätze Zeichenbreite: ~0.48 × fontSize für Arial-Durchschnitt
+            // (0.6 war zu hoch und führte zu falscher Mehrzeiligkeits-Erkennung)
+            const charWidth = props.fontSize * 0.48;
+            const availWidth = props.width - 20; // Minimal-Padding abziehen
             const charsPerLine = Math.max(1, Math.floor(availWidth / charWidth));
             const cleanText = props.text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '');
             const estimatedLines = Math.ceil(cleanText.length / charsPerLine);
             const lineHeight = props.fontSize * 1.3;
-            const minHeight = Math.ceil(estimatedLines * lineHeight + 20); // +20 für VML-Padding
+            const minHeight = Math.ceil(estimatedLines * lineHeight + 16); // +16 für VML-Padding
             if (minHeight > height) {
                 height = minHeight;
             }
@@ -3676,7 +3690,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.13-2026-02-27';
+const APP_VERSION = 'v3.8.15-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -7897,7 +7911,8 @@ td[width] { width: auto !important; }
                 groupLinks.forEach(link => {
                     // Prüfe ob der Link problematisch ist (leer, nur Whitespace, nur #)
                     const isEmptyHref = !link.href || link.href.trim() === '' || link.href.trim() === '#';
-                    const cardClass = isEmptyHref ? 'link-card link-card-warning' : 'link-card';
+                    const isPlaceholderHref = /^#[A-Z]/.test((link.href || '').trim()); // z.B. #AMEX, #PLACEHOLDER
+                    const cardClass = (isEmptyHref || isPlaceholderHref) ? 'link-card link-card-warning' : 'link-card';
                     
                     html += '<div class="' + cardClass + '" data-link-id="' + link.id + '">';
                     
@@ -7907,6 +7922,8 @@ td[width] { width: auto !important; }
                     html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
                     if (isEmptyHref) {
                         html += '<span class="link-card-warning-badge">⚠ Leerer Link</span>';
+                    } else if (isPlaceholderHref) {
+                        html += '<span class="link-card-warning-badge">⚠ Platzhalter</span>';
                     }
                     html += '</div>';
                     
@@ -7916,6 +7933,8 @@ td[width] { width: auto !important; }
                     // URL (bei leerem href deutliche Anzeige)
                     if (isEmptyHref) {
                         html += '<div class="link-card-url link-card-url-empty">⚠ href ist leer – Versandsystem belegt diesen Link ggf. automatisch mit Redirect!</div>';
+                    } else if (isPlaceholderHref) {
+                        html += '<div class="link-card-url link-card-url-empty">⚠ Platzhalter-Link (' + escapeHtml(link.href) + ') – muss durch echte URL ersetzt werden!</div>';
                     } else {
                         html += '<div class="link-card-url" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</div>';
                     }
@@ -8003,19 +8022,53 @@ td[width] { width: auto !important; }
         const anchors = doc.querySelectorAll('a[href]');
         
         const links = [];
-        anchors.forEach((anchor, index) => {
+        let globalIndex = 0;
+        
+        anchors.forEach((anchor) => {
             const href = anchor.getAttribute('href');
             const text = anchor.textContent.trim() || '[ohne Text]';
-            const id = 'L' + String(index + 1).padStart(3, '0');
+            const id = 'L' + String(++globalIndex).padStart(3, '0');
             
             links.push({
                 id: id,
                 text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-                href: href
+                href: href,
+                source: 'html'
             });
         });
         
-        console.log('[INSPECTOR] Extracted ' + links.length + ' links');
+        // Auch Links aus MSO Conditional Comments extrahieren (VML-Buttons, etc.)
+        // Diese wurden von protectMsoStyles in _ccBlockStore versteckt
+        if (_ccBlockStore && _ccBlockStore.length > 0) {
+            _ccBlockStore.forEach((block, blockIdx) => {
+                // Suche href="..." in VML-Elementen (v:roundrect, v:rect, etc.) und <a> Tags
+                const hrefPattern = /(?:<v:[^>]*|<a[^>]*)\shref\s*=\s*["']([^"']+)["']/gi;
+                let match;
+                while ((match = hrefPattern.exec(block)) !== null) {
+                    const href = match[1];
+                    // Duplikat-Check: gleiche URL schon in der Liste?
+                    const alreadyExists = links.some(l => l.href === href && l.source === 'html');
+                    
+                    // Text aus dem Block extrahieren (z.B. aus <center>...</center>)
+                    let text = '[MSO/Outlook]';
+                    const centerMatch = block.match(/<center[^>]*>([\s\S]*?)<\/center>/i);
+                    if (centerMatch) {
+                        text = centerMatch[1].replace(/<[^>]*>/g, '').trim() || text;
+                    }
+                    
+                    const id = 'L' + String(++globalIndex).padStart(3, '0');
+                    links.push({
+                        id: id,
+                        text: (text.substring(0, 40) + (text.length > 40 ? '...' : '') + ' [MSO]'),
+                        href: href,
+                        source: 'mso',
+                        ccBlockIdx: blockIdx
+                    });
+                }
+            });
+        }
+        
+        console.log('[INSPECTOR] Extracted ' + links.length + ' links (incl. MSO)');
         return links;
     }
     
@@ -8269,24 +8322,54 @@ td[width] { width: auto !important; }
         // linkId = "L001" → Index 0, "L002" → Index 1, etc.
         const linkIndex = parseInt(linkId.substring(1)) - 1;
         
+        // Bestimme ob es ein MSO-Link ist (über die aktuelle Linkliste)
+        const currentLinks = extractLinksFromHTML(trackingTabHtml);
+        const targetLink = currentLinks[linkIndex];
+        
+        if (!targetLink) {
+            showInspectorToast('⚠️ Link nicht gefunden');
+            return;
+        }
+        
         // Speichere in History
         trackingHistory.push(trackingTabHtml);
         
         let html = trackingTabHtml;
         let replaced = false;
-        let currentIdx = 0;
         
-        // Finde alle <a> Tags mit href und ersetze den N-ten
-        html = html.replace(/<a\b([^>]*href\s*=\s*)(["'])([^"']*)\2/gi, (match, before, quote, oldHref) => {
-            if (currentIdx === linkIndex) {
+        if (targetLink.source === 'mso') {
+            // MSO-Link: href im rohen HTML ersetzen (innerhalb von Conditional Comments)
+            // Die VML-Elemente stehen als Klartext im HTML (nicht in _ccBlockStore, 
+            // da trackingTabHtml den ungeschützten Stand enthält)
+            const oldHref = targetLink.href;
+            const escapedOldHref = oldHref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            // Ersetze href in v:roundrect, v:rect und ähnlichen VML-Elementen
+            const vmlHrefRegex = new RegExp('(<v:[^>]*\\shref\\s*=\\s*["\'])' + escapedOldHref + '(["\'])', 'gi');
+            const newHtml = html.replace(vmlHrefRegex, '$1' + newHref + '$2');
+            
+            if (newHtml !== html) {
+                html = newHtml;
                 replaced = true;
-                currentIdx++;
-                console.log('[INSPECTOR] Link ' + linkId + ' replaced:', oldHref.substring(0, 50), '->', newHref.substring(0, 50));
-                return '<a' + before + quote + newHref + quote;
+                console.log('[INSPECTOR] MSO Link ' + linkId + ' replaced:', oldHref.substring(0, 50), '->', newHref.substring(0, 50));
             }
-            currentIdx++;
-            return match;
-        });
+        } else {
+            // Normaler <a>-Link: N-ten <a href> im HTML ersetzen
+            // Zähle nur HTML-Links (nicht MSO) für den Index
+            const htmlLinkIndex = currentLinks.slice(0, linkIndex).filter(l => l.source === 'html').length;
+            let currentIdx = 0;
+            
+            html = html.replace(/<a\b([^>]*href\s*=\s*)(["'])([^"']*)\2/gi, (match, before, quote, oldHref) => {
+                if (currentIdx === htmlLinkIndex) {
+                    replaced = true;
+                    currentIdx++;
+                    console.log('[INSPECTOR] Link ' + linkId + ' replaced:', oldHref.substring(0, 50), '->', newHref.substring(0, 50));
+                    return '<a' + before + quote + newHref + quote;
+                }
+                currentIdx++;
+                return match;
+            });
+        }
         
         if (replaced) {
             trackingTabHtml = html;
@@ -11365,7 +11448,16 @@ td[width] { width: auto !important; }
             const textColor = normalizeHex(colorMatch ? colorMatch[1] : 'ffffff');
             const width = parseInt((style.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
             let height = parseInt((style.match(/height\s*:\s*(\d+)/i) || [])[1] || '0');
-            if (!height) { const padV = parseInt((style.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12'); height = padV * 2 + 20; }
+            if (!height) {
+                // Prüfe Parent-TD height-Attribut als Fallback
+                const beforeBtn = html.substring(Math.max(0, match.index - 300), match.index);
+                const tdHeightMatch = beforeBtn.match(/<td[^>]*\sheight\s*=\s*["']?(\d+)/i);
+                if (tdHeightMatch) {
+                    height = parseInt(tdHeightMatch[1]);
+                } else {
+                    const padV = parseInt((style.match(/padding\s*:\s*(\d+)/i) || [])[1] || '12'); height = padV * 2 + 20;
+                }
+            }
             const borderRadius = parseInt((style.match(/border-radius\s*:\s*(\d+)/i) || [])[1] || '0');
             const fontSize = parseInt((style.match(/font-size\s*:\s*(\d+)/i) || [])[1] || '16');
             
