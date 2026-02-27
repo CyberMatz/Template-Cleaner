@@ -3690,7 +3690,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.15-2026-02-27';
+const APP_VERSION = 'v3.8.16-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4407,6 +4407,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
             const newName = `${baseName}_optimized.${extension}`;
+            // Sicherheitsnetz: &amp; in href/src zurück zu & konvertieren
+            // (Versandsysteme lesen URLs oft als Rohtext ohne HTML-Dekodierung)
+            downloadHtml = downloadHtml.replace(/(href|src|action)\s*=\s*"([^"]*)"/gi, (match, attr, url) => {
+                if (/&amp;/.test(url)) {
+                    return attr + '="' + url.replace(/&amp;/g, '&') + '"';
+                }
+                return match;
+            });
+            
             downloadFile(downloadHtml, newName, 'text/html');
         }
     });
@@ -4758,6 +4767,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (/:\s*0px/i.test(styleContent)) {
                 const fixed = styleContent.replace(/:\s*0px\b/gi, ': 0');
                 return 'style="' + fixed + '"';
+            }
+            return match;
+        });
+        
+        // 7. &amp; in href/src Attributen zurück zu & konvertieren
+        // DOMParser wandelt & → &amp; in allen Attributen um (korrektes HTML),
+        // aber Versandsysteme (z.B. kreditpilot) lesen URLs oft als Rohtext
+        // ohne HTML-Dekodierung. Dann wird &amp;kid=... statt &kid=... an den
+        // Redirect-Server weitergegeben → URL bricht.
+        // FIX: In href und src Attributen &amp; zurück zu & wandeln.
+        raw = raw.replace(/(href|src|action)\s*=\s*"([^"]*)"/gi, (match, attr, url) => {
+            if (/&amp;/.test(url)) {
+                const fixed = url.replace(/&amp;/g, '&');
+                return attr + '="' + fixed + '"';
             }
             return match;
         });
