@@ -471,9 +471,39 @@ class TemplateProcessor {
             
         } else if (preheaderCount === 0) {
             if (this.preheaderText) {
-                const insertPos = bodyEndPos;
+                // Preheader muss VOR %header% stehen, damit E-Mail-Clients ihn als Vorschau lesen
+                // Prüfe ob %header% nach <body> kommt
+                let insertPos = bodyEndPos;
+                const afterBody = this.html.slice(bodyEndPos);
+                const headerPlaceholderIdx = afterBody.indexOf('%header%');
+                
+                if (headerPlaceholderIdx > -1) {
+                    // %header% gefunden → suche den umgebenden Container (table/td/div) rückwärts
+                    const beforeHeader = afterBody.substring(0, headerPlaceholderIdx);
+                    // Finde den äußersten öffnenden Container-Tag vor %header%
+                    // z.B. <table...><tr><td>%header% → insertPos = vor <table
+                    const lastTableOpen = beforeHeader.lastIndexOf('<table');
+                    const lastDivOpen = beforeHeader.lastIndexOf('<div');
+                    const containerStart = Math.max(lastTableOpen, lastDivOpen);
+                    
+                    if (containerStart > -1) {
+                        // Prüfe ob zwischen <body> und dem Container nur Whitespace/Kommentare/Tracking-Pixel ist
+                        const beforeContainer = beforeHeader.substring(0, containerStart);
+                        const stripped = beforeContainer
+                            .replace(/<!--[\s\S]*?-->/g, '')
+                            .replace(/<img[^>]*>/gi, '')  // Tracking-Pixel ignorieren
+                            .replace(/\s+/g, '')
+                            .trim();
+                        
+                        if (stripped.length === 0) {
+                            // Container mit %header% ist direkt nach <body> → Preheader davor einfügen
+                            insertPos = bodyEndPos + containerStart;
+                        }
+                    }
+                }
+                
                 this.html = this.html.slice(0, insertPos) + '\n' + this._buildPreheaderHtml(this.preheaderText) + '\n' + this.html.slice(insertPos);
-                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (direkt nach <body>)');
+                this.addCheck(id, 'FIXED', 'Pre-Header eingefügt (direkt nach <body>, vor %header%)');
             } else {
                 this.addCheck(id, 'PASS', 'Pre-Header nicht vorhanden (optional, kein Text angegeben)');
             }
@@ -3690,7 +3720,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.16-2026-02-27';
+const APP_VERSION = 'v3.8.17-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4407,6 +4437,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
             const newName = `${baseName}_optimized.${extension}`;
+            // Sicherheitsnetz: Preheader muss VOR %header% stehen
+            // (Manche Verarbeitungsschritte können die Reihenfolge ändern)
+            const preheaderMatch = downloadHtml.match(/<div[^>]*style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"[^>]*>[\s\S]*?<\/div>/i);
+            const headerIdx = downloadHtml.indexOf('%header%');
+            if (preheaderMatch && headerIdx > -1) {
+                const preheaderIdx = downloadHtml.indexOf(preheaderMatch[0]);
+                if (preheaderIdx > headerIdx) {
+                    // Preheader steht NACH %header% → verschieben
+                    // 1. Preheader entfernen
+                    downloadHtml = downloadHtml.replace(preheaderMatch[0], '');
+                    // 2. Vor %header%-Container einfügen
+                    const newHeaderIdx = downloadHtml.indexOf('%header%');
+                    const beforeHeader = downloadHtml.substring(0, newHeaderIdx);
+                    const lastTableOpen = beforeHeader.lastIndexOf('<table');
+                    if (lastTableOpen > -1) {
+                        downloadHtml = downloadHtml.slice(0, lastTableOpen) + preheaderMatch[0] + '\n' + downloadHtml.slice(lastTableOpen);
+                    }
+                    console.log('[DOWNLOAD] Preheader vor %header% verschoben');
+                }
+            }
+            
             // Sicherheitsnetz: &amp; in href/src zurück zu & konvertieren
             // (Versandsysteme lesen URLs oft als Rohtext ohne HTML-Dekodierung)
             downloadHtml = downloadHtml.replace(/(href|src|action)\s*=\s*"([^"]*)"/gi, (match, attr, url) => {
