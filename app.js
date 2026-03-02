@@ -2572,9 +2572,27 @@ class TemplateProcessor {
                 
                 // Prüfe ob der HTML-Button bereits in <!--[if !mso]> gewrapped ist
                 // Varianten: <!--[if !mso]><!--> und <!--[if !mso]><!-- --> (mit Leerzeichen)
+                // WICHTIG: Lookback muss groß genug sein, da der !mso Wrapper vor dem
+                // Parent-Element (z.B. <span> mit langem style-Attribut) stehen kann.
+                // Bei smava-Templates: ~200 Zeichen Abstand zwischen !mso und <a>.
                 const ctaStart = cta.containerIndex || cta.index;
-                const beforeCtaCheck = this.html.substring(Math.max(0, ctaStart - 80), ctaStart);
-                if (!/<!--\[if\s+!mso[^\]]*\]><!--(?:\s*-->|>)/i.test(beforeCtaCheck)) {
+                const beforeCtaCheck = this.html.substring(Math.max(0, ctaStart - 500), ctaStart);
+                // Suche den LETZTEN !mso Opener im Lookback
+                const nmoOpenerMatch = beforeCtaCheck.match(/<!--\[if\s+!mso[^\]]*\]><!--(?:\s*-->|>)/gi);
+                let alreadyWrapped = false;
+                
+                if (nmoOpenerMatch) {
+                    // Prüfe ob der letzte Opener noch offen ist (kein Closer dazwischen)
+                    const lastOpener = nmoOpenerMatch[nmoOpenerMatch.length - 1];
+                    const lastOpenerPos = beforeCtaCheck.lastIndexOf(lastOpener);
+                    const afterOpener = beforeCtaCheck.substring(lastOpenerPos + lastOpener.length);
+                    // Wenn kein <!--<![endif]--> zwischen Opener und CTA → Button ist bereits gewrapped
+                    if (!/<!--<!\[endif\]-->/i.test(afterOpener)) {
+                        alreadyWrapped = true;
+                    }
+                }
+                
+                if (!alreadyWrapped) {
                     // !mso Wrapper fehlt → hinzufügen damit Outlook nur VML zeigt
                     const notMsoOpen = '<!--[if !mso]><!-->\n';
                     const notMsoClose = '\n<!--<![endif]-->';
@@ -3721,7 +3739,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.26-2026-02-27';
+const APP_VERSION = 'v3.8.27-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4929,6 +4947,36 @@ document.addEventListener('DOMContentLoaded', () => {
         let finalContent = content;
         if (mimeType === 'text/html') {
             finalContent = stripCmsArtifacts(content);
+            
+            // Sicherheitsnetz: CC-Blöcke INNERHALB von style-Attributen reparieren
+            // Bug: Manchmal landen <!--[if !mso]><!--> oder <!--<![endif]--> 
+            // versehentlich innerhalb von style="..." und spalten CSS-Properties.
+            // z.B. border-w<!--[if !mso]><!-->\nidth:0px → border-width:0px
+            let ccRepairCount = 0;
+            finalContent = finalContent.replace(/style="([^"]*)"/gi, function(match, styleContent) {
+                if (/<!--/.test(styleContent)) {
+                    // CC-Patterns aus Style entfernen + Whitespace/Newlines um sie herum
+                    let fixed = styleContent;
+                    fixed = fixed.replace(/\s*<!--\[if\s+!mso[^\]]*\]><!--[\s]*-->\s*/gi, '');
+                    fixed = fixed.replace(/\s*<!--\[if\s+!mso[^\]]*\]><!-->\s*/gi, '');
+                    fixed = fixed.replace(/\s*<!--<!\[endif\]-->\s*/gi, '');
+                    fixed = fixed.replace(/\s*<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->\s*/gi, '');
+                    // Doppelte Semikolons bereinigen
+                    fixed = fixed.replace(/;{2,}/g, ';');
+                    // Newlines entfernen (sollten nicht in style sein)
+                    fixed = fixed.replace(/\n/g, '');
+                    if (fixed !== styleContent) {
+                        ccRepairCount++;
+                        console.log('[DOWNLOAD] CC-Block aus style-Attribut repariert');
+                    }
+                    return 'style="' + fixed + '"';
+                }
+                return match;
+            });
+            
+            if (ccRepairCount > 0) {
+                console.warn('[DOWNLOAD] ' + ccRepairCount + ' style-Attribute mit CC-Blöcken repariert');
+            }
         }
         const blob = new Blob([finalContent], { type: mimeType });
         const url = URL.createObjectURL(blob);
