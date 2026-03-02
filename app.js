@@ -3720,7 +3720,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.20-2026-02-27';
+const APP_VERSION = 'v3.8.21-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6684,13 +6684,41 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentInspectorTab === 'editor' && editorTabHtml) {
                 const r = findElementByQaNodeId(editorTabHtml, event.data.qaNodeId);
                 if (r) {
-                    // Ersetze das Element mit dem aktualisierten HTML aus dem iframe
-                    const tmp = new DOMParser().parseFromString(protectMsoStyles(event.data.outerHTML), 'text/html');
-                    const updatedEl = tmp.body.firstChild;
-                    if (updatedEl) {
-                        // Übertrage den neuen innerHTML (ohne qa-node-id Manipulationen)
-                        r.element.innerHTML = updatedEl.innerHTML;
+                    // innerHTML aus dem outerHTML extrahieren
+                    // WICHTIG: DOMParser zerstört <td>/<tr> ohne <table>-Kontext!
+                    // Daher innerHTML per Regex extrahieren statt DOMParser
+                    const outerHTML = event.data.outerHTML;
+                    let newInnerHTML = null;
+                    
+                    // innerHTML zwischen erstem > und letztem </ extrahieren
+                    const innerMatch = outerHTML.match(/^<[^>]+>([\s\S]*)<\/[^>]+>$/);
+                    if (innerMatch) {
+                        newInnerHTML = innerMatch[1];
+                    } else {
+                        // Fallback: DOMParser mit Table-Wrapper für td/tr
+                        const tagName = r.element.tagName.toLowerCase();
+                        let wrappedHtml = outerHTML;
+                        if (tagName === 'td' || tagName === 'th') {
+                            wrappedHtml = '<table><tr>' + outerHTML + '</tr></table>';
+                        } else if (tagName === 'tr') {
+                            wrappedHtml = '<table>' + outerHTML + '</table>';
+                        }
+                        const tmp = new DOMParser().parseFromString(protectMsoStyles(wrappedHtml), 'text/html');
+                        const updatedEl = tmp.querySelector(tagName);
+                        if (updatedEl && typeof updatedEl.innerHTML === 'string') {
+                            newInnerHTML = updatedEl.innerHTML;
+                        }
+                    }
+                    
+                    if (typeof newInnerHTML === 'string') {
+                        // qa-* Attribute aus innerHTML entfernen (kommen aus dem iframe)
+                        newInnerHTML = newInnerHTML.replace(/\s*data-qa-[a-z-]+="[^"]*"/gi, '');
+                        newInnerHTML = newInnerHTML.replace(/\s*contenteditable="[^"]*"/gi, '');
+                        newInnerHTML = newInnerHTML.replace(/\s*class="qa-[^"]*"/gi, '');
+                        r.element.innerHTML = newInnerHTML;
                         editorTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(r.doc);
+                    } else {
+                        console.warn('[PLACEHOLDER_DONE] innerHTML konnte nicht extrahiert werden');
                     }
                 }
                 setEditorPending(true);
