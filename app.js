@@ -3720,7 +3720,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.19-2026-02-27';
+const APP_VERSION = 'v3.8.20-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -13649,16 +13649,34 @@ td[width] { width: auto !important; }
             html += '<h4>🎯 Platzhalter einfügen</h4>';
             html += '<p style="color:#888;font-size:12px;margin:0 0 8px">Wird an das ausgewählte Element angehängt.</p>';
             const placeholders = [
-                '%anrede%','%titel%','%vorname%','%nachname%','%firma%',
-                '%strasse%','%plz%','%ort%','%land%','%email%',
-                '%telefon%','%geburtsdatum%','%kundennummer%','%vertragsnummer%',
-                '%rechnungsnummer%','%datum%','%betrag%','%waehrung%',
-                '%produkt%','%menge%','%lieferdatum%','%tracking%','%link%'
+                { ph: '%vorname%', ex: 'Manfred' },
+                { ph: '%nachname%', ex: 'Mustermann' },
+                { ph: '%anrede%', ex: 'Herr/Frau' },
+                { ph: '%briefanredeGeehrte%', ex: 'Sehr geehrte/r Herr/Frau Nachname' },
+                { ph: '%briefanredeLiebe%', ex: 'Liebe/r Herr/Frau Nachname' },
+                { ph: '%anredeLiebeBlanko%', ex: 'Liebe/r' },
+                { ph: '%anredeLiebeblankoklein%', ex: 'liebe/r' },
+                { ph: '%anredeGeehrteVN%', ex: 'Sehr geehrter Torsten Dressel' },
+                { ph: '%anredeFR%', ex: 'Monsieur / Madame' },
+                { ph: '%email%', ex: 'max.mustermann@muster.de' },
+                { ph: '%strasse%', ex: 'Musterstrasse' },
+                { ph: '%plz%', ex: '63069' },
+                { ph: '%ort%', ex: 'Fürth (kein Fallback → LEER)' },
+                { ph: '%client_ort%', ex: 'Fürth (Fallback → "Ihrer Nähe")' },
+                { ph: '%client_de_ort%', ex: 'in Fürth' },
+                { ph: '%client_ort_ihre_stadt%', ex: 'Fürth | Ihre Stadt' },
+                { ph: '%client_ort_ihrer_stadt%', ex: 'Fürth | Ihrer Stadt' },
+                { ph: '%bundesland%', ex: 'Bayern' },
+                { ph: '%land%', ex: 'de' },
+                { ph: '%geburtstag%', ex: '27.03.1981' },
+                { ph: '%aktuellesDatum%', ex: '18.06.2019' },
+                { ph: '%current_year%', ex: '2025' },
+                { ph: '%readonline%', ex: 'Readonline-Link' },
             ];
-            html += '<select id="editorPlaceholderSelect" class="editor-input">';
+            html += '<select id="editorPlaceholderSelect" class="editor-input" style="font-size:13px">';
             html += '<option value="">-- Platzhalter auswählen --</option>';
-            placeholders.forEach(function(ph) {
-                html += '<option value="' + escapeHtml(ph) + '">' + escapeHtml(ph) + '</option>';
+            placeholders.forEach(function(item) {
+                html += '<option value="' + escapeHtml(item.ph) + '">' + escapeHtml(item.ph) + '  →  ' + escapeHtml(item.ex) + '</option>';
             });
             html += '</select>';
             html += '<button id="editorInsertPlaceholder" class="btn-editor-primary" style="margin-top:8px;width:100%">➕ Einfügen</button>';
