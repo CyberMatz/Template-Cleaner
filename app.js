@@ -2571,9 +2571,10 @@ class TemplateProcessor {
                 }
                 
                 // Prüfe ob der HTML-Button bereits in <!--[if !mso]> gewrapped ist
+                // Varianten: <!--[if !mso]><!--> und <!--[if !mso]><!-- --> (mit Leerzeichen)
                 const ctaStart = cta.containerIndex || cta.index;
                 const beforeCtaCheck = this.html.substring(Math.max(0, ctaStart - 80), ctaStart);
-                if (!/<!--\[if\s+!mso\]><!-->/i.test(beforeCtaCheck)) {
+                if (!/<!--\[if\s+!mso[^\]]*\]><!--(?:\s*-->|>)/i.test(beforeCtaCheck)) {
                     // !mso Wrapper fehlt → hinzufügen damit Outlook nur VML zeigt
                     const notMsoOpen = '<!--[if !mso]><!-->\n';
                     const notMsoClose = '\n<!--<![endif]-->';
@@ -3720,7 +3721,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.21-2026-02-27';
+const APP_VERSION = 'v3.8.22-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4462,13 +4463,24 @@ document.addEventListener('DOMContentLoaded', () => {
             // (Legacy) DOMParser kann <ins>-Placeholders zu &lt;ins HTML-encodieren
             downloadHtml = downloadHtml.replace(/&lt;ins\s+data-cc-idx[^>]*&gt;/gi, '');
             downloadHtml = downloadHtml.replace(/&lt;\s*ins\s+data-cc-idx[^>]*&gt;/gi, '');
-            // Verbliebene CC-Kommentar-Placeholders wiederherstellen
+            // Verbliebene <tr>-Block-Placeholders wiederherstellen
+            downloadHtml = downloadHtml.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
+                const idx = parseInt(idxStr);
+                if (idx >= 0 && idx < _ccBlockStore.length) {
+                    return _ccBlockStore[idx];
+                }
+                if (encoded) {
+                    try { return decodeURIComponent(encoded); } catch(e) {}
+                }
+                return '';
+            });
+            // Verbliebene CC-Kommentar-Placeholders wiederherstellen (Legacy v3.8.19)
             downloadHtml = downloadHtml.replace(/<!-- cc-nm([oc])-(\d+) -->/gi, (match, type, idxStr) => {
                 const idx = parseInt(idxStr);
                 if (idx >= 0 && idx < _ccBlockStore.length) {
                     return _ccBlockStore[idx];
                 }
-                return ''; // Entferne wenn Block nicht wiederherstellbar
+                return '';
             });
             // Aufräumen: verbliebene data-cc-* Attribute
             downloadHtml = downloadHtml.replace(/\s+data-cc-(?:open|close|idx)(?:-content)?="[^"]*"/gi, '');
@@ -4721,28 +4733,57 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mobile-Content (z.B. Mobile-Bilder) der sichtbar bleiben muss.
         result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
-        // 0b: Non-MSO Opener: <!--[if !mso]><!-- --> oder <!--[if !mso]><!-->
-        // Statt <ins>-Tags oder data-Attribute verwenden wir NORMALE HTML-Kommentare
-        // als Platzhalter. Diese überleben den DOMParser immer an exakter Position,
-        // im Gegensatz zu <ins>-Tags (die zwischen <tr> ungültig sind) oder
-        // data-Attributen (die bei DOM-Umstrukturierung verloren gehen können).
-        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, function(match) {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<!-- cc-nmo-' + idx + ' -->';
-        });
-        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, function(match) {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<!-- cc-nmo-' + idx + ' -->';
-        });
+        // 0b: Komplette Non-MSO Blöcke als Einheit schützen
+        // <!--[if !mso]><!-- -->INHALT<!--<![endif]--> → ein einziger Placeholder
+        // So kann DOMParser die Opener/Closer nicht trennen oder verschieben.
+        // 
+        // Variante 1: <!--[if !mso]><!-- --> (mit Leerzeichen)
+        // Variante 2: <!--[if !mso]><!--> (ohne Leerzeichen)
+        result = result.replace(
+            /<!--\[if\s+!mso[^\]]*\]><!--[\s]*-->([\s\S]*?)<!--<!\[endif\]-->/gi,
+            function(fullMatch) {
+                const idx = _ccBlockStore.length;
+                _ccBlockStore.push(fullMatch);
+                const encoded = encodeURIComponent(fullMatch);
+                
+                // Prüfe ob der Block zwischen Tabellenzeilen steht
+                // (vor dem Block kommt </tr>, nach dem Block kommt <tr>)
+                const posInResult = result.indexOf(fullMatch);
+                const before = result.substring(Math.max(0, posInResult - 50), posInResult);
+                const isBetweenRows = /<\/tr>\s*$/i.test(before);
+                
+                if (isBetweenRows) {
+                    // Zwischen Tabellenzeilen: <tr>-Wrapper damit DOMParser es nicht verschiebt
+                    return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
+                } else {
+                    // Innerhalb eines Elements (z.B. <td>): normaler <ins>-Placeholder
+                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
+                }
+            }
+        );
+        // Variante 2 Fallback
+        result = result.replace(
+            /<!--\[if\s+!mso[^\]]*\]><!-->([\s\S]*?)<!--<!\[endif\]-->/gi,
+            function(fullMatch) {
+                const idx = _ccBlockStore.length;
+                _ccBlockStore.push(fullMatch);
+                const encoded = encodeURIComponent(fullMatch);
+                const posInResult = result.indexOf(fullMatch);
+                const before = result.substring(Math.max(0, posInResult - 50), posInResult);
+                const isBetweenRows = /<\/tr>\s*$/i.test(before);
+                
+                if (isBetweenRows) {
+                    return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
+                } else {
+                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
+                }
+            }
+        );
         
-        // 0c: Non-MSO Closer: <!--<![endif]-->
-        result = result.replace(/<!--<!\[endif\]-->/gi, function(match) {
-            const idx = _ccBlockStore.length;
-            _ccBlockStore.push(match);
-            return '<!-- cc-nmc-' + idx + ' -->';
-        });
+        // 0c: Alleinstehende Non-MSO Opener/Closer (Fallback, falls Block-Match nicht greift)
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, ccPlaceholder);
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, ccPlaceholder);
+        result = result.replace(/<!--<!\[endif\]-->/gi, ccPlaceholder);
         
         // === SCHRITT 1: MSO-* Inline-Styles schützen ===
         result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
@@ -4828,19 +4869,30 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 3b: HTML-Kommentar-Placeholders für !mso Opener/Closer wiederherstellen
-        // Format: <!-- cc-nmo-N --> (non-mso-opener) und <!-- cc-nmc-N --> (non-mso-closer)
+        // 3b: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
+        raw = raw.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
+            const idx = parseInt(idxStr);
+            if (idx >= 0 && idx < _ccBlockStore.length) {
+                return _ccBlockStore[idx];
+            }
+            if (encoded) {
+                try { return decodeURIComponent(encoded); } catch(e) {}
+            }
+            console.warn('[safeDomSerialize] CC-Block-TR ' + idx + ' nicht gefunden');
+            return match;
+        });
+        
+        // 3c: Aufräumen - verbliebene cc-nmo/cc-nmc Kommentare (Legacy v3.8.19)
         raw = raw.replace(/<!-- cc-nm([oc])-(\d+) -->/gi, (match, type, idxStr) => {
             const idx = parseInt(idxStr);
             if (idx >= 0 && idx < _ccBlockStore.length) {
                 return _ccBlockStore[idx];
             }
-            console.warn('[safeDomSerialize] CC-Comment-Block ' + idx + ' nicht gefunden');
-            return match;
+            return '';
         });
         
-        // 3c: Aufräumen - verbliebene data-cc-* Attribute entfernen (Legacy-Cleanup)
-        raw = raw.replace(/\s+data-cc-(?:open|close)(?:-content)?="[^"]*"/gi, '');
+        // 3d: Aufräumen - verbliebene data-cc-* Attribute entfernen (Legacy-Cleanup)
+        raw = raw.replace(/\s+data-cc-(?:open|close|block-idx|block-content)(?:-content)?="[^"]*"/gi, '');
         
         // 4. Browser-eingefügte <tbody>/<\/tbody> entfernen
         // Browser fügt automatisch <tbody> in <table> ein – das verändert das Email-HTML
@@ -12618,11 +12670,13 @@ td[width] { width: auto !important; }
         if (btnPos >= 0) {
             // Prüfe ob der Button bereits einen !mso Wrapper hat
             const beforeBtn = html.substring(Math.max(0, btnPos - 80), btnPos);
-            const hasNotMsoWrapper = /<!--\[if\s+!mso\]><!-->/i.test(beforeBtn);
+            const hasNotMsoWrapper = /<!--\[if\s+!mso[^\]]*\]><!--(?:\s*-->|>)/i.test(beforeBtn);
             
             if (hasNotMsoWrapper) {
                 // Wrapper existiert bereits → VML VOR dem Wrapper einfügen
-                const wrapperPos = html.lastIndexOf('<!--[if !mso]><!-->', btnPos);
+                // Suche beide Varianten: mit und ohne Leerzeichen
+                let wrapperPos = html.lastIndexOf('<!--[if !mso]><!-->', btnPos);
+                if (wrapperPos < 0) wrapperPos = html.lastIndexOf('<!--[if !mso]><!-- -->', btnPos);
                 if (wrapperPos >= 0) {
                     html = html.substring(0, wrapperPos) + vml + html.substring(wrapperPos);
                 } else {
