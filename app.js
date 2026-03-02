@@ -3721,7 +3721,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.25-2026-02-27';
+const APP_VERSION = 'v3.8.26-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4742,64 +4742,28 @@ document.addEventListener('DOMContentLoaded', () => {
         result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
         // 0b: Non-MSO Blöcke schützen
-        // <!--[if !mso]><!-- -->INHALT<!--<![endif]--> 
-        // 
-        // Statt Wrapper-Elemente (<ins>) oder HTML-Kommentare zu verwenden,
-        // speichern wir den GESAMTEN Block im Store und markieren das ERSTE
-        // HTML-Element im Inhalt mit data-Attributen. So bleibt das Layout
-        // komplett unverändert, und wir können beim Export den Block rekonstruieren.
+        // <!--[if !mso]><!-- -->INHALT<!--<![endif]-->
         //
-        // Variante 1: <!--[if !mso]><!-- --> (mit Leerzeichen)
+        // KERN-PROBLEM: Wenn ein !mso-Block ZWISCHEN Tabellenzeilen steht,
+        // erzeugt ein <ins>-Placeholder ungültiges HTML → DOMParser-Kettenreaktion
+        // die ALLE Platzhalter im Dokument zerstört.
+        //
+        // LÖSUNG: Nur den between-rows-Fall als Gesamtblock schützen.
+        // Für inside-td-Fälle: separate Opener/Closer als <ins> (das funktioniert,
+        // solange kein between-rows-Block die DOM-Struktur zerstört).
+        
+        // Schritt 1: Komplette !mso-Blöcke ZWISCHEN Tabellenzeilen als Einheit ersetzen
+        // (Greedy-Match auf den gesamten Block: Opener + Inhalt + Closer)
         result = result.replace(
-            /<!--\[if\s+!mso[^\]]*\]><!--[\s]*-->([\s\S]*?)<!--<!\[endif\]-->/gi,
-            function(fullMatch, content) {
+            /(<\/tr>)\s*(<!--\[if\s+!mso[^\]]*\]><!--[\s]*-->[\s\S]*?<!--<!\[endif\]-->)\s*(<tr[\s>])/gi,
+            function(fullMatch, closeTr, ccBlock, openTr) {
                 const idx = _ccBlockStore.length;
-                _ccBlockStore.push(fullMatch);
-                const encoded = encodeURIComponent(fullMatch);
-                
-                // Prüfe ob der Block zwischen Tabellenzeilen steht
-                const posInResult = result.indexOf(fullMatch);
-                const before = result.substring(Math.max(0, posInResult - 50), posInResult);
-                const isBetweenRows = /<\/tr>\s*$/i.test(before);
-                
-                if (isBetweenRows) {
-                    // Zwischen Tabellenzeilen: unsichtbare <tr> als Platzhalter
-                    return '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>';
-                } else {
-                    // Innerhalb von <td>: data-Attribut auf erstes Element im Inhalt setzen
-                    // NUR den Index speichern (kein Content - der ist im _ccBlockStore)
-                    const taggedContent = content.replace(
-                        /^(\s*)(<[a-z][^>]*)(>)/i,
-                        '$1$2 data-cc-nmo-idx="' + idx + '"$3'
-                    );
-                    return taggedContent;
-                }
-            }
-        );
-        // Variante 2: <!--[if !mso]><!--> (ohne Leerzeichen)
-        result = result.replace(
-            /<!--\[if\s+!mso[^\]]*\]><!-->([\s\S]*?)<!--<!\[endif\]-->/gi,
-            function(fullMatch, content) {
-                const idx = _ccBlockStore.length;
-                _ccBlockStore.push(fullMatch);
-                const encoded = encodeURIComponent(fullMatch);
-                const posInResult = result.indexOf(fullMatch);
-                const before = result.substring(Math.max(0, posInResult - 50), posInResult);
-                const isBetweenRows = /<\/tr>\s*$/i.test(before);
-                
-                if (isBetweenRows) {
-                    return '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>';
-                } else {
-                    const taggedContent = content.replace(
-                        /^(\s*)(<[a-z][^>]*)(>)/i,
-                        '$1$2 data-cc-nmo-idx="' + idx + '"$3'
-                    );
-                    return taggedContent;
-                }
+                _ccBlockStore.push(ccBlock);
+                return closeTr + '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>' + openTr;
             }
         );
         
-        // 0c: Alleinstehende Non-MSO Opener/Closer (Fallback, falls Block-Match nicht greift)
+        // Schritt 2: Verbleibende !mso Opener/Closer einzeln ersetzen (inside-td, sicher)
         result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, ccPlaceholder);
         result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, ccPlaceholder);
         result = result.replace(/<!--<!\[endif\]-->/gi, ccPlaceholder);
@@ -4856,23 +4820,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Wrapper: HTML sicher durch DOMParser → outerHTML schleusen
     function safeDomSerialize(doc) {
-        // 0. VOR Serialisierung: data-cc-nmo Elemente durch Text-Marker ersetzen
-        // Diese Elemente enthalten den sichtbaren Inhalt von !mso-Blöcken.
-        // Wir ersetzen sie durch eindeutige Marker, serialisieren, und 
-        // ersetzen die Marker dann durch den originalen CC-Block.
-        const nmoElements = doc.querySelectorAll('[data-cc-nmo-idx]');
-        const nmoMarkers = [];
-        nmoElements.forEach(el => {
-            const idx = parseInt(el.getAttribute('data-cc-nmo-idx'));
-            const marker = '___CC_NMO_' + idx + '___';
-            nmoMarkers.push({ idx, marker });
-            // Element durch Text-Marker ersetzen
-            const textNode = doc.createTextNode(marker);
-            if (el.parentNode) {
-                el.parentNode.replaceChild(textNode, el);
-            }
-        });
-        
         let raw = doc.documentElement.outerHTML;
         
         // 1. MSO-Styles wiederherstellen
@@ -4905,14 +4852,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 3b: data-cc-nmo Text-Marker → kompletten !mso Block wiederherstellen
-        nmoMarkers.forEach(({ idx, marker }) => {
-            if (idx >= 0 && idx < _ccBlockStore.length) {
-                raw = raw.replace(marker, _ccBlockStore[idx]);
-            }
-        });
-        
-        // 3c: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
+        // 3b: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
         raw = raw.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
             if (idx >= 0 && idx < _ccBlockStore.length) {
