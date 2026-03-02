@@ -3721,7 +3721,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.22-2026-02-27';
+const APP_VERSION = 'v3.8.23-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4409,7 +4409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('[DOWNLOAD] CC-Platzhalter im HTML gefunden! Versuche Wiederherstellung...');
                 
                 // Wiederherstellen: Primär aus data-cc-content, Fallback auf _ccBlockStore
-                downloadHtml = downloadHtml.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
+                downloadHtml = downloadHtml.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*>[\s\S]*?<\/ins>/gi, (match, idxStr, encoded) => {
                     const idx = parseInt(idxStr);
                     // Versuch 1: data-cc-content (selbst-wiederherstellend)
                     if (encoded) {
@@ -4735,36 +4735,37 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 0b: Komplette Non-MSO Blöcke als Einheit schützen
         // <!--[if !mso]><!-- -->INHALT<!--<![endif]--> → ein einziger Placeholder
-        // So kann DOMParser die Opener/Closer nicht trennen oder verschieben.
+        // WICHTIG: Der Inhalt bleibt SICHTBAR (für Preview), aber der gesamte Block
+        // wird beim Export aus dem Store wiederhergestellt.
         // 
         // Variante 1: <!--[if !mso]><!-- --> (mit Leerzeichen)
-        // Variante 2: <!--[if !mso]><!--> (ohne Leerzeichen)
         result = result.replace(
             /<!--\[if\s+!mso[^\]]*\]><!--[\s]*-->([\s\S]*?)<!--<!\[endif\]-->/gi,
-            function(fullMatch) {
+            function(fullMatch, content) {
                 const idx = _ccBlockStore.length;
                 _ccBlockStore.push(fullMatch);
                 const encoded = encodeURIComponent(fullMatch);
                 
                 // Prüfe ob der Block zwischen Tabellenzeilen steht
-                // (vor dem Block kommt </tr>, nach dem Block kommt <tr>)
                 const posInResult = result.indexOf(fullMatch);
                 const before = result.substring(Math.max(0, posInResult - 50), posInResult);
                 const isBetweenRows = /<\/tr>\s*$/i.test(before);
                 
                 if (isBetweenRows) {
-                    // Zwischen Tabellenzeilen: <tr>-Wrapper damit DOMParser es nicht verschiebt
+                    // Zwischen Tabellenzeilen: <tr>-Wrapper (DOMParser-sicher)
+                    // Inhalt ist meist eine versteckte <tr>, also display:none ist OK
                     return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
                 } else {
-                    // Innerhalb eines Elements (z.B. <td>): normaler <ins>-Placeholder
-                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
+                    // Innerhalb eines Elements: <ins> MIT sichtbarem Inhalt
+                    // So bleibt der Button in der Preview sichtbar
+                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '">' + content + '</ins>';
                 }
             }
         );
-        // Variante 2 Fallback
+        // Variante 2: <!--[if !mso]><!--> (ohne Leerzeichen)
         result = result.replace(
             /<!--\[if\s+!mso[^\]]*\]><!-->([\s\S]*?)<!--<!\[endif\]-->/gi,
-            function(fullMatch) {
+            function(fullMatch, content) {
                 const idx = _ccBlockStore.length;
                 _ccBlockStore.push(fullMatch);
                 const encoded = encodeURIComponent(fullMatch);
@@ -4775,7 +4776,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isBetweenRows) {
                     return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
                 } else {
-                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
+                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '">' + content + '</ins>';
                 }
             }
         );
@@ -4848,8 +4849,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // 3. Conditional Comment Blöcke wiederherstellen (aus _ccBlockStore, mit Fallback auf data-cc-content)
-        // 3a: <ins>-basierte Placeholders (für MSO-positive Blöcke)
-        raw = raw.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
+        // 3a: <ins>-basierte Placeholders (leer ODER mit sichtbarem Inhalt für !mso-Blöcke)
+        raw = raw.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*>[\s\S]*?<\/ins>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
             // Primär: aus _ccBlockStore wiederherstellen
             if (idx >= 0 && idx < _ccBlockStore.length) {
