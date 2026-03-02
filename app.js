@@ -348,14 +348,17 @@ class TemplateProcessor {
         const searchArea = this.html.substring(bodyEndPos, bodyEndPos + 5000);
         
         // Breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all
+        // Erkennt sowohl <div> als auch <span> Preheader
         const preheaderPatterns = [
-            /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*mso-hide:\s*all[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*overflow:\s*hidden[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-            /<div[^>]*style="[^"]*max-height:\s*0[^"]*overflow:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/div>/gi
+            /<(?:div|span)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style="[^"]*mso-hide:\s*all[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style="[^"]*overflow:\s*hidden[^"]*max-height:\s*0[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style="[^"]*max-height:\s*0[^"]*overflow:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi,
+            // Explizit: Elemente mit class="preheader" (z.B. <span class="preheader" style="...">)
+            /<(?:div|span)[^>]*class="[^"]*preheader[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi
         ];
         
         // Sammle alle Kandidaten im Suchbereich
@@ -364,18 +367,22 @@ class TemplateProcessor {
             let match;
             while ((match = pattern.exec(searchArea)) !== null) {
                 // Prüfe ob es ein echter Preheader ist (nicht Mobile-Content)
-                const div = match[0];
-                const hasClass = /class\s*=\s*["'][^"']+["']/i.test(div);
-                const hasTable = /<table/i.test(div);
-                const hasImg = /<img/i.test(div);
+                const el = match[0];
+                const hasTable = /<table/i.test(el);
+                const hasImg = /<img/i.test(el);
                 
-                // Nur als Preheader werten wenn: keine Klasse, keine Tabellen, keine Bilder
-                if (!hasClass && !hasTable && !hasImg) {
+                // Klassen-Filter: Klassen wie "m", "mobile-hide" etc. sind KEIN Preheader
+                // ABER: class="preheader" ist ein gültiger Preheader!
+                const classMatch = el.match(/class\s*=\s*["']([^"']+)["']/i);
+                const hasNonPreheaderClass = classMatch && !/preheader/i.test(classMatch[1]);
+                
+                // Nur als Preheader werten wenn: keine fremde Klasse, keine Tabellen, keine Bilder
+                if (!hasNonPreheaderClass && !hasTable && !hasImg) {
                     // Prüfe ob dieser Kandidat nicht schon erfasst wurde (Duplikat-Vermeidung)
                     const absPos = bodyEndPos + match.index;
                     const alreadyFound = candidates.some(c => Math.abs(c.pos - absPos) < 50);
                     if (!alreadyFound) {
-                        candidates.push({ pos: absPos, match: div, fullMatch: match[0] });
+                        candidates.push({ pos: absPos, match: el, fullMatch: match[0] });
                     }
                 }
             }
@@ -3166,8 +3173,8 @@ class TemplateProcessor {
         visibleHtml = visibleHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
         // Entferne MSO Conditional Comments
         visibleHtml = visibleHtml.replace(/<!--\[if\s[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
-        // Entferne versteckte Elemente (Preheader etc.)
-        visibleHtml = visibleHtml.replace(/<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+        // Entferne versteckte Elemente (Preheader etc.) - div und span
+        visibleHtml = visibleHtml.replace(/<(?:div|span)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi, '');
         // Entferne alle HTML-Tags
         const textOnly = visibleHtml.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
         
@@ -3786,7 +3793,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.28-2026-03-02';
+const APP_VERSION = 'v3.8.29-2026-03-02';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4200,24 +4207,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         const bodyEndPos = selectedHtml.indexOf(bodyMatch[0]) + bodyMatch[0].length;
                         const searchArea = selectedHtml.substring(bodyEndPos, bodyEndPos + 5000);
                         
-                        // Gleiche Erkennung wie im Checker: versteckte Divs am Anfang des Body
+                        // Gleiche Erkennung wie im Checker: versteckte Divs/Spans am Anfang des Body
                         const preheaderPatterns = [
-                            /<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-                            /<div[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-                            /<div[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-                            /<div[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-                            /<div[^>]*style="[^"]*mso-hide:\s*all[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+                            /<(?:div|span)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+                            /<(?:div|span)[^>]*style="[^"]*max-height:\s*0[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+                            /<(?:div|span)[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+                            /<(?:div|span)[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+                            /<(?:div|span)[^>]*style="[^"]*mso-hide:\s*all[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+                            /<(?:div|span)[^>]*class="[^"]*preheader[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i
                         ];
                         
                         for (const pattern of preheaderPatterns) {
                             const match = searchArea.match(pattern);
                             if (match && match[1]) {
-                                const div = match[0];
-                                // Nur echte Preheader (keine Mobile-Blöcke mit Klasse/Tabelle/Bild)
-                                const hasClass = /class\s*=\s*["'][^"']+["']/i.test(div);
-                                const hasTable = /<table/i.test(div);
-                                const hasImg = /<img/i.test(div);
-                                if (!hasClass && !hasTable && !hasImg) {
+                                const el = match[0];
+                                // Nur echte Preheader (keine Mobile-Blöcke mit fremder Klasse/Tabelle/Bild)
+                                const classMatch = el.match(/class\s*=\s*["']([^"']+)["']/i);
+                                const hasNonPreheaderClass = classMatch && !/preheader/i.test(classMatch[1]);
+                                const hasTable = /<table/i.test(el);
+                                const hasImg = /<img/i.test(el);
+                                if (!hasNonPreheaderClass && !hasTable && !hasImg) {
                                     // HTML-Tags entfernen, Text extrahieren
                                     preheaderText = match[1]
                                         .replace(/<[^>]*>/g, '')     // HTML-Tags entfernen
@@ -4505,7 +4514,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const newName = `${baseName}_optimized.${extension}`;
             // Sicherheitsnetz: Preheader muss VOR %header% stehen
             // (Manche Verarbeitungsschritte können die Reihenfolge ändern)
-            const preheaderMatch = downloadHtml.match(/<div[^>]*style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"[^>]*>[\s\S]*?<\/div>/i);
+            const preheaderMatch = downloadHtml.match(/<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
             const headerIdx = downloadHtml.indexOf('%header%');
             if (preheaderMatch && headerIdx > -1) {
                 const preheaderIdx = downloadHtml.indexOf(preheaderMatch[0]);
@@ -4667,7 +4676,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Preheader aktualisieren
             if (newPreheader) {
                 // Preheader-Div erkennen (verstecktes Div direkt nach <body>)
-                const preheaderRegex = /<div\s+style="[^"]*(?:display:\s*none|max-height:\s*0|mso-hide:\s*all)[^"]*"[^>]*>[\s\S]*?<\/div>/i;
+                const preheaderRegex = /<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0|mso-hide:\s*all|visibility:\s*hidden|font-size:\s*0|color:\s*transparent)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i;
                 const preheaderMatch = html.match(preheaderRegex);
                 
                 // Neuen Preheader bauen (gleiche Logik wie _buildPreheaderHtml)
@@ -5322,21 +5331,24 @@ document.addEventListener('DOMContentLoaded', () => {
         // Zähle %preheader% Vorkommen
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
         
-        // Zähle Preheader Divs (breite Erkennung: display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all)
+        // Zähle Preheader Elemente (breite Erkennung: div/span, display:none, max-height:0, visibility:hidden, font-size:0, mso-hide:all, class=preheader)
         const preheaderPatterns = [
-            /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi,
-            /<div[^>]*style=["'][^"]*max-height\s*:\s*0[^"]*["'][^>]*>.*?<\/div>/gi,
-            /<div[^>]*style=["'][^"]*visibility\s*:\s*hidden[^"]*["'][^>]*>.*?<\/div>/gi,
-            /<div[^>]*style=["'][^"]*mso-hide\s*:\s*all[^"]*["'][^>]*>.*?<\/div>/gi
+            /<(?:div|span)[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style=["'][^"]*max-height\s*:\s*0[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style=["'][^"]*visibility\s*:\s*hidden[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style=["'][^"]*mso-hide\s*:\s*all[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*class="[^"]*preheader[^"]*"[^>]*>.*?<\/(?:div|span)>/gi
         ];
-        // Sammle alle Preheader-Divs (de-dupliziert)
+        // Sammle alle Preheader-Elemente (de-dupliziert)
         const preheaderDivPositions = new Set();
         for (const pattern of preheaderPatterns) {
             let m;
             while ((m = pattern.exec(assetReviewStagedHtml)) !== null) {
-                const div = m[0];
-                // Nur echte Preheader: keine Klasse, keine Tabellen, keine Bilder
-                if (!/class\s*=\s*["'][^"']+["']/i.test(div) && !/<table/i.test(div) && !/<img/i.test(div)) {
+                const el = m[0];
+                // Nur echte Preheader: keine fremde Klasse, keine Tabellen, keine Bilder
+                const classMatch = el.match(/class\s*=\s*["']([^"']+)["']/i);
+                const hasNonPreheaderClass = classMatch && !/preheader/i.test(classMatch[1]);
+                if (!hasNonPreheaderClass && !/<table/i.test(el) && !/<img/i.test(el)) {
                     // Position-basiert de-duplizieren
                     const posKey = Math.round(m.index / 50);
                     if (!preheaderDivPositions.has(posKey)) {
@@ -5354,10 +5366,10 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText = '✅ Kein Preheader gefunden (optional, ok)';
             statusClass = 'status-ok';
         } else if (preheaderPlaceholderCount === 1 || preheaderDivCount === 1) {
-            statusText = `✅ Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
+            statusText = `✅ Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Elemente: ${preheaderDivCount})`;
             statusClass = 'status-ok';
         } else {
-            statusText = `⚠️ Mehrere Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Divs: ${preheaderDivCount})`;
+            statusText = `⚠️ Mehrere Preheader gefunden (Placeholder: ${preheaderPlaceholderCount}, Elemente: ${preheaderDivCount})`;
             statusClass = 'status-warn';
         }
         
@@ -6301,7 +6313,7 @@ document.addEventListener('DOMContentLoaded', () => {
         visibleHtml = visibleHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
         visibleHtml = visibleHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
         visibleHtml = visibleHtml.replace(/<!--\[if\s[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
-        visibleHtml = visibleHtml.replace(/<div[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+        visibleHtml = visibleHtml.replace(/<(?:div|span)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/gi, '');
         const textOnly = visibleHtml.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
         const words = textOnly.split(/\s+/).filter(w => w.length >= 2);
         const wordCount = words.length;
@@ -6517,17 +6529,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // Zähle Preheader (breite Erkennung)
         const preheaderPlaceholderCount = (assetReviewStagedHtml.match(/%preheader%/gi) || []).length;
         const phPatterns = [
-            /<div[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/div>/gi,
-            /<div[^>]*style=["'][^"]*max-height\s*:\s*0[^"]*["'][^>]*>.*?<\/div>/gi,
-            /<div[^>]*style=["'][^"]*visibility\s*:\s*hidden[^"]*["'][^>]*>.*?<\/div>/gi,
-            /<div[^>]*style=["'][^"]*mso-hide\s*:\s*all[^"]*["'][^>]*>.*?<\/div>/gi
+            /<(?:div|span)[^>]*style=["'][^"]*display\s*:\s*none[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style=["'][^"]*max-height\s*:\s*0[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style=["'][^"]*visibility\s*:\s*hidden[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*style=["'][^"]*mso-hide\s*:\s*all[^"]*["'][^>]*>.*?<\/(?:div|span)>/gi,
+            /<(?:div|span)[^>]*class="[^"]*preheader[^"]*"[^>]*>.*?<\/(?:div|span)>/gi
         ];
         const phPositions = new Set();
         for (const pat of phPatterns) {
             let m;
             while ((m = pat.exec(assetReviewStagedHtml)) !== null) {
-                const div = m[0];
-                if (!/class\s*=\s*["'][^"']+["']/i.test(div) && !/<table/i.test(div) && !/<img/i.test(div)) {
+                const el = m[0];
+                const classMatch = el.match(/class\s*=\s*["']([^"']+)["']/i);
+                const hasNonPreheaderClass = classMatch && !/preheader/i.test(classMatch[1]);
+                if (!hasNonPreheaderClass && !/<table/i.test(el) && !/<img/i.test(el)) {
                     phPositions.add(Math.round(m.index / 50));
                 }
             }
@@ -11054,12 +11069,14 @@ td[width] { width: auto !important; }
         // Suche display:none-Div in den ersten 2000 Zeichen nach <body>
         const afterBody = html.substring(bodyEndPos, bodyEndPos + 2000);
         const preheaderPatterns = [
-            // Standard: <div style="display:none;">...</div>
-            /<div[^>]*style="[^"]*display\s*:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/i,
-            // Variante: <div style="...max-height:0...">...</div>  
-            /<div[^>]*style="[^"]*max-height\s*:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/i,
-            // Variante: <span> Preheader (z.B. mit display:none, visibility:hidden, color:transparent)
-            /<span[^>]*(?:style="[^"]*(?:display\s*:\s*none|visibility:\s*hidden|color:\s*transparent)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/span>/i
+            // Standard: <div> oder <span> mit display:none
+            /<(?:div|span)[^>]*style="[^"]*display\s*:\s*none[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/i,
+            // Variante: max-height:0
+            /<(?:div|span)[^>]*style="[^"]*max-height\s*:\s*0[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/i,
+            // Variante: visibility:hidden oder color:transparent
+            /<(?:div|span)[^>]*style="[^"]*(?:visibility:\s*hidden|color:\s*transparent)[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/i,
+            // Variante: class="preheader"
+            /<(?:div|span)[^>]*class="[^"]*preheader[^"]*"[^>]*>[\s\S]*?<\/(?:div|span)>/i
         ];
         for (const pattern of preheaderPatterns) {
             const phMatch = afterBody.match(pattern);
