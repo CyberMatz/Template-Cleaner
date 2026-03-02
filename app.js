@@ -3720,7 +3720,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.18-2026-02-27';
+const APP_VERSION = 'v3.8.19-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4459,10 +4459,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Sicherheitsnetz: Korrupte CC-Placeholders aufräumen
-            // DOMParser kann <ins>-Placeholders zu &lt;ins HTML-encodieren wenn sie
-            // an ungültigen Positionen stehen (z.B. zwischen <tr>-Tags)
+            // (Legacy) DOMParser kann <ins>-Placeholders zu &lt;ins HTML-encodieren
             downloadHtml = downloadHtml.replace(/&lt;ins\s+data-cc-idx[^>]*&gt;/gi, '');
             downloadHtml = downloadHtml.replace(/&lt;\s*ins\s+data-cc-idx[^>]*&gt;/gi, '');
+            // Verbliebene CC-Kommentar-Placeholders wiederherstellen
+            downloadHtml = downloadHtml.replace(/<!-- cc-nm([oc])-(\d+) -->/gi, (match, type, idxStr) => {
+                const idx = parseInt(idxStr);
+                if (idx >= 0 && idx < _ccBlockStore.length) {
+                    return _ccBlockStore[idx];
+                }
+                return ''; // Entferne wenn Block nicht wiederherstellbar
+            });
             // Aufräumen: verbliebene data-cc-* Attribute
             downloadHtml = downloadHtml.replace(/\s+data-cc-(?:open|close|idx)(?:-content)?="[^"]*"/gi, '');
             
@@ -4715,54 +4722,27 @@ document.addEventListener('DOMContentLoaded', () => {
         result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
         // 0b: Non-MSO Opener: <!--[if !mso]><!-- --> oder <!--[if !mso]><!-->
-        // Statt <ins>-Placeholders (die DOMParser zwischen <tr>-Tags zerstört)
-        // fügen wir data-Attribute auf dem NÄCHSTEN HTML-Element hinzu.
-        // Das überlebt den DOMParser immer zuverlässig.
-        result = result.replace(
-            /(<!--\[if\s+!mso[^\]]*\]><!--\s*-->)\s*(<[a-z][^>]*>)/gi,
-            function(fullMatch, opener, nextTag) {
-                const idx = _ccBlockStore.length;
-                _ccBlockStore.push(opener);
-                const encoded = encodeURIComponent(opener);
-                // data-cc-open Attribut an das nächste HTML-Element hängen
-                return nextTag.replace(/>$/, ' data-cc-open="' + idx + '" data-cc-open-content="' + encoded + '">');
-            }
-        );
-        result = result.replace(
-            /(<!--\[if\s+!mso[^\]]*\]><!-->)\s*(<[a-z][^>]*>)/gi,
-            function(fullMatch, opener, nextTag) {
-                const idx = _ccBlockStore.length;
-                _ccBlockStore.push(opener);
-                const encoded = encodeURIComponent(opener);
-                return nextTag.replace(/>$/, ' data-cc-open="' + idx + '" data-cc-open-content="' + encoded + '">');
-            }
-        );
+        // Statt <ins>-Tags oder data-Attribute verwenden wir NORMALE HTML-Kommentare
+        // als Platzhalter. Diese überleben den DOMParser immer an exakter Position,
+        // im Gegensatz zu <ins>-Tags (die zwischen <tr> ungültig sind) oder
+        // data-Attributen (die bei DOM-Umstrukturierung verloren gehen können).
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!--\s*-->/gi, function(match) {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<!-- cc-nmo-' + idx + ' -->';
+        });
+        result = result.replace(/<!--\[if\s+!mso[^\]]*\]><!-->/gi, function(match) {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<!-- cc-nmo-' + idx + ' -->';
+        });
         
         // 0c: Non-MSO Closer: <!--<![endif]-->
-        // Ebenfalls als data-Attribut auf dem NÄCHSTEN HTML-Element speichern
-        result = result.replace(
-            /(<!--<!\[endif\]-->)\s*(<[a-z][^>]*>)/gi,
-            function(fullMatch, closer, nextTag) {
-                const idx = _ccBlockStore.length;
-                _ccBlockStore.push(closer);
-                const encoded = encodeURIComponent(closer);
-                return nextTag.replace(/>$/, ' data-cc-close="' + idx + '" data-cc-close-content="' + encoded + '">');
-            }
-        );
-        // Fallback: Closer am Ende eines Elements (z.B. </span><!--<![endif]--></td>)
-        // Hier hängen wir an das FOLGENDE Tag an
-        result = result.replace(
-            /(<!--<!\[endif\]-->)\s*(<\/[a-z][^>]*>)/gi,
-            function(fullMatch, closer, closeTag) {
-                // Closer vor einem schließenden Tag → als <ins> speichern (innerhalb von </td> gültig)
-                const idx = _ccBlockStore.length;
-                _ccBlockStore.push(closer);
-                const encoded = encodeURIComponent(closer);
-                return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>' + closeTag;
-            }
-        );
-        // Letzer Fallback: Alleinstehende Closer
-        result = result.replace(/<!--<!\[endif\]-->/gi, ccPlaceholder);
+        result = result.replace(/<!--<!\[endif\]-->/gi, function(match) {
+            const idx = _ccBlockStore.length;
+            _ccBlockStore.push(match);
+            return '<!-- cc-nmc-' + idx + ' -->';
+        });
         
         // === SCHRITT 1: MSO-* Inline-Styles schützen ===
         result = result.replace(/style="([^"]*)"/gi, (match, styleContent) => {
@@ -4848,36 +4828,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 3b: data-cc-open Attribute → !mso Opener VOR dem Element einfügen
-        raw = raw.replace(/(<[a-z][^>]*)\s+data-cc-open="(\d+)"(?:\s+data-cc-open-content="([^"]*)")?([^>]*>)/gi, 
-            (match, tagStart, idxStr, encoded, tagEnd) => {
-                const idx = parseInt(idxStr);
-                let ccBlock = '';
-                if (idx >= 0 && idx < _ccBlockStore.length) {
-                    ccBlock = _ccBlockStore[idx];
-                } else if (encoded) {
-                    try { ccBlock = decodeURIComponent(encoded); } catch(e) {}
-                }
-                // Attribut entfernen und CC-Block davor einfügen
-                return ccBlock + tagStart + tagEnd;
+        // 3b: HTML-Kommentar-Placeholders für !mso Opener/Closer wiederherstellen
+        // Format: <!-- cc-nmo-N --> (non-mso-opener) und <!-- cc-nmc-N --> (non-mso-closer)
+        raw = raw.replace(/<!-- cc-nm([oc])-(\d+) -->/gi, (match, type, idxStr) => {
+            const idx = parseInt(idxStr);
+            if (idx >= 0 && idx < _ccBlockStore.length) {
+                return _ccBlockStore[idx];
             }
-        );
+            console.warn('[safeDomSerialize] CC-Comment-Block ' + idx + ' nicht gefunden');
+            return match;
+        });
         
-        // 3c: data-cc-close Attribute → !mso Closer VOR dem Element einfügen
-        raw = raw.replace(/(<[a-z][^>]*)\s+data-cc-close="(\d+)"(?:\s+data-cc-close-content="([^"]*)")?([^>]*>)/gi, 
-            (match, tagStart, idxStr, encoded, tagEnd) => {
-                const idx = parseInt(idxStr);
-                let ccBlock = '';
-                if (idx >= 0 && idx < _ccBlockStore.length) {
-                    ccBlock = _ccBlockStore[idx];
-                } else if (encoded) {
-                    try { ccBlock = decodeURIComponent(encoded); } catch(e) {}
-                }
-                return ccBlock + tagStart + tagEnd;
-            }
-        );
-        
-        // 3d: Aufräumen - verbliebene data-cc-* Attribute entfernen
+        // 3c: Aufräumen - verbliebene data-cc-* Attribute entfernen (Legacy-Cleanup)
         raw = raw.replace(/\s+data-cc-(?:open|close)(?:-content)?="[^"]*"/gi, '');
         
         // 4. Browser-eingefügte <tbody>/<\/tbody> entfernen
