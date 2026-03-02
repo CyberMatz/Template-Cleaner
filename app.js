@@ -2530,7 +2530,7 @@ class TemplateProcessor {
         // Sammle alle VML-Block-Positionen
         const vmlPositions = [];
         let match;
-        const vmlRegex = /<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
+        const vmlRegex = /<!--\[if\s+mso\]>(?:(?!<!\[endif\])[\s\S])*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
         while ((match = vmlRegex.exec(this.html)) !== null) {
             vmlPositions.push({
                 index: match.index,
@@ -3793,7 +3793,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.29-2026-03-02';
+const APP_VERSION = 'v3.8.31-2026-03-02';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11681,7 +11681,7 @@ td[width] { width: auto !important; }
         
         // Sammle VML-Blöcke
         const vmlBlocks = [];
-        const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
+        const vmlRegex = /(<!--\[if\s+mso\]>(?:(?!<!\[endif\])[\s\S])*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
         let vmlMatch;
         while ((vmlMatch = vmlRegex.exec(html)) !== null) {
             const vmlHref = vmlMatch[1].match(/href\s*=\s*["']([^"']*)["']/i);
@@ -12646,7 +12646,15 @@ td[width] { width: auto !important; }
             );
         }
         
-        html = html.replace(oldBtnHtml, newBtnHtml);
+        // Positionsbasierter Replace: Finde den Button an seiner exakten Position statt per String-Suche
+        // String.replace() ersetzt nur das ERSTE Vorkommen, das kann bei ähnlichem Code das Falsche treffen
+        const exactPos = html.indexOf(oldBtnHtml, Math.max(0, btnData.matchIndex - 200));
+        if (exactPos >= 0) {
+            html = html.substring(0, exactPos) + newBtnHtml + html.substring(exactPos + oldBtnHtml.length);
+        } else {
+            // Fallback: globale Suche (sollte nicht passieren)
+            html = html.replace(oldBtnHtml, newBtnHtml);
+        }
         
         // === Parent <td bgcolor> mit-updaten (für Typ A + Typ B) ===
         // Finde die <td> die den Button direkt umgibt und aktualisiere bgcolor
@@ -12732,7 +12740,7 @@ td[width] { width: auto !important; }
         
         // === VML-Block automatisch mit-updaten (wenn vorhanden) ===
         if (btnData.hasVml) {
-            const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
+            const vmlRegex = /(<!--\[if\s+mso\]>(?:(?!<!\[endif\])[\s\S])*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
             let vmlMatch;
             const btnPos = html.indexOf(newBtnHtml);
             
@@ -12791,7 +12799,7 @@ td[width] { width: auto !important; }
         
         // Wenn bereits VML vorhanden, entferne den alten Block zuerst
         if (btnData.hasVml) {
-            const vmlRegex = /(<!--\[if\s+mso\]>[\s\S]*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
+            const vmlRegex = /(<!--\[if\s+mso\]>(?:(?!<!\[endif\])[\s\S])*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
             let vmlMatch;
             const btnPos = html.indexOf(btnData.fullMatch);
             
