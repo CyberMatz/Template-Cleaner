@@ -554,13 +554,27 @@ class TemplateProcessor {
 
         let insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
 
-        // Prüfe ob Preheader vorhanden (direkt nach body) - breite Erkennung
+        // Prüfe ob Preheader vorhanden (direkt nach body) - breite Erkennung (div UND span)
         const afterBody = this.html.slice(insertPos);
-        const preheaderMatch = afterBody.match(/^\s*<div[^>]*style="[^"]*(?:display:\s*none|max-height:\s*0|visibility:\s*hidden|mso-hide:\s*all|font-size:\s*0)[^"]*"[^>]*>.*?<\/div>/i);
+        const preheaderMatch = afterBody.match(/^\s*<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0|visibility:\s*hidden|mso-hide:\s*all|font-size:\s*0|color:\s*transparent)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
 
         if (preheaderMatch) {
             // Header nach Preheader einfügen
             insertPos += preheaderMatch[0].length;
+        }
+
+        // Standard: Header INNERHALB des Hintergrund-Wrappers einfügen
+        if (this.checklistType !== 'dpl') {
+            const afterPreheader = this.html.slice(insertPos);
+            // Suche das erste Element mit nicht-weißer Hintergrundfarbe (= der äußere Wrapper)
+            const bgWrapperMatch = afterPreheader.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
+            if (bgWrapperMatch) {
+                const color = bgWrapperMatch[1].trim().toLowerCase().replace(/\s/g, '');
+                // Nur reingehen wenn Farbe nicht weiß ist (sonst kein visueller Unterschied)
+                if (color !== '#fff' && color !== '#ffffff' && color !== 'white' && color !== '#FFF' && color !== '#FFFFFF') {
+                    insertPos += afterPreheader.indexOf(bgWrapperMatch[0]) + bgWrapperMatch[0].length;
+                }
+            }
         }
 
         // DPL: Header INNERHALB des roten Hintergrund-Divs einfügen
@@ -1410,6 +1424,39 @@ class TemplateProcessor {
                     
                     if (whiteDivEnd > 0) {
                         insertPos = whiteDivEnd;
+                    }
+                }
+            }
+            
+            // Standard: Footer INNERHALB des Hintergrund-Wrappers einfügen (vor dessen schließendem </div>)
+            if (!insertPos && this.checklistType !== 'dpl') {
+                // Suche das Wrapper-Div mit nicht-weißer Hintergrundfarbe
+                const bgWrapperMatch = this.html.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
+                if (bgWrapperMatch) {
+                    const color = bgWrapperMatch[1].trim().toLowerCase().replace(/\s/g, '');
+                    if (color !== '#fff' && color !== '#ffffff' && color !== 'white' && color !== '#FFF' && color !== '#FFFFFF') {
+                        const wrapperStart = this.html.indexOf(bgWrapperMatch[0]);
+                        const afterWrapper = this.html.slice(wrapperStart);
+                        
+                        // Finde das schließende </div> des Wrappers durch Div-Tiefe zählen
+                        let depth = 0;
+                        let wrapperEndPos = -1;
+                        
+                        for (let i = 0; i < afterWrapper.length; i++) {
+                            if (afterWrapper.substr(i, 4) === '<div' && (afterWrapper[i+4] === ' ' || afterWrapper[i+4] === '>')) {
+                                depth++;
+                            } else if (afterWrapper.substr(i, 6) === '</div>') {
+                                depth--;
+                                if (depth === 0) {
+                                    wrapperEndPos = wrapperStart + i;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (wrapperEndPos > 0) {
+                            insertPos = wrapperEndPos;
+                        }
                     }
                 }
             }
@@ -3739,7 +3786,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.27-2026-02-27';
+const APP_VERSION = 'v3.8.28-2026-03-02';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11010,7 +11057,9 @@ td[width] { width: auto !important; }
             // Standard: <div style="display:none;">...</div>
             /<div[^>]*style="[^"]*display\s*:\s*none[^"]*"[^>]*>[\s\S]*?<\/div>/i,
             // Variante: <div style="...max-height:0...">...</div>  
-            /<div[^>]*style="[^"]*max-height\s*:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/i
+            /<div[^>]*style="[^"]*max-height\s*:\s*0[^"]*"[^>]*>[\s\S]*?<\/div>/i,
+            // Variante: <span> Preheader (z.B. mit display:none, visibility:hidden, color:transparent)
+            /<span[^>]*(?:style="[^"]*(?:display\s*:\s*none|visibility:\s*hidden|color:\s*transparent)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/span>/i
         ];
         for (const pattern of preheaderPatterns) {
             const phMatch = afterBody.match(pattern);
@@ -11085,6 +11134,26 @@ td[width] { width: auto !important; }
                     position: wrapperPos,
                     snippet: getSnippetAround(html, wrapperPos, 20, 80)
                 });
+            }
+        }
+        
+        // === Kandidat 6: Innerhalb des Hintergrund-Wrappers (Standard) ===
+        // Suche nach dem ersten Div mit nicht-weißer Hintergrundfarbe – das ist typischerweise der äußere Wrapper
+        const bgWrapperHeaderMatch = html.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
+        if (bgWrapperHeaderMatch) {
+            const bgColor = bgWrapperHeaderMatch[1].trim().toLowerCase().replace(/\s/g, '');
+            if (bgColor !== '#fff' && bgColor !== '#ffffff' && bgColor !== 'white') {
+                const wrapperPos = html.indexOf(bgWrapperHeaderMatch[0]) + bgWrapperHeaderMatch[0].length;
+                if (!positionAlreadyExists(wrapperPos)) {
+                    candidates.push({
+                        id: 'header_inside_bg_wrapper',
+                        label: 'Innerhalb des Hintergrund-Wrappers (' + bgWrapperHeaderMatch[1].trim() + ')',
+                        description: 'Der Header wird innerhalb des farbigen Wrapper-Divs platziert und übernimmt dessen Hintergrundfarbe.',
+                        position: wrapperPos,
+                        snippet: getSnippetAround(html, wrapperPos, 30, 70),
+                        isRecommended: true
+                    });
+                }
             }
         }
         
@@ -11233,6 +11302,44 @@ td[width] { width: auto !important; }
             }
         }
         
+        // === Kandidat 5: Innerhalb des Hintergrund-Wrappers (Standard) ===
+        // Suche nach dem Wrapper-Div mit nicht-weißer Hintergrundfarbe und finde dessen schließendes </div>
+        const bgWrapperFooterMatch = html.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
+        if (bgWrapperFooterMatch) {
+            const bgColor = bgWrapperFooterMatch[1].trim().toLowerCase().replace(/\s/g, '');
+            if (bgColor !== '#fff' && bgColor !== '#ffffff' && bgColor !== 'white') {
+                const wrapperStart = html.indexOf(bgWrapperFooterMatch[0]);
+                const afterWrapper = html.slice(wrapperStart);
+                
+                // Finde das schließende </div> des Wrappers
+                let depth = 0;
+                let wrapperEndPos = -1;
+                
+                for (let i = 0; i < afterWrapper.length; i++) {
+                    if (afterWrapper.substr(i, 4) === '<div' && (afterWrapper[i+4] === ' ' || afterWrapper[i+4] === '>')) {
+                        depth++;
+                    } else if (afterWrapper.substr(i, 6) === '</div>') {
+                        depth--;
+                        if (depth === 0) {
+                            wrapperEndPos = wrapperStart + i;
+                            break;
+                        }
+                    }
+                }
+                
+                if (wrapperEndPos > 0 && !positionAlreadyExists(wrapperEndPos)) {
+                    candidates.push({
+                        id: 'footer_inside_bg_wrapper',
+                        label: 'Innerhalb des Hintergrund-Wrappers (' + bgWrapperFooterMatch[1].trim() + ')',
+                        description: 'Der Footer wird innerhalb des farbigen Wrapper-Divs platziert und übernimmt dessen Hintergrundfarbe.',
+                        position: wrapperEndPos,
+                        snippet: getSnippetAround(html, wrapperEndPos, 60, 40),
+                        isRecommended: true
+                    });
+                }
+            }
+        }
+        
         // === DPL-Kandidat: Vor dem schließenden roten Div ===
         const redDivMatch = html.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
         if (redDivMatch) {
@@ -11344,11 +11451,12 @@ td[width] { width: auto !important; }
             candidates.forEach((c, idx) => {
                 const isCurrentClass = c.isCurrent ? ' current' : '';
                 const currentLabel = c.isCurrent ? ' (aktuell)' : '';
+                const recommendedBadge = c.isRecommended ? ' <span style="background:#4CAF50;color:#fff;font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;">★ Empfohlen</span>' : '';
                 
                 markup += '<div class="placement-candidate' + isCurrentClass + '" data-type="' + type + '" data-index="' + idx + '">';
                 markup += '<input type="radio" name="placement_' + type + '" class="placement-candidate-radio" ' + (c.isCurrent ? 'checked' : '') + '>';
                 markup += '<div class="placement-candidate-info">';
-                markup += '<div class="placement-candidate-label">' + escapeHtmlForDisplay(c.label) + currentLabel + '</div>';
+                markup += '<div class="placement-candidate-label">' + escapeHtmlForDisplay(c.label) + currentLabel + recommendedBadge + '</div>';
                 markup += '<div class="placement-candidate-description">' + escapeHtmlForDisplay(c.description) + '</div>';
                 markup += '<div class="placement-candidate-snippet">' + escapeHtmlForDisplay(c.snippet) + '</div>';
                 markup += '</div>';
