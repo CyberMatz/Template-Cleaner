@@ -3721,7 +3721,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.23-2026-02-27';
+const APP_VERSION = 'v3.8.24-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4409,7 +4409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('[DOWNLOAD] CC-Platzhalter im HTML gefunden! Versuche Wiederherstellung...');
                 
                 // Wiederherstellen: Primär aus data-cc-content, Fallback auf _ccBlockStore
-                downloadHtml = downloadHtml.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*>[\s\S]*?<\/ins>/gi, (match, idxStr, encoded) => {
+                downloadHtml = downloadHtml.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
                     const idx = parseInt(idxStr);
                     // Versuch 1: data-cc-content (selbst-wiederherstellend)
                     if (encoded) {
@@ -4483,7 +4483,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 return '';
             });
             // Aufräumen: verbliebene data-cc-* Attribute
-            downloadHtml = downloadHtml.replace(/\s+data-cc-(?:open|close|idx)(?:-content)?="[^"]*"/gi, '');
+            downloadHtml = downloadHtml.replace(/\s+data-cc-(?:open|close|idx|nmo-idx|nmo-content|block-idx|block-content)(?:-content)?="[^"]*"/gi, '');
+            // Aufräumen: verbliebene Text-Marker
+            downloadHtml = downloadHtml.replace(/___CC_NMO_(\d+)___/g, (match, idxStr) => {
+                const idx = parseInt(idxStr);
+                if (idx >= 0 && idx < _ccBlockStore.length) {
+                    return _ccBlockStore[idx];
+                }
+                return '';
+            });
             
             // Sicherheitsnetz: &amp; in href/src zurück zu & konvertieren
             // (Versandsysteme lesen URLs oft als Rohtext ohne HTML-Dekodierung)
@@ -4733,11 +4741,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mobile-Content (z.B. Mobile-Bilder) der sichtbar bleiben muss.
         result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
-        // 0b: Komplette Non-MSO Blöcke als Einheit schützen
-        // <!--[if !mso]><!-- -->INHALT<!--<![endif]--> → ein einziger Placeholder
-        // WICHTIG: Der Inhalt bleibt SICHTBAR (für Preview), aber der gesamte Block
-        // wird beim Export aus dem Store wiederhergestellt.
+        // 0b: Non-MSO Blöcke schützen
+        // <!--[if !mso]><!-- -->INHALT<!--<![endif]--> 
         // 
+        // Statt Wrapper-Elemente (<ins>) oder HTML-Kommentare zu verwenden,
+        // speichern wir den GESAMTEN Block im Store und markieren das ERSTE
+        // HTML-Element im Inhalt mit data-Attributen. So bleibt das Layout
+        // komplett unverändert, und wir können beim Export den Block rekonstruieren.
+        //
         // Variante 1: <!--[if !mso]><!-- --> (mit Leerzeichen)
         result = result.replace(
             /<!--\[if\s+!mso[^\]]*\]><!--[\s]*-->([\s\S]*?)<!--<!\[endif\]-->/gi,
@@ -4752,13 +4763,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isBetweenRows = /<\/tr>\s*$/i.test(before);
                 
                 if (isBetweenRows) {
-                    // Zwischen Tabellenzeilen: <tr>-Wrapper (DOMParser-sicher)
-                    // Inhalt ist meist eine versteckte <tr>, also display:none ist OK
+                    // Zwischen Tabellenzeilen: unsichtbare <tr> als Platzhalter
                     return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
                 } else {
-                    // Innerhalb eines Elements: <ins> MIT sichtbarem Inhalt
-                    // So bleibt der Button in der Preview sichtbar
-                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '">' + content + '</ins>';
+                    // Innerhalb von <td>: data-Attribute auf erstes Element im Inhalt setzen
+                    const taggedContent = content.replace(
+                        /^(\s*)(<[a-z][^>]*)(>)/i,
+                        '$1$2 data-cc-nmo-idx="' + idx + '" data-cc-nmo-content="' + encoded + '"$3'
+                    );
+                    return taggedContent;
                 }
             }
         );
@@ -4776,7 +4789,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isBetweenRows) {
                     return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
                 } else {
-                    return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '">' + content + '</ins>';
+                    const taggedContent = content.replace(
+                        /^(\s*)(<[a-z][^>]*)(>)/i,
+                        '$1$2 data-cc-nmo-idx="' + idx + '" data-cc-nmo-content="' + encoded + '"$3'
+                    );
+                    return taggedContent;
                 }
             }
         );
@@ -4838,6 +4855,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Wrapper: HTML sicher durch DOMParser → outerHTML schleusen
     function safeDomSerialize(doc) {
+        // 0. VOR Serialisierung: data-cc-nmo Elemente durch Text-Marker ersetzen
+        // Diese Elemente enthalten den sichtbaren Inhalt von !mso-Blöcken.
+        // Wir ersetzen sie durch eindeutige Marker, serialisieren, und 
+        // ersetzen die Marker dann durch den originalen CC-Block.
+        const nmoElements = doc.querySelectorAll('[data-cc-nmo-idx]');
+        const nmoMarkers = [];
+        nmoElements.forEach(el => {
+            const idx = parseInt(el.getAttribute('data-cc-nmo-idx'));
+            const marker = '___CC_NMO_' + idx + '___';
+            nmoMarkers.push({ idx, marker });
+            // Element durch Text-Marker ersetzen
+            const textNode = doc.createTextNode(marker);
+            if (el.parentNode) {
+                el.parentNode.replaceChild(textNode, el);
+            }
+        });
+        
         let raw = doc.documentElement.outerHTML;
         
         // 1. MSO-Styles wiederherstellen
@@ -4849,8 +4883,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // 3. Conditional Comment Blöcke wiederherstellen (aus _ccBlockStore, mit Fallback auf data-cc-content)
-        // 3a: <ins>-basierte Placeholders (leer ODER mit sichtbarem Inhalt für !mso-Blöcke)
-        raw = raw.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*>[\s\S]*?<\/ins>/gi, (match, idxStr, encoded) => {
+        // 3a: <ins>-basierte Placeholders (für MSO-positive Blöcke - immer leer)
+        raw = raw.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
             // Primär: aus _ccBlockStore wiederherstellen
             if (idx >= 0 && idx < _ccBlockStore.length) {
@@ -4870,7 +4904,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 3b: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
+        // 3b: data-cc-nmo Text-Marker → kompletten !mso Block wiederherstellen
+        nmoMarkers.forEach(({ idx, marker }) => {
+            if (idx >= 0 && idx < _ccBlockStore.length) {
+                raw = raw.replace(marker, _ccBlockStore[idx]);
+            }
+        });
+        
+        // 3c: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
         raw = raw.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
             if (idx >= 0 && idx < _ccBlockStore.length) {
@@ -4893,7 +4934,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // 3d: Aufräumen - verbliebene data-cc-* Attribute entfernen (Legacy-Cleanup)
-        raw = raw.replace(/\s+data-cc-(?:open|close|block-idx|block-content)(?:-content)?="[^"]*"/gi, '');
+        raw = raw.replace(/\s+data-cc-(?:open|close|block-idx|block-content|nmo-idx|nmo-content)(?:-content)?="[^"]*"/gi, '');
         
         // 4. Browser-eingefügte <tbody>/<\/tbody> entfernen
         // Browser fügt automatisch <tbody> in <table> ein – das verändert das Email-HTML
