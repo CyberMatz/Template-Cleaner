@@ -3793,7 +3793,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.31-2026-03-02';
+const APP_VERSION = 'v3.8.32-2026-03-02';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4446,6 +4446,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Scroll zu Ergebnissen
             resultsSection.scrollIntoView({ behavior: 'smooth' });
+            
+            // Inspector automatisch öffnen (spart einen Klick)
+            if (showInspectorBtn && !showInspectorBtn.disabled) {
+                setTimeout(() => {
+                    showInspectorBtn.click();
+                }, 300); // Kurze Verzögerung damit die Ergebnisse erst sichtbar werden
+            }
             
             // Reset-Button anzeigen
             resetBtn.style.display = '';
