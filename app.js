@@ -3721,7 +3721,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.24-2026-02-27';
+const APP_VERSION = 'v3.8.25-2026-02-27';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4764,12 +4764,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (isBetweenRows) {
                     // Zwischen Tabellenzeilen: unsichtbare <tr> als Platzhalter
-                    return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
+                    return '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>';
                 } else {
-                    // Innerhalb von <td>: data-Attribute auf erstes Element im Inhalt setzen
+                    // Innerhalb von <td>: data-Attribut auf erstes Element im Inhalt setzen
+                    // NUR den Index speichern (kein Content - der ist im _ccBlockStore)
                     const taggedContent = content.replace(
                         /^(\s*)(<[a-z][^>]*)(>)/i,
-                        '$1$2 data-cc-nmo-idx="' + idx + '" data-cc-nmo-content="' + encoded + '"$3'
+                        '$1$2 data-cc-nmo-idx="' + idx + '"$3'
                     );
                     return taggedContent;
                 }
@@ -4787,11 +4788,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isBetweenRows = /<\/tr>\s*$/i.test(before);
                 
                 if (isBetweenRows) {
-                    return '<tr data-cc-block-idx="' + idx + '" data-cc-block-content="' + encoded + '" style="display:none"><td></td></tr>';
+                    return '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>';
                 } else {
                     const taggedContent = content.replace(
                         /^(\s*)(<[a-z][^>]*)(>)/i,
-                        '$1$2 data-cc-nmo-idx="' + idx + '" data-cc-nmo-content="' + encoded + '"$3'
+                        '$1$2 data-cc-nmo-idx="' + idx + '"$3'
                     );
                     return taggedContent;
                 }
