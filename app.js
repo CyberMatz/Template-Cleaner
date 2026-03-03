@@ -4665,7 +4665,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
             const templateWidth = detectTemplateWidth(downloadHtml);
-            const newName = `${baseName}_optimized_${templateWidth}.${extension}`;
+            const widthSuffix = templateWidth ? `_${templateWidth}` : '';
+            const newName = `${baseName}_optimized${widthSuffix}.${extension}`;
             // Sicherheitsnetz: Preheader muss VOR %header% stehen
             // (Manche Verarbeitungsschritte können die Reihenfolge ändern)
             const preheaderMatch = downloadHtml.match(/<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
@@ -4795,7 +4796,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
             const templateWidth = detectTemplateWidth(currentWorkingHtml);
-            const newName = `${baseName}_final_optimized_${templateWidth}.${extension}`;
+            const widthSuffix = templateWidth ? `_${templateWidth}` : '';
+            const newName = `${baseName}_final_optimized${widthSuffix}.${extension}`;
             
             downloadFile(currentWorkingHtml, newName, 'text/html');
             
@@ -7424,21 +7426,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Template-Breite erkennen (häufigste table width im Bereich 400-800px)
     function detectTemplateWidth(html) {
-        const widthMatches = html.match(/<table[^>]*width\s*=\s*["'](\d+)["'][^>]*>/gi);
-        if (!widthMatches) return 600; // Fallback
-        
         const widths = {};
-        widthMatches.forEach(match => {
-            const wMatch = match.match(/width\s*=\s*["'](\d+)["']/i);
-            if (wMatch) {
-                const w = parseInt(wMatch[1]);
+        
+        // Methode 1: <table width="NNN"> Attribute (klassisch)
+        const widthAttrRegex = /<table[^>]*\swidth\s*=\s*["'](\d+)["'][^>]*>/gi;
+        let match;
+        while ((match = widthAttrRegex.exec(html)) !== null) {
+            const w = parseInt(match[1]);
+            if (w >= 400 && w <= 800) {
+                widths[w] = (widths[w] || 0) + 1;
+            }
+        }
+        
+        // Methode 2: max-width im style von <table> (z.B. max-width: 500px)
+        const tableStyleRegex = /<table[^>]*style\s*=\s*"([^"]*)"[^>]*>/gi;
+        while ((match = tableStyleRegex.exec(html)) !== null) {
+            const style = match[1];
+            const maxWidthMatch = style.match(/max-width\s*:\s*(\d+)px/i);
+            if (maxWidthMatch) {
+                const w = parseInt(maxWidthMatch[1]);
+                if (w >= 300 && w <= 800) {
+                    widths[w] = (widths[w] || 0) + 1;
+                }
+            }
+            // Auch width:NNNpx (nicht width:100%)
+            const widthStyleMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i);
+            if (widthStyleMatch) {
+                const w = parseInt(widthStyleMatch[1]);
                 if (w >= 400 && w <= 800) {
                     widths[w] = (widths[w] || 0) + 1;
                 }
             }
-        });
+        }
         
-        let bestWidth = 600;
+        // Methode 3: max-width im style von Container-<td> (z.B. max-width: 500px)
+        const tdStyleRegex = /<td[^>]*style\s*=\s*"([^"]*)"[^>]*>/gi;
+        while ((match = tdStyleRegex.exec(html)) !== null) {
+            const style = match[1];
+            const maxWidthMatch = style.match(/max-width\s*:\s*(\d+)px/i);
+            if (maxWidthMatch) {
+                const w = parseInt(maxWidthMatch[1]);
+                if (w >= 300 && w <= 800) {
+                    widths[w] = (widths[w] || 0) + 1;
+                }
+            }
+        }
+        
+        let bestWidth = null;
         let bestCount = 0;
         Object.keys(widths).forEach(w => {
             if (widths[w] > bestCount) {
@@ -7675,7 +7709,7 @@ td[width] { width: auto !important; }
             let simSourceHtml = sourceHtml;
             if (selectedClientSim && selectedClientSim !== 'original') {
                 const simColor = simColorSelect ? simColorSelect.value : '#999999';
-                const templateWidth = detectTemplateWidth(sourceHtml);
+                const templateWidth = detectTemplateWidth(sourceHtml) || 600;
                 simSourceHtml = replaceHeaderFooterPlaceholders(simSourceHtml, simColor, templateWidth);
                 simSourceHtml = applyClientSimulation(simSourceHtml, selectedClientSim);
                 if (window.DEV_MODE) {
