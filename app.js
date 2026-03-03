@@ -4962,10 +4962,43 @@ document.addEventListener('DOMContentLoaded', () => {
             return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
         }
         
+        // 0a-pre: MSO-positive Blöcke ZWISCHEN Tabellenzeilen als <tr> schützen
+        // KERN-PROBLEM (analog zu 0b für !mso): Wenn ein MSO-positiver Block
+        // (z.B. <!--[if mso]><center><table>...<![endif]-->) direkt innerhalb
+        // von <tbody> steht (zwischen Zeilen), erzeugt der <ins>-Placeholder
+        // ungültiges HTML. DOMParser "foster-parents" das <ins> VOR die Tabelle,
+        // was die gesamte HTML-Struktur zerstört.
+        // LÖSUNG: MSO-positive Blöcke zwischen Zeilen als <tr>-Placeholder speichern.
+        // Betroffen sind z.B. Amplifon-Templates mit MSO-Wrapper um die Haupt-Tabelle.
+        
+        // Fall 1: Nach </tr> oder <tbody> und vor <tr>
+        result = result.replace(
+            /((?:<\/tr>|<tbody[^>]*>))\s*(<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->)\s*(<tr[\s>])/gi,
+            function(fullMatch, before, ccBlock, after) {
+                const idx = _ccBlockStore.length;
+                _ccBlockStore.push(ccBlock);
+                console.log('[protectMsoStyles] MSO-positive between-rows Block ' + idx + ' als <tr> geschützt');
+                return before + '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>' + after;
+            }
+        );
+        
+        // Fall 2: Nach </tr> und vor </tbody> oder </table> (letzter Block am Ende)
+        result = result.replace(
+            /(<\/tr>)\s*(<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->)\s*(<\/(?:tbody|table)[\s>])/gi,
+            function(fullMatch, before, ccBlock, after) {
+                const idx = _ccBlockStore.length;
+                _ccBlockStore.push(ccBlock);
+                console.log('[protectMsoStyles] MSO-positive end-of-table Block ' + idx + ' als <tr> geschützt');
+                return before + '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>' + after;
+            }
+        );
+        
         // 0a: Komplette Conditional Comment Blöcke: <!--[if ...]>INHALT<![endif]-->
         // Matcht alle Varianten: [if mso], [if gte mso 9], [if (mso 16)], etc.
         // WICHTIG: Nur MSO-positive Blöcke! NICHT [if !mso...] – diese enthalten
         // Mobile-Content (z.B. Mobile-Bilder) der sichtbar bleiben muss.
+        // HINWEIS: between-rows-Blöcke wurden bereits in 0a-pre als <tr> geschützt,
+        // hier werden nur noch die verbleibenden (inside-td) Blöcke erfasst.
         result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
         // 0b: Non-MSO Blöcke schützen
@@ -5079,7 +5112,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 3b: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
+        // 3b: <tr>-Block-Placeholders für CC-Blöcke zwischen Tabellenzeilen wiederherstellen
+        // (sowohl MSO-positive als auch !mso Blöcke, die als <tr> geschützt wurden)
         raw = raw.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
             if (idx >= 0 && idx < _ccBlockStore.length) {
@@ -7074,7 +7108,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 imagesHistory = [];
                 imagesPending = false;
             } else if (fromTab === 'editor') {
-                editorTabHtml = currentWorkingHtml;
+                editorTabHtml = null; // BUG FIX: null statt currentWorkingHtml, damit showEditorTab beim nächsten Öffnen injectQaNodeIds aufruft
                 editorHistory = [];
                 editorPending = false;
                 editorSelectedElement = null;
@@ -7547,8 +7581,8 @@ td[width] { width: auto !important; }
             sourceLabel = 'images';
         } else if (currentInspectorTab === 'editor') {
             if (!editorTabHtml) {
-                editorTabHtml = currentWorkingHtml; // Initialisiere sofort
-                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Editor initialized from currentWorkingHtml');
+                editorTabHtml = injectQaNodeIds(currentWorkingHtml); // BUG FIX: Mit IDs initialisieren (war: currentWorkingHtml ohne IDs → ID-Mismatch mit Preview)
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Editor initialized from currentWorkingHtml (with injectQaNodeIds)');
             }
             sourceHtml = editorTabHtml;
             sourceLabel = 'editor';
@@ -7745,16 +7779,30 @@ td[width] { width: auto !important; }
         const clickableSelectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'];
         let nodeIdCounter = 0;
         
-        clickableSelectors.forEach(selector => {
-            const elements = doc.querySelectorAll(selector);
-            elements.forEach(el => {
-                nodeIdCounter++;
-                const id = 'N' + String(nodeIdCounter).padStart(4, '0');
-                el.setAttribute('data-qa-node-id', id);
-            });
-        });
+        // BUG FIX: Wenn das Quell-HTML bereits qa-node-ids hat (z.B. editorTabHtml 
+        // aus injectQaNodeIds), diese BEIBEHALTEN statt neu zu vergeben.
+        // Problem: generateAnnotatedPreview durchläuft DOMParser + Fix-Marker-Insertion,
+        // was die Element-Reihenfolge verändern kann. Wenn IDs neu vergeben werden,
+        // können sie von den IDs in editorTabHtml abweichen → Editor schreibt in
+        // das falsche Element (z.B. %header% statt Anrede-TD).
+        const hasExistingNodeIds = doc.querySelector('[data-qa-node-id]') !== null;
         
-        console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
+        if (hasExistingNodeIds) {
+            // IDs bereits vorhanden → beibehalten, nur zählen
+            nodeIdCounter = doc.querySelectorAll('[data-qa-node-id]').length;
+            console.log('[INSPECTOR] Preserving ' + nodeIdCounter + ' existing qa-node-ids (from editorTabHtml)');
+        } else {
+            // Keine IDs vorhanden → neu vergeben
+            clickableSelectors.forEach(selector => {
+                const elements = doc.querySelectorAll(selector);
+                elements.forEach(el => {
+                    nodeIdCounter++;
+                    const id = 'N' + String(nodeIdCounter).padStart(4, '0');
+                    el.setAttribute('data-qa-node-id', id);
+                });
+            });
+            console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
+        }
         
         // EDITOR MODE: Direkt editierbare Textelemente (Preview-only)
         if (tabName === 'editor') {
