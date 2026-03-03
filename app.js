@@ -4664,7 +4664,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
-            const newName = `${baseName}_optimized.${extension}`;
+            const templateWidth = detectTemplateWidth(downloadHtml);
+            const newName = `${baseName}_optimized_${templateWidth}.${extension}`;
             // Sicherheitsnetz: Preheader muss VOR %header% stehen
             // (Manche Verarbeitungsschritte können die Reihenfolge ändern)
             const preheaderMatch = downloadHtml.match(/<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
@@ -4780,7 +4781,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
-            const newName = `${baseName}_final_optimized.${extension}`;
+            const templateWidth = detectTemplateWidth(currentWorkingHtml);
+            const newName = `${baseName}_final_optimized_${templateWidth}.${extension}`;
             
             downloadFile(currentWorkingHtml, newName, 'text/html');
             
