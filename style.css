@@ -3554,3 +3554,436 @@ body {
     align-items: center;
     gap: 12px;
 }
+/* ============================================
+   EOA CLIENT-VORSCHAU STYLES
+   ============================================
+   Einfügen am Ende der style.css
+*/
+
+/* --- EOA Tab Spinner --- */
+.eoa-tab-spinner {
+    margin-left: 4px;
+    animation: eoaSpin 1s linear infinite;
+    display: inline-block;
+    font-size: 12px;
+}
+
+@keyframes eoaSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- EOA Panel Layout --- */
+.eoa-panel-wrapper {
+    padding: 16px;
+}
+
+/* --- Client-Auswahl Bereich --- */
+.eoa-client-selector {
+    background: #f8f7f5;
+    border: 1px solid #e7e5e1;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.eoa-client-selector h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #44403c;
+    margin-bottom: 12px;
+}
+
+.eoa-client-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.eoa-client-group {
+    border-bottom: 1px solid #e7e5e1;
+    padding-bottom: 10px;
+}
+
+.eoa-client-group:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.eoa-client-group-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #78716c;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.eoa-client-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.eoa-client-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #fff;
+    border: 1px solid #d6d3d1;
+    border-radius: 16px;
+    font-size: 12px;
+    color: #44403c;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.eoa-client-chip:hover {
+    border-color: #f2a93b;
+    background: #fef6e8;
+}
+
+.eoa-client-chip.selected {
+    background: #fef6e8;
+    border-color: #f2a93b;
+    color: #b45309;
+    font-weight: 500;
+}
+
+.eoa-client-chip input[type="checkbox"] {
+    display: none;
+}
+
+.eoa-client-chip .chip-check {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid #a8a29e;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.eoa-client-chip.selected .chip-check {
+    background: #f2a93b;
+    border-color: #f2a93b;
+    color: #fff;
+}
+
+/* --- Buttons --- */
+.eoa-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.eoa-btn-start {
+    padding: 8px 20px;
+    background: #f2a93b;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.eoa-btn-start:hover {
+    background: #d97706;
+}
+
+.eoa-btn-start:disabled {
+    background: #d6d3d1;
+    cursor: not-allowed;
+}
+
+.eoa-btn-select-all,
+.eoa-btn-select-none {
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px solid #d6d3d1;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #78716c;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.eoa-btn-select-all:hover,
+.eoa-btn-select-none:hover {
+    background: #f5f3f0;
+    border-color: #a8a29e;
+}
+
+/* --- Fortschrittsanzeige --- */
+.eoa-progress {
+    background: #f8f7f5;
+    border: 1px solid #e7e5e1;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.eoa-progress-bar-container {
+    flex: 1;
+    height: 6px;
+    background: #e7e5e1;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.eoa-progress-bar {
+    height: 100%;
+    background: #f2a93b;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+.eoa-progress-text {
+    font-size: 12px;
+    color: #78716c;
+    white-space: nowrap;
+}
+
+/* --- Screenshot-Galerie (Mosaik) --- */
+.eoa-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.eoa-screenshot-card {
+    background: #fff;
+    border: 1px solid #e7e5e1;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+    animation: eoaFadeIn 0.4s ease-out;
+}
+
+@keyframes eoaFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.eoa-screenshot-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.eoa-screenshot-header {
+    padding: 10px 12px;
+    background: #f8f7f5;
+    border-bottom: 1px solid #e7e5e1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.eoa-screenshot-client-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #44403c;
+}
+
+.eoa-screenshot-client-info {
+    font-size: 11px;
+    color: #a8a29e;
+}
+
+.eoa-screenshot-img-wrapper {
+    position: relative;
+    max-height: 400px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.eoa-screenshot-img-wrapper img {
+    width: 100%;
+    display: block;
+}
+
+.eoa-screenshot-img-wrapper .eoa-expand-hint {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(transparent, rgba(255,255,255,0.95));
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+    font-size: 11px;
+    color: #78716c;
+    pointer-events: none;
+}
+
+/* --- Placeholder / Lade-Karte --- */
+.eoa-screenshot-card.loading {
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.eoa-screenshot-card.loading .eoa-screenshot-img-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f7f5;
+    min-height: 150px;
+}
+
+.eoa-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e7e5e1;
+    border-top-color: #f2a93b;
+    border-radius: 50%;
+    animation: eoaSpin 0.8s linear infinite;
+}
+
+/* --- Lightbox (Vollbild-Ansicht) --- */
+.eoa-lightbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.eoa-lightbox-header {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.eoa-lightbox-img {
+    max-width: 90vw;
+    max-height: 85vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.eoa-lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.eoa-lightbox-close:hover {
+    opacity: 1;
+}
+
+/* Navigation Pfeile in Lightbox */
+.eoa-lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #fff;
+    font-size: 36px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.eoa-lightbox-nav:hover {
+    opacity: 1;
+    background: rgba(255,255,255,0.2);
+}
+
+.eoa-lightbox-prev {
+    left: 20px;
+}
+
+.eoa-lightbox-next {
+    right: 20px;
+}
+
+/* --- Status-Meldungen --- */
+.eoa-status {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.eoa-status-info {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+
+.eoa-status-error {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+
+.eoa-status-success {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+}
+
+/* --- Server-Check Banner --- */
+.eoa-server-banner {
+    padding: 16px;
+    text-align: center;
+}
+
+.eoa-server-offline {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 20px;
+    color: #dc2626;
+}
+
+.eoa-server-offline h4 {
+    margin-bottom: 8px;
+}
+
+.eoa-server-offline p {
+    font-size: 13px;
+    color: #78716c;
+    margin: 4px 0;
+}

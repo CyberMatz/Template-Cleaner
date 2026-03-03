@@ -3904,6 +3904,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const placementPanel = document.getElementById('placementPanel');
     const placementContent = document.getElementById('placementContent');
     
+    // EOA Client-Vorschau
+    const eoaTab = document.getElementById('eoaTab');
+    const eoaPanel = document.getElementById('eoaPanel');
+    const eoaContent = document.getElementById('eoaContent');
+    const eoaTabSpinner = document.getElementById('eoaTabSpinner');
+    const eoaTabCount = document.getElementById('eoaTabCount');
+    
     const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
     const commitChangesBtn = document.getElementById('commitChangesBtn');
     const downloadManualOptimized = document.getElementById('downloadManualOptimized');
@@ -6961,12 +6968,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Update Tab Buttons
-        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab, placementTab].forEach(tab => {
+        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab, placementTab, eoaTab].forEach(tab => {
             if (tab) tab.classList.remove('active');
         });
         
         // Update Panels
-        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel, placementPanel].forEach(panel => {
+        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel, placementPanel, eoaPanel].forEach(panel => {
             if (panel) panel.style.display = 'none';
         });
         
@@ -6991,6 +6998,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (tabName === 'placement' && placementTab && placementPanel) {
             placementTab.classList.add('active');
             placementPanel.style.display = 'block';
+        } else if (tabName === 'eoa' && eoaTab && eoaPanel) {
+            eoaTab.classList.add('active');
+            eoaPanel.style.display = 'block';
         }
         
         // Lade Tab Content
@@ -7007,6 +7017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editorTab) editorTab.addEventListener('click', () => switchInspectorTab('editor'));
     if (buttonsTab) buttonsTab.addEventListener('click', () => switchInspectorTab('buttons'));
     if (placementTab) placementTab.addEventListener('click', () => switchInspectorTab('placement'));
+    if (eoaTab) eoaTab.addEventListener('click', () => switchInspectorTab('eoa'));
     
     // Load Tab Content (Placeholder für Phase 3-7)
     function loadInspectorTabContent(tabName) {
@@ -7029,6 +7040,16 @@ document.addEventListener('DOMContentLoaded', () => {
             showButtonsTab(buttonsContent);
         } else if (tabName === 'placement' && placementContent) {
             showPlacementTab(placementContent);
+        } else if (tabName === 'eoa' && eoaContent) {
+            // EOA Client-Vorschau: Server-Check beim ersten Aufruf
+            if (!eoaServerOnline && !eoaAvailableClients) {
+                checkEoaServer().then(online => {
+                    if (online) loadEoaClients().then(() => renderEoaTabContent());
+                    else renderEoaTabContent();
+                });
+            } else {
+                renderEoaTabContent();
+            }
         }
     }
     
@@ -14682,6 +14703,578 @@ td[width] { width: auto !important; }
         // Wird in Phase 3+ verwendet
         // Placeholder für spätere Implementierung
     }
+
+    // ============================================
+    // EOA CLIENT-VORSCHAU
+    // ============================================
+    
+    const EOA_SERVER_URL = 'http://localhost:3457';
+    let eoaAvailableClients = null;
+    let eoaCurrentTestId = null;
+    let eoaPollingTimer = null;
+    let eoaCompletedClients = {};
+    let eoaSelectedClients = [];
+    let eoaIsLoading = false;
+    let eoaServerOnline = false;
+
+    // Bevorzugte Clients – Keywords zum Erkennen der EOA-Client-IDs
+    const EOA_PREFERRED_KEYWORDS = [
+        { label: 'Outlook 2016', keywords: ['outlook16', 'outlook_2016'] },
+        { label: 'Outlook 2019', keywords: ['outlook19', 'outlook_2019'] },
+        { label: 'Outlook 365', keywords: ['outlook365', 'office365'] },
+        { label: 'Gmail Desktop', keywords: ['gmail_chr', 'gmail_ff'] },
+        { label: 'Gmail Mobile (Android)', keywords: ['gmail_mob_and', 'gmail_android'] },
+        { label: 'Gmail Mobile (iOS)', keywords: ['gmail_mob_ios', 'gmail_ios'] },
+        { label: 'Apple Mail (macOS)', keywords: ['apple_mail', 'mac_mail', 'appmail'] },
+        { label: 'Apple Mail (iPhone)', keywords: ['iphone', 'ios_mail'] },
+        { label: 'Yahoo Mail', keywords: ['yahoo'] },
+        { label: 'Hotmail / Outlook.com', keywords: ['outlook_com', 'hotmail', 'live'] },
+        { label: 'Web.de', keywords: ['web_de', 'webde'] },
+        { label: 'Web.de Mobile', keywords: ['web_de_mob', 'webde_mob'] },
+        { label: 'GMX', keywords: ['gmx'] },
+        { label: 'GMX Mobile', keywords: ['gmx_mob'] },
+        { label: 'T-Online', keywords: ['t_online', 'tonline', 't-online'] },
+        { label: 'Freenet', keywords: ['freenet'] },
+    ];
+
+    // Server Health Check
+    async function checkEoaServer() {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const response = await fetch(EOA_SERVER_URL + '/health', { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (response.ok) {
+                eoaServerOnline = true;
+                return true;
+            }
+        } catch (e) { /* Server nicht erreichbar */ }
+        eoaServerOnline = false;
+        return false;
+    }
+
+    // Verfügbare Clients laden
+    async function loadEoaClients() {
+        if (eoaAvailableClients) return eoaAvailableClients;
+        try {
+            const response = await fetch(EOA_SERVER_URL + '/clients');
+            const data = await response.json();
+            eoaAvailableClients = data.clients || [];
+            console.log('[EOA] ' + eoaAvailableClients.length + ' Clients verfügbar');
+            return eoaAvailableClients;
+        } catch (e) {
+            console.error('[EOA] Fehler beim Laden der Clients:', e);
+            return [];
+        }
+    }
+
+    // Passende Client-IDs finden
+    function findMatchingEoaClients(availableClients) {
+        const matched = [];
+        const unmatched = [];
+        
+        for (const pref of EOA_PREFERRED_KEYWORDS) {
+            let found = false;
+            for (const keyword of pref.keywords) {
+                const match = availableClients.find(function(c) {
+                    return c.id.toLowerCase().includes(keyword.toLowerCase());
+                });
+                if (match) {
+                    matched.push(Object.assign({}, match, { preferredLabel: pref.label }));
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                unmatched.push(pref.label);
+            }
+        }
+        
+        return { matched: matched, unmatched: unmatched };
+    }
+
+    // EOA Tab Inhalt rendern
+    function renderEoaTabContent() {
+        if (!eoaContent) return;
+        
+        // Server offline?
+        if (!eoaServerOnline) {
+            eoaContent.innerHTML = '<div class="eoa-server-banner">' +
+                '<div class="eoa-server-offline">' +
+                '<h4>\u26a0\ufe0f EOA-Server nicht erreichbar</h4>' +
+                '<p>Der lokale EOA-Server l\u00e4uft nicht auf Port 3457.</p>' +
+                '<p><strong>So startest du ihn:</strong></p>' +
+                '<p>1. Doppelklick auf <code>start-eoa.bat</code> im eoa-server Ordner</p>' +
+                '<p style="margin-top: 12px;">' +
+                '<button onclick="retryEoaConnection()" class="eoa-btn-start">\ud83d\udd04 Erneut verbinden</button>' +
+                '</p></div></div>';
+            return;
+        }
+        
+        // Clients noch nicht geladen?
+        if (!eoaAvailableClients) {
+            eoaContent.innerHTML = '<div class="eoa-panel-wrapper">' +
+                '<div class="eoa-status eoa-status-info">\u23f3 Lade verf\u00fcgbare E-Mail-Clients...</div></div>';
+            loadEoaClients().then(function() { renderEoaTabContent(); });
+            return;
+        }
+        
+        var result = findMatchingEoaClients(eoaAvailableClients);
+        var matched = result.matched;
+        var unmatched = result.unmatched;
+        
+        // Standard: Alle gefundenen auswählen
+        if (eoaSelectedClients.length === 0) {
+            eoaSelectedClients = matched.map(function(c) { return c.id; });
+        }
+        
+        // Gruppieren
+        var groups = {};
+        matched.forEach(function(client) {
+            var cat = client.category || 'Sonstige';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(client);
+        });
+        
+        var categoryLabels = {
+            'Application': '\ud83d\udcbb Desktop-Anwendungen',
+            'Web': '\ud83c\udf10 Webmail',
+            'Mobile': '\ud83d\udcf1 Mobil'
+        };
+        
+        var html = '<div class="eoa-panel-wrapper">';
+        
+        // Kein Template?
+        if (!currentWorkingHtml) {
+            html += '<div class="eoa-status eoa-status-info">\u2139\ufe0f Bitte zuerst ein Template laden.</div></div>';
+            eoaContent.innerHTML = html;
+            return;
+        }
+        
+        // Client-Auswahl
+        html += '<div class="eoa-client-selector">';
+        html += '<h4>E-Mail-Clients ausw\u00e4hlen</h4>';
+        html += '<div class="eoa-client-groups">';
+        
+        var catKeys = Object.keys(groups);
+        for (var ci = 0; ci < catKeys.length; ci++) {
+            var category = catKeys[ci];
+            var clients = groups[category];
+            html += '<div class="eoa-client-group">';
+            html += '<div class="eoa-client-group-title">' + (categoryLabels[category] || category) + '</div>';
+            html += '<div class="eoa-client-checkboxes">';
+            
+            for (var cj = 0; cj < clients.length; cj++) {
+                var client = clients[cj];
+                var isSelected = eoaSelectedClients.indexOf(client.id) !== -1;
+                html += '<label class="eoa-client-chip ' + (isSelected ? 'selected' : '') + '" data-client-id="' + client.id + '">' +
+                    '<span class="chip-check">' + (isSelected ? '\u2713' : '') + '</span>' +
+                    '<span>' + (client.preferredLabel || client.name) + '</span>' +
+                    '<input type="checkbox" value="' + client.id + '"' + (isSelected ? ' checked' : '') + '>' +
+                    '</label>';
+            }
+            
+            html += '</div></div>';
+        }
+        
+        html += '</div>'; // eoa-client-groups
+        
+        if (unmatched.length > 0) {
+            html += '<div style="margin-top: 10px; font-size: 11px; color: #a8a29e;">' +
+                '\u2139\ufe0f Nicht bei EOA verf\u00fcgbar: ' + unmatched.join(', ') + '</div>';
+        }
+        
+        // Buttons
+        html += '<div class="eoa-actions">';
+        html += '<button class="eoa-btn-start" id="eoaStartTest"' + (eoaIsLoading ? ' disabled' : '') + '>' +
+            (eoaIsLoading ? '\u23f3 Test l\u00e4uft...' : '\ud83e\uddea Vorschau laden') + '</button>';
+        html += '<button class="eoa-btn-select-all" onclick="eoaSelectAll()">Alle ausw\u00e4hlen</button>';
+        html += '<button class="eoa-btn-select-none" onclick="eoaSelectNone()">Keine</button>';
+        html += '<span style="font-size: 11px; color: #a8a29e;">' + eoaSelectedClients.length + ' Client(s) ausgew\u00e4hlt</span>';
+        html += '</div>';
+        html += '</div>'; // eoa-client-selector
+        
+        // Fortschrittsanzeige
+        var completedCount = Object.keys(eoaCompletedClients).length;
+        if (eoaIsLoading || completedCount > 0) {
+            var totalClients = eoaSelectedClients.length;
+            var pct = totalClients > 0 ? Math.round((completedCount / totalClients) * 100) : 0;
+            
+            html += '<div class="eoa-progress">' +
+                '<div class="eoa-progress-bar-container">' +
+                '<div class="eoa-progress-bar" style="width: ' + pct + '%"></div>' +
+                '</div>' +
+                '<span class="eoa-progress-text">' + completedCount + ' / ' + totalClients + ' fertig</span>' +
+                '</div>';
+        }
+        
+        // Screenshot-Galerie
+        html += '<div class="eoa-gallery" id="eoaGallery">';
+        
+        if (eoaIsLoading || completedCount > 0) {
+            // Fertige Screenshots
+            var compKeys = Object.keys(eoaCompletedClients);
+            for (var ck = 0; ck < compKeys.length; ck++) {
+                html += renderEoaScreenshotCard(compKeys[ck], eoaCompletedClients[compKeys[ck]]);
+            }
+            
+            // Noch ladende Clients
+            if (eoaIsLoading) {
+                for (var li = 0; li < eoaSelectedClients.length; li++) {
+                    var cid = eoaSelectedClients[li];
+                    if (eoaCompletedClients[cid]) continue;
+                    
+                    var clientInfo = null;
+                    for (var ai = 0; ai < eoaAvailableClients.length; ai++) {
+                        if (eoaAvailableClients[ai].id === cid) { clientInfo = eoaAvailableClients[ai]; break; }
+                    }
+                    var matchedPref = null;
+                    for (var pi = 0; pi < EOA_PREFERRED_KEYWORDS.length; pi++) {
+                        var p = EOA_PREFERRED_KEYWORDS[pi];
+                        for (var ki = 0; ki < p.keywords.length; ki++) {
+                            if (cid.toLowerCase().indexOf(p.keywords[ki]) !== -1) { matchedPref = p; break; }
+                        }
+                        if (matchedPref) break;
+                    }
+                    var lbl = matchedPref ? matchedPref.label : (clientInfo ? clientInfo.name : cid);
+                    
+                    html += '<div class="eoa-screenshot-card loading" data-client-id="' + cid + '">' +
+                        '<div class="eoa-screenshot-header">' +
+                        '<span class="eoa-screenshot-client-name">' + lbl + '</span>' +
+                        '<span class="eoa-screenshot-client-info">\u23f3 Wird geladen...</span>' +
+                        '</div>' +
+                        '<div class="eoa-screenshot-img-wrapper">' +
+                        '<div class="eoa-loading-spinner"></div>' +
+                        '</div></div>';
+                }
+            }
+        }
+        
+        html += '</div></div>';
+        eoaContent.innerHTML = html;
+        setupEoaEventListeners();
+    }
+
+    // Screenshot-Karte HTML erzeugen
+    function renderEoaScreenshotCard(clientId, result) {
+        var matchedPref = null;
+        for (var pi = 0; pi < EOA_PREFERRED_KEYWORDS.length; pi++) {
+            var p = EOA_PREFERRED_KEYWORDS[pi];
+            for (var ki = 0; ki < p.keywords.length; ki++) {
+                if (clientId.toLowerCase().indexOf(p.keywords[ki]) !== -1) { matchedPref = p; break; }
+            }
+            if (matchedPref) break;
+        }
+        var label = matchedPref ? matchedPref.label : (result.displayName || clientId);
+        
+        var screenshotUrl = '';
+        if (result.screenshots) {
+            screenshotUrl = result.screenshots['default'] || result.screenshots.no_images || '';
+            if (!screenshotUrl) {
+                var sKeys = Object.values(result.screenshots);
+                if (sKeys.length > 0) screenshotUrl = sKeys[0];
+            }
+        }
+        if (!screenshotUrl) {
+            screenshotUrl = result.fullThumbnail || result.thumbnail || '';
+        }
+        
+        var osInfo = [result.client, result.os].filter(Boolean).join(' \u00b7 ');
+        
+        var cardHtml = '<div class="eoa-screenshot-card" data-client-id="' + clientId + '">' +
+            '<div class="eoa-screenshot-header">' +
+            '<span class="eoa-screenshot-client-name">' + label + '</span>' +
+            '<span class="eoa-screenshot-client-info">' + osInfo + '</span>' +
+            '</div>' +
+            '<div class="eoa-screenshot-img-wrapper" onclick="openEoaLightbox(\'' + clientId + '\')">';
+        
+        if (screenshotUrl) {
+            cardHtml += '<img src="' + screenshotUrl + '" alt="' + label + '" loading="lazy">' +
+                '<div class="eoa-expand-hint">\ud83d\udd0d Klicken zum Vergr\u00f6\u00dfern</div>';
+        } else {
+            cardHtml += '<div style="padding: 40px; text-align: center; color: #a8a29e;">Kein Screenshot verf\u00fcgbar</div>';
+        }
+        
+        cardHtml += '</div></div>';
+        return cardHtml;
+    }
+
+    // Event-Listener für Client-Chips
+    function setupEoaEventListeners() {
+        var chips = document.querySelectorAll('.eoa-client-chip');
+        for (var i = 0; i < chips.length; i++) {
+            chips[i].addEventListener('click', function(e) {
+                e.preventDefault();
+                var clientId = this.getAttribute('data-client-id');
+                var checkbox = this.querySelector('input[type="checkbox"]');
+                var idx = eoaSelectedClients.indexOf(clientId);
+                
+                if (idx !== -1) {
+                    eoaSelectedClients.splice(idx, 1);
+                    this.classList.remove('selected');
+                    this.querySelector('.chip-check').textContent = '';
+                    checkbox.checked = false;
+                } else {
+                    eoaSelectedClients.push(clientId);
+                    this.classList.add('selected');
+                    this.querySelector('.chip-check').textContent = '\u2713';
+                    checkbox.checked = true;
+                }
+                
+                var countSpan = document.querySelector('.eoa-actions span');
+                if (countSpan) countSpan.textContent = eoaSelectedClients.length + ' Client(s) ausgew\u00e4hlt';
+            });
+        }
+        
+        var startBtn = document.getElementById('eoaStartTest');
+        if (startBtn) startBtn.addEventListener('click', startEoaTest);
+    }
+
+    // Alle/Keine auswählen
+    function eoaSelectAll() {
+        if (!eoaAvailableClients) return;
+        var result = findMatchingEoaClients(eoaAvailableClients);
+        eoaSelectedClients = result.matched.map(function(c) { return c.id; });
+        renderEoaTabContent();
+    }
+    function eoaSelectNone() {
+        eoaSelectedClients = [];
+        renderEoaTabContent();
+    }
+
+    // Test starten
+    async function startEoaTest() {
+        if (eoaIsLoading) return;
+        if (eoaSelectedClients.length === 0) {
+            showInspectorToast('\u26a0\ufe0f Bitte mindestens einen Client ausw\u00e4hlen');
+            return;
+        }
+        if (!currentWorkingHtml) {
+            showInspectorToast('\u26a0\ufe0f Kein Template geladen');
+            return;
+        }
+        
+        eoaIsLoading = true;
+        eoaCompletedClients = {};
+        if (eoaTabSpinner) eoaTabSpinner.style.display = 'inline-block';
+        if (eoaTabCount) eoaTabCount.textContent = '';
+        renderEoaTabContent();
+        
+        try {
+            var response = await fetch(EOA_SERVER_URL + '/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    html: currentWorkingHtml,
+                    subject: 'Template QA Test',
+                    clients: eoaSelectedClients
+                })
+            });
+            
+            if (!response.ok) throw new Error('Server-Fehler: ' + response.status);
+            
+            var data = await response.json();
+            eoaCurrentTestId = data.testId;
+            console.log('[EOA] Test gestartet: ' + eoaCurrentTestId);
+            showInspectorToast('\ud83e\uddea Client-Vorschauen werden im Hintergrund geladen...');
+            
+            startEoaPolling();
+        } catch (err) {
+            console.error('[EOA] Fehler beim Starten:', err);
+            eoaIsLoading = false;
+            if (eoaTabSpinner) eoaTabSpinner.style.display = 'none';
+            showInspectorToast('\u274c Fehler: ' + err.message);
+            renderEoaTabContent();
+        }
+    }
+
+    // Polling: Screenshots nach und nach abholen
+    function startEoaPolling() {
+        if (eoaPollingTimer) clearInterval(eoaPollingTimer);
+        var attempts = 0;
+        
+        eoaPollingTimer = setInterval(async function() {
+            attempts++;
+            if (attempts > 60) {
+                stopEoaPolling();
+                showInspectorToast('\u26a0\ufe0f Zeit\u00fcberschreitung \u2013 einige Vorschauen konnten nicht geladen werden');
+                return;
+            }
+            
+            try {
+                var statusRes = await fetch(EOA_SERVER_URL + '/test/' + eoaCurrentTestId + '/status');
+                var statusData = await statusRes.json();
+                
+                // Neue fertige Clients
+                var newlyCompleted = statusData.completed.filter(function(id) {
+                    return !eoaCompletedClients[id];
+                });
+                
+                if (newlyCompleted.length > 0) {
+                    var resultsRes = await fetch(EOA_SERVER_URL + '/test/' + eoaCurrentTestId + '/results-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ clients: newlyCompleted })
+                    });
+                    var resultsData = await resultsRes.json();
+                    
+                    var rKeys = Object.keys(resultsData.results);
+                    for (var ri = 0; ri < rKeys.length; ri++) {
+                        var rClientId = rKeys[ri];
+                        eoaCompletedClients[rClientId] = resultsData.results[rClientId];
+                        updateEoaScreenshotInGallery(rClientId, resultsData.results[rClientId]);
+                    }
+                    
+                    updateEoaProgress();
+                    if (eoaTabCount) eoaTabCount.textContent = Object.keys(eoaCompletedClients).length;
+                }
+                
+                if (statusData.allDone) {
+                    stopEoaPolling();
+                    showInspectorToast('\u2705 Alle ' + Object.keys(eoaCompletedClients).length + ' Client-Vorschauen fertig!');
+                }
+            } catch (err) {
+                console.error('[EOA] Polling-Fehler:', err);
+            }
+        }, 3000);
+    }
+
+    function stopEoaPolling() {
+        if (eoaPollingTimer) { clearInterval(eoaPollingTimer); eoaPollingTimer = null; }
+        eoaIsLoading = false;
+        if (eoaTabSpinner) eoaTabSpinner.style.display = 'none';
+        renderEoaTabContent();
+    }
+
+    // Screenshot live im Mosaik aktualisieren
+    function updateEoaScreenshotInGallery(clientId, result) {
+        var gallery = document.getElementById('eoaGallery');
+        if (!gallery) return;
+        
+        var existingCard = gallery.querySelector('.eoa-screenshot-card[data-client-id="' + clientId + '"]');
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = renderEoaScreenshotCard(clientId, result);
+        var newCard = tempDiv.firstElementChild;
+        
+        if (existingCard) {
+            existingCard.replaceWith(newCard);
+        } else {
+            var firstLoading = gallery.querySelector('.eoa-screenshot-card.loading');
+            if (firstLoading) {
+                gallery.insertBefore(newCard, firstLoading);
+            } else {
+                gallery.appendChild(newCard);
+            }
+        }
+    }
+
+    // Fortschrittsbalken aktualisieren
+    function updateEoaProgress() {
+        var bar = document.querySelector('.eoa-progress-bar');
+        var text = document.querySelector('.eoa-progress-text');
+        if (!bar || !text) return;
+        var total = eoaSelectedClients.length;
+        var completed = Object.keys(eoaCompletedClients).length;
+        var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        bar.style.width = pct + '%';
+        text.textContent = completed + ' / ' + total + ' fertig';
+    }
+
+    // Lightbox (Vollbild)
+    function openEoaLightbox(clientId) {
+        var result = eoaCompletedClients[clientId];
+        if (!result) return;
+        
+        var matchedPref = null;
+        for (var pi = 0; pi < EOA_PREFERRED_KEYWORDS.length; pi++) {
+            var p = EOA_PREFERRED_KEYWORDS[pi];
+            for (var ki = 0; ki < p.keywords.length; ki++) {
+                if (clientId.toLowerCase().indexOf(p.keywords[ki]) !== -1) { matchedPref = p; break; }
+            }
+            if (matchedPref) break;
+        }
+        var label = matchedPref ? matchedPref.label : (result.displayName || clientId);
+        
+        var screenshotUrl = '';
+        if (result.screenshots) {
+            screenshotUrl = result.screenshots['default'] || result.screenshots.no_images || '';
+            if (!screenshotUrl) {
+                var sVals = Object.values(result.screenshots);
+                if (sVals.length > 0) screenshotUrl = sVals[0];
+            }
+        }
+        if (!screenshotUrl) screenshotUrl = result.fullThumbnail || result.thumbnail || '';
+        if (!screenshotUrl) return;
+        
+        var clientIds = Object.keys(eoaCompletedClients);
+        var currentIdx = clientIds.indexOf(clientId);
+        
+        // Alte Lightbox entfernen
+        var old = document.querySelector('.eoa-lightbox');
+        if (old) old.remove();
+        
+        var lightbox = document.createElement('div');
+        lightbox.className = 'eoa-lightbox';
+        lightbox.dataset.currentIdx = currentIdx;
+        
+        var innerHtml = '<button class="eoa-lightbox-close" onclick="this.parentElement.remove()">\u00d7</button>' +
+            '<div class="eoa-lightbox-header">' + label + '</div>' +
+            '<img class="eoa-lightbox-img" src="' + screenshotUrl + '" alt="' + label + '">';
+        
+        if (currentIdx > 0) {
+            innerHtml += '<button class="eoa-lightbox-nav eoa-lightbox-prev" onclick="navigateEoaLightbox(-1)">\u2039</button>';
+        }
+        if (currentIdx < clientIds.length - 1) {
+            innerHtml += '<button class="eoa-lightbox-nav eoa-lightbox-next" onclick="navigateEoaLightbox(1)">\u203a</button>';
+        }
+        
+        lightbox.innerHTML = innerHtml;
+        
+        lightbox.addEventListener('click', function(e) {
+            if (e.target === lightbox) lightbox.remove();
+        });
+        
+        document.addEventListener('keydown', function eoaLbKeyHandler(e) {
+            if (e.key === 'Escape') {
+                var lb = document.querySelector('.eoa-lightbox');
+                if (lb) lb.remove();
+                document.removeEventListener('keydown', eoaLbKeyHandler);
+            }
+            if (e.key === 'ArrowLeft') navigateEoaLightbox(-1);
+            if (e.key === 'ArrowRight') navigateEoaLightbox(1);
+        });
+        
+        document.body.appendChild(lightbox);
+    }
+
+    function navigateEoaLightbox(direction) {
+        var lightbox = document.querySelector('.eoa-lightbox');
+        if (!lightbox) return;
+        var clientIds = Object.keys(eoaCompletedClients);
+        var currentIdx = parseInt(lightbox.dataset.currentIdx) + direction;
+        if (currentIdx < 0 || currentIdx >= clientIds.length) return;
+        lightbox.remove();
+        openEoaLightbox(clientIds[currentIdx]);
+    }
+
+    // Erneut verbinden
+    async function retryEoaConnection() {
+        var online = await checkEoaServer();
+        if (online) {
+            await loadEoaClients();
+            showInspectorToast('\u2705 Verbindung zum EOA-Server hergestellt!');
+        } else {
+            showInspectorToast('\u274c EOA-Server immer noch nicht erreichbar');
+        }
+        renderEoaTabContent();
+    }
+
+    // Globale Funktionen
+    window.openEoaLightbox = openEoaLightbox;
+    window.navigateEoaLightbox = navigateEoaLightbox;
+    window.eoaSelectAll = eoaSelectAll;
+    window.eoaSelectNone = eoaSelectNone;
+    window.retryEoaConnection = retryEoaConnection;
 });
 
 
