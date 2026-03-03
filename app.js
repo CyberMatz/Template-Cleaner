@@ -2566,6 +2566,17 @@ class TemplateProcessor {
                 }
             }
             
+            // mso-border-alt Pattern: Button hat bereits Outlook-Fallback via mso-border-alt
+            // z.B. mso-border-alt:10px solid #39a949 → Outlook nutzt das als Padding/Background
+            // Kombiniert mit display:block + width:auto → volle Breite auch in Outlook
+            // → KEIN VML nötig, da bestehende Lösung funktioniert
+            if (!hasVml && cta.fullMatch) {
+                const hasMsoBorderAlt = /mso-border-alt\s*:\s*\d+px\s+solid\s+#[a-fA-F0-9]{3,6}/i.test(cta.fullMatch);
+                if (hasMsoBorderAlt) {
+                    hasVml = true; // Behandle als "hat Outlook-Support"
+                }
+            }
+            
             // Typ B (table mit bgcolor): Outlook versteht bgcolor nativ → KEIN VML nötig
             // CSS-class Buttons: Outlook versteht KEIN linear-gradient → VML nötig
             if (cta.type === 'table' && !hasVml) {
@@ -3000,7 +3011,35 @@ class TemplateProcessor {
             props.textColor = colorMatch ? '#' + colorMatch[1] : '#ffffff';
             props.textColor = props.textColor.replace(/^#([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '#$1$1$2$2$3$3');
             
-            props.width = parseInt((style.match(/width\s*:\s*(\d+)/i) || [])[1] || '250');
+            props.width = parseInt((style.match(/width\s*:\s*(\d+)/i) || [])[1] || '0');
+            
+            // Wenn width:auto oder kein expliziter Pixel-Wert (display:block Buttons)
+            // → Parent-TD/Table Breite nutzen statt 250px Fallback
+            if (props.width === 0) {
+                const isBlockDisplay = /display\s*:\s*block/i.test(style);
+                if (cta.index > 0) {
+                    const beforeBtn = this.html.substring(Math.max(0, cta.index - 1500), cta.index);
+                    // Zuerst: Suche nächste übergeordnete TD mit width-Attribut (Pixel)
+                    const allTdWidths = [...beforeBtn.matchAll(/<td[^>]*\swidth\s*=\s*["']?(\d+)/gi)];
+                    const allTdStyleWidths = [...beforeBtn.matchAll(/<td[^>]*style\s*=\s*"[^"]*width\s*:\s*(\d+)px/gi)];
+                    // Nutze die letzte (= nächste übergeordnete) TD-Breite
+                    if (allTdWidths.length > 0) {
+                        props.width = parseInt(allTdWidths[allTdWidths.length - 1][1]);
+                    } else if (allTdStyleWidths.length > 0) {
+                        props.width = parseInt(allTdStyleWidths[allTdStyleWidths.length - 1][1]);
+                    } else {
+                        // Fallback: Suche nächste übergeordnete Table mit width-Attribut (nur Pixel, kein %)
+                        const allTableWidths = [...beforeBtn.matchAll(/<table[^>]*\swidth\s*=\s*["']?(\d+)(?!%)/gi)];
+                        if (allTableWidths.length > 0) {
+                            props.width = parseInt(allTableWidths[allTableWidths.length - 1][1]);
+                        } else {
+                            props.width = 250; // Absoluter Fallback
+                        }
+                    }
+                } else {
+                    props.width = 250; // Absoluter Fallback
+                }
+            }
             const heightMatch = style.match(/height\s*:\s*(\d+)/i);
             // Auch Parent-TD height-Attribut prüfen (z.B. <td height="48">)
             let tdHeight = 0;
