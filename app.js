@@ -102,6 +102,11 @@ class TemplateProcessor {
         // Self-Closing Tags reparieren (<td/> → <td></td>) – VOR Tag-Balancing
         this.fixSelfClosingTags();
 
+        // S14: Vom Kunden eingebauten "Online-Version"-Link entfernen
+        // Manche Kunden bauen selbst einen "Falls nicht korrekt dargestellt..."-Link ein,
+        // der dann doppelt erscheint weil unser %header% den gleichen Link liefert.
+        this.removeCustomOnlineVersionLink();
+
         // === PHASE A1: Platzhalter & Inhalte ===
         // P03/P04: Pre-Header
         this.checkPreheader();
@@ -1748,6 +1753,112 @@ class TemplateProcessor {
             console.log('[TAG-NESTING] Details:', details);
         } else if (skippedMixed > 0) {
             this.addCheck(id, 'INFO', 'Tag-Verschachtelung: ' + skippedMixed + ' Block(s) mit gemischter div/table-Struktur erkannt (bewusst nicht korrigiert – könnte Mobile-Layout beeinflussen)');
+        }
+    }
+    
+    // S14: Vom Kunden eingebauten "Online-Version"-Link entfernen
+    // Manche Kunden fügen selbst einen Link ein wie "Falls diese Nachricht nicht korrekt 
+    // dargestellt wird, klicken Sie bitte hier" – dieser ist redundant weil unser %header%
+    // Platzhalter den gleichen Zweck erfüllt. In der Testmail erscheint er doppelt,
+    // wobei der Kunden-Link nicht funktioniert (hat oft Platzhalter-URLs).
+    removeCustomOnlineVersionLink() {
+        const id = 'S14_DUPLICATE_ONLINE_LINK';
+        
+        // Typische Texte die Kunden in ihre "Online-Version"-Links schreiben
+        const onlineVersionPatterns = [
+            /falls\s+diese\s+(?:e-?mail|nachricht)\s+nicht\s+(?:korrekt|richtig)\s+(?:dargestellt|angezeigt)\s+wird/i,
+            /wird\s+diese\s+(?:e-?mail|nachricht)\s+nicht\s+(?:korrekt|richtig)\s+(?:dargestellt|angezeigt)/i,
+            /probleme\s+(?:mit\s+der|bei\s+der)\s+darstellung/i,
+            /(?:e-?mail|newsletter)\s+(?:im\s+browser|online)\s+(?:anzeigen|ansehen|öffnen|lesen)/i,
+            /(?:im\s+browser|online)\s+(?:anzeigen|ansehen|öffnen|lesen)/i,
+            /(?:webversion|online.?version|browser.?version)\s+(?:anzeigen|ansehen|öffnen|hier)/i,
+            /(?:zur|die)\s+(?:webversion|online.?version|browser.?version)/i,
+            /view\s+(?:this\s+)?(?:email|e-mail)\s+in\s+(?:your\s+)?browser/i,
+            /(?:can'?t|cannot|having\s+trouble)\s+(?:see|view|read)(?:ing)?\s+this\s+(?:email|e-mail)/i,
+        ];
+        
+        // Typische Platzhalter-URLs die Kunden als href einsetzen
+        const placeholderHrefPatterns = [
+            /insert\s+(?:online\s+)?link\s+here/i,
+            /publisher\s+insert/i,
+            /\{%.*online.*%\}/i,
+            /\[\[.*online.*\]\]/i,
+            /%%.*online.*%%/i,
+        ];
+        
+        // Suche INNERSTE <tr>-Blöcke die einen solchen Link enthalten
+        // Negative Lookahead verhindert, dass verschachtelte <tr>-Blöcke erfasst werden
+        const trBlockRegex = /<tr\b[^>]*>(?:(?!<tr\b)[\s\S])*?<\/tr>/gi;
+        let match;
+        let removedCount = 0;
+        const removedTexts = [];
+        
+        // Alle <tr>-Blöcke sammeln und prüfen
+        const trBlocks = [];
+        while ((match = trBlockRegex.exec(this.html)) !== null) {
+            trBlocks.push({ start: match.index, end: match.index + match[0].length, html: match[0] });
+        }
+        
+        // Rückwärts verarbeiten damit Positionen stimmen
+        for (let i = trBlocks.length - 1; i >= 0; i--) {
+            const block = trBlocks[i];
+            
+            // Prüfe ob der Block einen <a>-Tag mit Online-Version-Text enthält
+            const aTagMatch = block.html.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i);
+            if (!aTagMatch) continue;
+            
+            const linkText = aTagMatch[1].replace(/<[^>]*>/g, '').trim();
+            const linkHtml = aTagMatch[0];
+            
+            // Prüfe Text-Patterns
+            let isOnlineVersionLink = onlineVersionPatterns.some(p => p.test(linkText));
+            
+            // Falls Text nicht gematcht: Prüfe ob href ein Platzhalter ist UND der Text
+            // "hier" / "klicken" / "click here" enthält (Sicherheitscheck)
+            if (!isOnlineVersionLink) {
+                const hrefMatch = linkHtml.match(/href\s*=\s*["']([^"']+)["']/i);
+                if (hrefMatch) {
+                    const isPlaceholderUrl = placeholderHrefPatterns.some(p => p.test(hrefMatch[1]));
+                    const hasClickHereText = /(?:hier|klicken|click\s+here)/i.test(linkText);
+                    if (isPlaceholderUrl && hasClickHereText) {
+                        isOnlineVersionLink = true;
+                    }
+                }
+            }
+            
+            if (!isOnlineVersionLink) continue;
+            
+            // Sicherheitscheck: Block sollte NUR diesen Link + Wrapper enthalten
+            // (keine anderen Links, Bilder, Buttons etc.) 
+            const otherLinks = (block.html.match(/<a\b/gi) || []).length;
+            const images = (block.html.match(/<img\b/gi) || []).length;
+            if (otherLinks > 1 || images > 0) {
+                console.log('[S14] Online-Version-Link gefunden aber Block enthält weitere Elemente – übersprungen');
+                continue;
+            }
+            
+            // Sicherheitscheck: Font-Size muss klein sein (< 14px) oder Block 
+            // darf nur wenig Text haben (= kein Hauptinhalt)
+            const textOnly = block.html.replace(/<[^>]*>/g, '').trim();
+            const isSmallText = /font-size:\s*([0-9]+)/i.test(block.html) && 
+                                parseInt(block.html.match(/font-size:\s*([0-9]+)/i)[1]) < 14;
+            const isShortText = textOnly.length < 200;
+            
+            if (!isSmallText && !isShortText) {
+                console.log('[S14] Online-Version-Link gefunden aber Block scheint Hauptinhalt zu sein – übersprungen');
+                continue;
+            }
+            
+            // Block entfernen
+            const shortText = linkText.substring(0, 60) + (linkText.length > 60 ? '...' : '');
+            removedTexts.push(shortText);
+            this.html = this.html.substring(0, block.start) + this.html.substring(block.end);
+            removedCount++;
+            console.log('[S14] Online-Version-Link entfernt: "' + shortText + '"');
+        }
+        
+        if (removedCount > 0) {
+            this.addCheck(id, 'FIXED', removedCount + '× eigener "Online-Version"-Link des Kunden entfernt (wird durch %header% ersetzt). Text: „' + removedTexts.join('", „') + '"');
         }
     }
     
@@ -3821,7 +3932,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.32-2026-03-02';
+const APP_VERSION = 'v3.8.33-2026-03-03';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
