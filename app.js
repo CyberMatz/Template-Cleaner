@@ -15078,6 +15078,7 @@ td[width] { width: auto !important; }
     let eoaCurrentTestId = null;
     let eoaPollingTimer = null;
     let eoaCompletedClients = {};
+    let eoaBouncedClients = {};
     let eoaSelectedClients = [];
     let eoaIsLoading = false;
     let eoaServerOnline = false;
@@ -15426,6 +15427,7 @@ td[width] { width: auto !important; }
         
         eoaIsLoading = true;
         eoaCompletedClients = {};
+        eoaBouncedClients = {};
         if (eoaTabSpinner) eoaTabSpinner.style.display = 'inline-block';
         if (eoaTabCount) eoaTabCount.textContent = '';
         renderEoaTabContent();
@@ -15499,9 +15501,29 @@ td[width] { width: auto !important; }
                     if (eoaTabCount) eoaTabCount.textContent = Object.keys(eoaCompletedClients).length;
                 }
                 
+                // Fehlgeschlagene (bounced) Clients erkennen
+                if (statusData.bounced && statusData.bounced.length > 0) {
+                    var newlyBounced = statusData.bounced.filter(function(id) {
+                        return !eoaBouncedClients[id];
+                    });
+                    for (var bi = 0; bi < newlyBounced.length; bi++) {
+                        var bouncedId = newlyBounced[bi];
+                        eoaBouncedClients[bouncedId] = true;
+                        updateEoaBouncedInGallery(bouncedId);
+                    }
+                    if (newlyBounced.length > 0) {
+                        updateEoaProgress();
+                    }
+                }
+                
                 if (statusData.allDone) {
                     stopEoaPolling();
-                    showInspectorToast('\u2705 Alle ' + Object.keys(eoaCompletedClients).length + ' Client-Vorschauen fertig!');
+                    var bouncedCount = Object.keys(eoaBouncedClients).length;
+                    if (bouncedCount > 0) {
+                        showInspectorToast('\u2705 ' + Object.keys(eoaCompletedClients).length + ' Vorschauen fertig, ' + bouncedCount + ' fehlgeschlagen');
+                    } else {
+                        showInspectorToast('\u2705 Alle ' + Object.keys(eoaCompletedClients).length + ' Client-Vorschauen fertig!');
+                    }
                 }
             } catch (err) {
                 console.error('[EOA] Polling-Fehler:', err);
@@ -15538,6 +15560,45 @@ td[width] { width: auto !important; }
         }
     }
 
+    // Fehlgeschlagenen Client in Galerie anzeigen
+    function updateEoaBouncedInGallery(clientId) {
+        var gallery = document.getElementById('eoaGallery');
+        if (!gallery) return;
+        
+        var matchedPref = null;
+        for (var pi = 0; pi < EOA_PREFERRED_KEYWORDS.length; pi++) {
+            var p = EOA_PREFERRED_KEYWORDS[pi];
+            for (var ki = 0; ki < p.keywords.length; ki++) {
+                if (clientId.toLowerCase().indexOf(p.keywords[ki]) !== -1) { matchedPref = p; break; }
+            }
+            if (matchedPref) break;
+        }
+        var label = matchedPref ? matchedPref.label : clientId;
+        
+        var cardHtml = '<div class="eoa-screenshot-card bounced" data-client-id="' + clientId + '">' +
+            '<div class="eoa-screenshot-header">' +
+            '<span class="eoa-screenshot-client-name">' + label + '</span>' +
+            '<span class="eoa-screenshot-client-info" style="color: #c62828;">\u274c Fehlgeschlagen</span>' +
+            '</div>' +
+            '<div class="eoa-screenshot-img-wrapper eoa-bounced-wrapper">' +
+            '<div class="eoa-bounced-message">' +
+            '<div style="font-size: 28px; margin-bottom: 8px;">\u26a0\ufe0f</div>' +
+            '<div style="font-weight: 600; margin-bottom: 4px;">Screenshot nicht verf\u00fcgbar</div>' +
+            '<div style="font-size: 11px; color: #a8a29e;">EOA konnte diesen Client nicht rendern (bounced)</div>' +
+            '</div></div></div>';
+        
+        var existingCard = gallery.querySelector('.eoa-screenshot-card[data-client-id="' + clientId + '"]');
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = cardHtml;
+        var newCard = tempDiv.firstElementChild;
+        
+        if (existingCard) {
+            existingCard.replaceWith(newCard);
+        } else {
+            gallery.appendChild(newCard);
+        }
+    }
+
     // Fortschrittsbalken aktualisieren
     function updateEoaProgress() {
         var bar = document.querySelector('.eoa-progress-bar');
@@ -15545,9 +15606,15 @@ td[width] { width: auto !important; }
         if (!bar || !text) return;
         var total = eoaSelectedClients.length;
         var completed = Object.keys(eoaCompletedClients).length;
-        var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        var bounced = Object.keys(eoaBouncedClients).length;
+        var done = completed + bounced;
+        var pct = total > 0 ? Math.round((done / total) * 100) : 0;
         bar.style.width = pct + '%';
-        text.textContent = completed + ' / ' + total + ' fertig';
+        if (bounced > 0) {
+            text.textContent = completed + ' fertig, ' + bounced + ' fehlgeschlagen / ' + total + ' gesamt';
+        } else {
+            text.textContent = completed + ' / ' + total + ' fertig';
+        }
     }
 
     // Lightbox (Vollbild)

@@ -3856,6 +3856,29 @@ body {
     animation: eoaSpin 0.8s linear infinite;
 }
 
+
+/* --- Fehlgeschlagene Clients (Bounced) --- */
+.eoa-screenshot-card.bounced {
+    border-color: #ffcdd2;
+    background: #fff5f5;
+}
+.eoa-screenshot-card.bounced .eoa-screenshot-header {
+    background: #ffebee;
+    border-bottom-color: #ffcdd2;
+}
+.eoa-bounced-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    background: #fff5f5;
+}
+.eoa-bounced-message {
+    text-align: center;
+    padding: 20px;
+    color: #c62828;
+}
+
 /* --- Lightbox (Vollbild-Ansicht) --- */
 .eoa-lightbox {
     position: fixed;
