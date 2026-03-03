@@ -2835,6 +2835,29 @@ class TemplateProcessor {
         while ((match = typeA.exec(this.html)) !== null) {
             const style = this._extractStyleValue(match[0]);
             const styleLower = style.toLowerCase();
+            
+            // Bulletproof-Button-Check: Wenn der <a> in einer <td> mit background +
+            // text-align:center steckt, ist es ein Typ-B-Button (funktioniert in Outlook
+            // nativ via td-background + thick-border-trick). Kein VML noetig -> ueberspringen.
+            // WICHTIG: Bei verschachtelten Tabellen muss der INNERSTE (letzte) offene <td>
+            // geprüft werden, nicht der äußerste (erste).
+            const beforeA = this.html.substring(Math.max(0, match.index - 500), match.index);
+            const allTdOpens = [...beforeA.matchAll(/<td\b[^>]*>/gi)];
+            let isBulletproof = false;
+            for (let ti = allTdOpens.length - 1; ti >= 0; ti--) {
+                const tdM = allTdOpens[ti];
+                const afterTd = beforeA.substring(tdM.index + tdM[0].length);
+                // Prüfe ob dieser <td> noch offen ist (kein </td> zwischen ihm und <a>)
+                if (!/<\/td>/i.test(afterTd)) {
+                    const tdStr = tdM[0];
+                    const tdHasBg = /bgcolor\s*=|background(?:-color)?\s*:\s*#?[a-fA-F0-9]/i.test(tdStr);
+                    const tdCentered = /text-align\s*:\s*center|align\s*=\s*["']center/i.test(tdStr);
+                    if (tdHasBg && tdCentered) isBulletproof = true;
+                    break; // Nur den direkten Parent prüfen
+                }
+            }
+            if (isBulletproof) continue;
+            
             if (/background(?:-color)?\s*:/.test(styleLower) && (/padding/.test(styleLower) || /display\s*:\s*(block|inline-block)/.test(styleLower))) {
                 const href = (match[0].match(/href\s*=\s*"([^"]*)"/i) || match[0].match(/href\s*=\s*'([^']*)'/i) || [])[1] || '';
                 buttons.push({
@@ -2849,7 +2872,7 @@ class TemplateProcessor {
         
         // Typ B: <td> mit bgcolor-Attribut ODER background-color im style, text-align:center, enthält <a>
         // Robustes Matching: Finde <td mit bgcolor, dann vorwärts zum nächsten </td>
-        const typeBOpen = /<td\b([^>]*(?:bgcolor\s*=\s*"[^"]*"|background-color\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*)>/gi;
+        const typeBOpen = /<td\b([^>]*(?:bgcolor\s*=\s*"[^"]*"|background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6})[^>]*)>/gi;
         while ((match = typeBOpen.exec(this.html)) !== null) {
             const tdAttrs = match[1];
             const tdOpenEnd = match.index + match[0].length;
