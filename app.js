@@ -2566,17 +2566,6 @@ class TemplateProcessor {
                 }
             }
             
-            // mso-border-alt Pattern: Button hat bereits Outlook-Fallback via mso-border-alt
-            // z.B. mso-border-alt:10px solid #39a949 → Outlook nutzt das als Padding/Background
-            // Kombiniert mit display:block + width:auto → volle Breite auch in Outlook
-            // → KEIN VML nötig, da bestehende Lösung funktioniert
-            if (!hasVml && cta.fullMatch) {
-                const hasMsoBorderAlt = /mso-border-alt\s*:\s*\d+px\s+solid\s+#[a-fA-F0-9]{3,6}/i.test(cta.fullMatch);
-                if (hasMsoBorderAlt) {
-                    hasVml = true; // Behandle als "hat Outlook-Support"
-                }
-            }
-            
             // Typ B (table mit bgcolor): Outlook versteht bgcolor nativ → KEIN VML nötig
             // CSS-class Buttons: Outlook versteht KEIN linear-gradient → VML nötig
             if (cta.type === 'table' && !hasVml) {
