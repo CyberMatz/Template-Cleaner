@@ -12016,12 +12016,29 @@ td[width] { width: auto !important; }
         while ((vmlMatch = vmlRegex.exec(html)) !== null) {
             const vmlHref = vmlMatch[1].match(/href\s*=\s*["']([^"']*)["']/i);
             const vmlText = vmlMatch[1].match(/<center[^>]*>([\s\S]*?)<\/center>/i);
+            let extractedText = vmlText ? vmlText[1].replace(/<[^>]*>/g, '').trim() : '';
+            
+            // Hybrid-VML-Pattern: <center> öffnet aber schließt nicht im VML-Block
+            // → Button-Text steht NACH dem VML-Block im shared <a>-Tag
+            if (!extractedText) {
+                const hasCenterOpen = /<center[\s>]/i.test(vmlMatch[1]);
+                const hasCenterClose = /<\/center>/i.test(vmlMatch[1]);
+                if (hasCenterOpen && !hasCenterClose) {
+                    // Suche den <a>-Tag direkt nach dem VML-Block
+                    const afterVml = html.substring(vmlMatch.index + vmlMatch[0].length, vmlMatch.index + vmlMatch[0].length + 1000);
+                    const sharedLink = afterVml.match(/(?:<!--\[if\s+!mso[^\]]*\]><!--\s*-->)?\s*<a\b[^>]*>([\s\S]*?)<\/a>/i);
+                    if (sharedLink) {
+                        extractedText = sharedLink[1].replace(/<[^>]*>/g, '').trim();
+                    }
+                }
+            }
+            
             vmlBlocks.push({
                 index: vmlMatch.index,
                 endIndex: vmlMatch.index + vmlMatch[0].length,
                 fullMatch: vmlMatch[1],
                 href: vmlHref ? vmlHref[1] : '',
-                text: vmlText ? vmlText[1].replace(/<[^>]*>/g, '').trim() : ''
+                text: extractedText
             });
         }
         
