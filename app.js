@@ -2757,7 +2757,25 @@ class TemplateProcessor {
                     }
                 }
                 
-                if (!alreadyWrapped) {
+                // Hybrid-VML-Pattern erkennen:
+                // VML-Block öffnet <center> aber schließt es NICHT → Button-Text wird geteilt
+                // zwischen Outlook (im VML <center>) und anderen Clients (als <a>).
+                // In diesem Fall darf der <a>-Tag NICHT in !mso gewrapped werden,
+                // sonst sieht Outlook nur einen leeren Button ohne Text!
+                // Pattern: <!--[if mso]><v:roundrect...><center...><![endif]-->
+                //          <a>TEXT</a>      ← SHARED, nicht wrappen!
+                //          <!--[if mso]></center></v:roundrect><![endif]-->
+                let isHybridVml = false;
+                if (vmlBlock) {
+                    const vml = vmlBlock.fullMatch;
+                    const hasCenterOpen = /<center[\s>]/i.test(vml);
+                    const hasCenterClose = /<\/center>/i.test(vml);
+                    if (hasCenterOpen && !hasCenterClose) {
+                        isHybridVml = true;
+                    }
+                }
+                
+                if (!alreadyWrapped && !isHybridVml) {
                     // !mso Wrapper fehlt → hinzufügen damit Outlook nur VML zeigt
                     const notMsoOpen = '<!--[if !mso]><!-->\n';
                     const notMsoClose = '\n<!--<![endif]-->';
@@ -7427,12 +7445,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Template-Breite erkennen (häufigste table width im Bereich 400-800px)
     function detectTemplateWidth(html) {
         const widths = {};
-        
-        // Methode 1: <table width="NNN"> Attribute (klassisch)
-        const widthAttrRegex = /<table[^>]*\swidth\s*=\s*["'](\d+)["'][^>]*>/gi;
         let match;
+        
+        // Methode 1: <table width="NNN"> oder width="NNN.NN" Attribute (klassisch + Dezimal)
+        const widthAttrRegex = /<table[^>]*\swidth\s*=\s*["'](\d+(?:\.\d+)?)["'][^>]*>/gi;
         while ((match = widthAttrRegex.exec(html)) !== null) {
-            const w = parseInt(match[1]);
+            const w = Math.round(parseFloat(match[1]));
             if (w >= 400 && w <= 800) {
                 widths[w] = (widths[w] || 0) + 1;
             }
@@ -7442,17 +7460,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const tableStyleRegex = /<table[^>]*style\s*=\s*"([^"]*)"[^>]*>/gi;
         while ((match = tableStyleRegex.exec(html)) !== null) {
             const style = match[1];
-            const maxWidthMatch = style.match(/max-width\s*:\s*(\d+)px/i);
+            const maxWidthMatch = style.match(/max-width\s*:\s*(\d+(?:\.\d+)?)px/i);
             if (maxWidthMatch) {
-                const w = parseInt(maxWidthMatch[1]);
+                const w = Math.round(parseFloat(maxWidthMatch[1]));
                 if (w >= 300 && w <= 800) {
                     widths[w] = (widths[w] || 0) + 1;
                 }
             }
             // Auch width:NNNpx (nicht width:100%)
-            const widthStyleMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i);
+            const widthStyleMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+(?:\.\d+)?)px/i);
             if (widthStyleMatch) {
-                const w = parseInt(widthStyleMatch[1]);
+                const w = Math.round(parseFloat(widthStyleMatch[1]));
                 if (w >= 400 && w <= 800) {
                     widths[w] = (widths[w] || 0) + 1;
                 }
@@ -7463,9 +7481,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const tdStyleRegex = /<td[^>]*style\s*=\s*"([^"]*)"[^>]*>/gi;
         while ((match = tdStyleRegex.exec(html)) !== null) {
             const style = match[1];
-            const maxWidthMatch = style.match(/max-width\s*:\s*(\d+)px/i);
+            const maxWidthMatch = style.match(/max-width\s*:\s*(\d+(?:\.\d+)?)px/i);
             if (maxWidthMatch) {
-                const w = parseInt(maxWidthMatch[1]);
+                const w = Math.round(parseFloat(maxWidthMatch[1]));
                 if (w >= 300 && w <= 800) {
                     widths[w] = (widths[w] || 0) + 1;
                 }
