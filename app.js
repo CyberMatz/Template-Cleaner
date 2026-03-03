@@ -102,6 +102,11 @@ class TemplateProcessor {
         // Self-Closing Tags reparieren (<td/> → <td></td>) – VOR Tag-Balancing
         this.fixSelfClosingTags();
 
+        // S14: Vom Kunden eingebauten "Online-Version"-Link entfernen
+        // Manche Kunden bauen selbst einen "Falls nicht korrekt dargestellt..."-Link ein,
+        // der dann doppelt erscheint weil unser %header% den gleichen Link liefert.
+        this.removeCustomOnlineVersionLink();
+
         // === PHASE A1: Platzhalter & Inhalte ===
         // P03/P04: Pre-Header
         this.checkPreheader();
@@ -1748,6 +1753,112 @@ class TemplateProcessor {
             console.log('[TAG-NESTING] Details:', details);
         } else if (skippedMixed > 0) {
             this.addCheck(id, 'INFO', 'Tag-Verschachtelung: ' + skippedMixed + ' Block(s) mit gemischter div/table-Struktur erkannt (bewusst nicht korrigiert – könnte Mobile-Layout beeinflussen)');
+        }
+    }
+    
+    // S14: Vom Kunden eingebauten "Online-Version"-Link entfernen
+    // Manche Kunden fügen selbst einen Link ein wie "Falls diese Nachricht nicht korrekt 
+    // dargestellt wird, klicken Sie bitte hier" – dieser ist redundant weil unser %header%
+    // Platzhalter den gleichen Zweck erfüllt. In der Testmail erscheint er doppelt,
+    // wobei der Kunden-Link nicht funktioniert (hat oft Platzhalter-URLs).
+    removeCustomOnlineVersionLink() {
+        const id = 'S14_DUPLICATE_ONLINE_LINK';
+        
+        // Typische Texte die Kunden in ihre "Online-Version"-Links schreiben
+        const onlineVersionPatterns = [
+            /falls\s+diese\s+(?:e-?mail|nachricht)\s+nicht\s+(?:korrekt|richtig)\s+(?:dargestellt|angezeigt)\s+wird/i,
+            /wird\s+diese\s+(?:e-?mail|nachricht)\s+nicht\s+(?:korrekt|richtig)\s+(?:dargestellt|angezeigt)/i,
+            /probleme\s+(?:mit\s+der|bei\s+der)\s+darstellung/i,
+            /(?:e-?mail|newsletter)\s+(?:im\s+browser|online)\s+(?:anzeigen|ansehen|öffnen|lesen)/i,
+            /(?:im\s+browser|online)\s+(?:anzeigen|ansehen|öffnen|lesen)/i,
+            /(?:webversion|online.?version|browser.?version)\s+(?:anzeigen|ansehen|öffnen|hier)/i,
+            /(?:zur|die)\s+(?:webversion|online.?version|browser.?version)/i,
+            /view\s+(?:this\s+)?(?:email|e-mail)\s+in\s+(?:your\s+)?browser/i,
+            /(?:can'?t|cannot|having\s+trouble)\s+(?:see|view|read)(?:ing)?\s+this\s+(?:email|e-mail)/i,
+        ];
+        
+        // Typische Platzhalter-URLs die Kunden als href einsetzen
+        const placeholderHrefPatterns = [
+            /insert\s+(?:online\s+)?link\s+here/i,
+            /publisher\s+insert/i,
+            /\{%.*online.*%\}/i,
+            /\[\[.*online.*\]\]/i,
+            /%%.*online.*%%/i,
+        ];
+        
+        // Suche INNERSTE <tr>-Blöcke die einen solchen Link enthalten
+        // Negative Lookahead verhindert, dass verschachtelte <tr>-Blöcke erfasst werden
+        const trBlockRegex = /<tr\b[^>]*>(?:(?!<tr\b)[\s\S])*?<\/tr>/gi;
+        let match;
+        let removedCount = 0;
+        const removedTexts = [];
+        
+        // Alle <tr>-Blöcke sammeln und prüfen
+        const trBlocks = [];
+        while ((match = trBlockRegex.exec(this.html)) !== null) {
+            trBlocks.push({ start: match.index, end: match.index + match[0].length, html: match[0] });
+        }
+        
+        // Rückwärts verarbeiten damit Positionen stimmen
+        for (let i = trBlocks.length - 1; i >= 0; i--) {
+            const block = trBlocks[i];
+            
+            // Prüfe ob der Block einen <a>-Tag mit Online-Version-Text enthält
+            const aTagMatch = block.html.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i);
+            if (!aTagMatch) continue;
+            
+            const linkText = aTagMatch[1].replace(/<[^>]*>/g, '').trim();
+            const linkHtml = aTagMatch[0];
+            
+            // Prüfe Text-Patterns
+            let isOnlineVersionLink = onlineVersionPatterns.some(p => p.test(linkText));
+            
+            // Falls Text nicht gematcht: Prüfe ob href ein Platzhalter ist UND der Text
+            // "hier" / "klicken" / "click here" enthält (Sicherheitscheck)
+            if (!isOnlineVersionLink) {
+                const hrefMatch = linkHtml.match(/href\s*=\s*["']([^"']+)["']/i);
+                if (hrefMatch) {
+                    const isPlaceholderUrl = placeholderHrefPatterns.some(p => p.test(hrefMatch[1]));
+                    const hasClickHereText = /(?:hier|klicken|click\s+here)/i.test(linkText);
+                    if (isPlaceholderUrl && hasClickHereText) {
+                        isOnlineVersionLink = true;
+                    }
+                }
+            }
+            
+            if (!isOnlineVersionLink) continue;
+            
+            // Sicherheitscheck: Block sollte NUR diesen Link + Wrapper enthalten
+            // (keine anderen Links, Bilder, Buttons etc.) 
+            const otherLinks = (block.html.match(/<a\b/gi) || []).length;
+            const images = (block.html.match(/<img\b/gi) || []).length;
+            if (otherLinks > 1 || images > 0) {
+                console.log('[S14] Online-Version-Link gefunden aber Block enthält weitere Elemente – übersprungen');
+                continue;
+            }
+            
+            // Sicherheitscheck: Font-Size muss klein sein (< 14px) oder Block 
+            // darf nur wenig Text haben (= kein Hauptinhalt)
+            const textOnly = block.html.replace(/<[^>]*>/g, '').trim();
+            const isSmallText = /font-size:\s*([0-9]+)/i.test(block.html) && 
+                                parseInt(block.html.match(/font-size:\s*([0-9]+)/i)[1]) < 14;
+            const isShortText = textOnly.length < 200;
+            
+            if (!isSmallText && !isShortText) {
+                console.log('[S14] Online-Version-Link gefunden aber Block scheint Hauptinhalt zu sein – übersprungen');
+                continue;
+            }
+            
+            // Block entfernen
+            const shortText = linkText.substring(0, 60) + (linkText.length > 60 ? '...' : '');
+            removedTexts.push(shortText);
+            this.html = this.html.substring(0, block.start) + this.html.substring(block.end);
+            removedCount++;
+            console.log('[S14] Online-Version-Link entfernt: "' + shortText + '"');
+        }
+        
+        if (removedCount > 0) {
+            this.addCheck(id, 'FIXED', removedCount + '× eigener "Online-Version"-Link des Kunden entfernt (wird durch %header% ersetzt). Text: „' + removedTexts.join('", „') + '"');
         }
     }
     
@@ -3821,7 +3932,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.32-2026-03-02';
+const APP_VERSION = 'v3.8.33-2026-03-03';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4553,7 +4664,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
-            const newName = `${baseName}_optimized.${extension}`;
+            const templateWidth = detectTemplateWidth(downloadHtml);
+            const newName = `${baseName}_optimized_${templateWidth}.${extension}`;
             // Sicherheitsnetz: Preheader muss VOR %header% stehen
             // (Manche Verarbeitungsschritte können die Reihenfolge ändern)
             const preheaderMatch = downloadHtml.match(/<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
@@ -4590,6 +4702,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 return '';
             });
+            // Verbliebene <td>-MSO-Placeholders wiederherstellen (Outlook-Zentrierung)
+            downloadHtml = downloadHtml.replace(/<td data-mso-td-idx="(\d+)"(?:\s+data-mso-td-content="([^"]*)")?[^>]*><\/td>/gi, (match, idxStr, encoded) => {
+                const idx = parseInt(idxStr);
+                if (idx >= 0 && idx < _ccBlockStore.length) {
+                    return _ccBlockStore[idx];
+                }
+                if (encoded) {
+                    try { return decodeURIComponent(encoded); } catch(e) {}
+                }
+                return '';
+            });
             // Verbliebene CC-Kommentar-Placeholders wiederherstellen (Legacy v3.8.19)
             downloadHtml = downloadHtml.replace(/<!-- cc-nm([oc])-(\d+) -->/gi, (match, type, idxStr) => {
                 const idx = parseInt(idxStr);
@@ -4600,6 +4723,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             // Aufräumen: verbliebene data-cc-* Attribute
             downloadHtml = downloadHtml.replace(/\s+data-cc-(?:open|close|idx|nmo-idx|nmo-content|block-idx|block-content)(?:-content)?="[^"]*"/gi, '');
+            // Aufräumen: verbliebene data-mso-td-* Attribute
+            downloadHtml = downloadHtml.replace(/\s+data-mso-td-(?:idx|content)="[^"]*"/gi, '');
             // Aufräumen: verbliebene Text-Marker
             downloadHtml = downloadHtml.replace(/___CC_NMO_(\d+)___/g, (match, idxStr) => {
                 const idx = parseInt(idxStr);
@@ -4669,7 +4794,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const nameParts = originalName.split('.');
             const extension = nameParts.pop();
             const baseName = nameParts.join('.');
-            const newName = `${baseName}_final_optimized.${extension}`;
+            const templateWidth = detectTemplateWidth(currentWorkingHtml);
+            const newName = `${baseName}_final_optimized_${templateWidth}.${extension}`;
             
             downloadFile(currentWorkingHtml, newName, 'text/html');
             
@@ -4851,22 +4977,55 @@ document.addEventListener('DOMContentLoaded', () => {
             return '<ins data-cc-idx="' + idx + '" data-cc-content="' + encoded + '" style="display:none"></ins>';
         }
         
+        // 0a-pre: MSO-positive Blöcke ZWISCHEN Tabellenzeilen als <tr> schützen
+        // KERN-PROBLEM (analog zu 0b für !mso): Wenn ein MSO-positiver Block
+        // (z.B. <!--[if mso]><center><table>...<![endif]-->) direkt innerhalb
+        // von <tbody> steht (zwischen Zeilen), erzeugt der <ins>-Placeholder
+        // ungültiges HTML. DOMParser "foster-parents" das <ins> VOR die Tabelle,
+        // was die gesamte HTML-Struktur zerstört.
+        // LÖSUNG: MSO-positive Blöcke zwischen Zeilen als <tr>-Placeholder speichern.
+        // Betroffen sind z.B. Amplifon-Templates mit MSO-Wrapper um die Haupt-Tabelle.
+        
+        // Fall 1: Nach </tr> oder <tbody> und vor <tr>
+        result = result.replace(
+            /((?:<\/tr>|<tbody[^>]*>))\s*(<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->)\s*(<tr[\s>])/gi,
+            function(fullMatch, before, ccBlock, after) {
+                const idx = _ccBlockStore.length;
+                _ccBlockStore.push(ccBlock);
+                console.log('[protectMsoStyles] MSO-positive between-rows Block ' + idx + ' als <tr> geschützt');
+                return before + '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>' + after;
+            }
+        );
+        
+        // Fall 2: Nach </tr> und vor </tbody> oder </table> (letzter Block am Ende)
+        result = result.replace(
+            /(<\/tr>)\s*(<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->)\s*(<\/(?:tbody|table)[\s>])/gi,
+            function(fullMatch, before, ccBlock, after) {
+                const idx = _ccBlockStore.length;
+                _ccBlockStore.push(ccBlock);
+                console.log('[protectMsoStyles] MSO-positive end-of-table Block ' + idx + ' als <tr> geschützt');
+                return before + '<tr data-cc-block-idx="' + idx + '" style="display:none"><td></td></tr>' + after;
+            }
+        );
+        
         // 0a: Komplette Conditional Comment Blöcke: <!--[if ...]>INHALT<![endif]-->
         // Matcht alle Varianten: [if mso], [if gte mso 9], [if (mso 16)], etc.
         // WICHTIG: Nur MSO-positive Blöcke! NICHT [if !mso...] – diese enthalten
         // Mobile-Content (z.B. Mobile-Bilder) der sichtbar bleiben muss.
+        // HINWEIS: between-rows-Blöcke wurden bereits in 0a-pre als <tr> geschützt,
+        // hier werden nur noch die verbleibenden (inside-td) Blöcke erfasst.
         
-        // 0a-PRE: MSO Conditional Comments mit <td> INNERHALB von <tr> speziell behandeln
-        // Pattern: <tr>...<!--[if mso]><td></td><![endif]-->...<td>
-        // oder:    </td><!--[if mso]><td></td><![endif]--></tr>
-        // Diese werden als <td>-Platzhalter ersetzt (nicht <ins>), da nur <td> in <tr> gültig ist.
-        // DOMParser würde <ins> aus der <tr> herausschieben → Zentrierung kaputt.
+        // 0a-INSIDE-TR: MSO Conditional Comments mit <td> INNERHALB einer <tr> schützen
+        // Pattern: <tr>...<!--[if mso]><td></td><![endif]-->...<td class="body-content">
+        // Zweck: Outlook-Zentrierung (leere TDs links/rechts vom Inhalt)
+        // Problem: <ins>-Placeholder in <tr> ist ungültig → DOMParser schiebt es raus
+        // Lösung: Als <td>-Placeholder ersetzen (nur <td> ist in <tr> gültig)
         result = result.replace(
             /<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi,
             function(match, offset) {
                 // Nur behandeln wenn der Block <td> oder <tr> enthält (Tabellen-Struktur-Element)
                 if (/<td[\s>]/i.test(match) || /<\/td>/i.test(match) || /<tr[\s>]/i.test(match) || /<\/tr>/i.test(match)) {
-                    // Prüfe ob dieser Block in einer Tabellenzeile steht
+                    // Prüfe ob dieser Block innerhalb einer Tabellenzeile steht
                     const before = result.substring(Math.max(0, offset - 200), offset);
                     const after = result.substring(offset + match.length, Math.min(result.length, offset + match.length + 200));
                     const isInsideTr = (/<tr[\s>][^]*$/i.test(before) && !/<\/tr>/i.test(before.slice(-50))) ||
@@ -4877,15 +5036,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         const idx = _ccBlockStore.length;
                         _ccBlockStore.push(match);
                         const encoded = encodeURIComponent(match);
+                        console.log('[protectMsoStyles] MSO inside-tr Block ' + idx + ' als <td> geschützt');
                         return '<td data-mso-td-idx="' + idx + '" data-mso-td-content="' + encoded + '" style="display:none;width:0;overflow:hidden"></td>';
                     }
                 }
-                // Kein Tabellen-Element oder nicht in <tr> → nicht ersetzen, wird unten als <ins> behandelt
+                // Nicht innerhalb <tr> → nicht ersetzen, wird unten als <ins> behandelt
                 return match;
             }
         );
         
-        // 0a: Verbleibende MSO-positive Blöcke normal als <ins> ersetzen
+        // 0a-REST: Verbleibende MSO-positive Blöcke normal als <ins> ersetzen
         result = result.replace(/<!--\[if\s(?!!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, ccPlaceholder);
         
         // 0b: Non-MSO Blöcke schützen
@@ -4999,20 +5159,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return match;
         });
         
-        // 3b: <td>-basierte Placeholders für MSO Conditional Comments in Tabellenzeilen
-        raw = raw.replace(/<td data-mso-td-idx="(\d+)"(?:\s+data-mso-td-content="([^"]*)")?[^>]*><\/td>/gi, (match, idxStr, encoded) => {
-            const idx = parseInt(idxStr);
-            if (idx >= 0 && idx < _ccBlockStore.length) {
-                return _ccBlockStore[idx];
-            }
-            if (encoded) {
-                try { return decodeURIComponent(encoded); } catch(e) {}
-            }
-            console.warn('[safeDomSerialize] MSO-TD-Block ' + idx + ' nicht gefunden');
-            return match;
-        });
-        
-        // 3c: <tr>-Block-Placeholders für !mso Blöcke zwischen Tabellenzeilen wiederherstellen
+        // 3b: <tr>-Block-Placeholders für CC-Blöcke zwischen Tabellenzeilen wiederherstellen
+        // (sowohl MSO-positive als auch !mso Blöcke, die als <tr> geschützt wurden)
         raw = raw.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
             const idx = parseInt(idxStr);
             if (idx >= 0 && idx < _ccBlockStore.length) {
@@ -5022,6 +5170,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 try { return decodeURIComponent(encoded); } catch(e) {}
             }
             console.warn('[safeDomSerialize] CC-Block-TR ' + idx + ' nicht gefunden');
+            return match;
+        });
+        
+        // 3b2: <td>-basierte Placeholders für MSO Conditional Comments innerhalb von Tabellenzeilen
+        // (z.B. Outlook-Zentrierung mit leeren <td>-Zellen links/rechts)
+        raw = raw.replace(/<td data-mso-td-idx="(\d+)"(?:\s+data-mso-td-content="([^"]*)")?[^>]*><\/td>/gi, (match, idxStr, encoded) => {
+            const idx = parseInt(idxStr);
+            if (idx >= 0 && idx < _ccBlockStore.length) {
+                return _ccBlockStore[idx];
+            }
+            if (encoded) {
+                try { return decodeURIComponent(encoded); } catch(e) {}
+            }
+            console.warn('[safeDomSerialize] MSO-TD-Block ' + idx + ' nicht gefunden');
             return match;
         });
         
@@ -5036,6 +5198,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 3d: Aufräumen - verbliebene data-cc-* Attribute entfernen (Legacy-Cleanup)
         raw = raw.replace(/\s+data-cc-(?:open|close|block-idx|block-content|nmo-idx|nmo-content)(?:-content)?="[^"]*"/gi, '');
+        // Aufräumen: verbliebene data-mso-td-* Attribute
+        raw = raw.replace(/\s+data-mso-td-(?:idx|content)="[^"]*"/gi, '');
         
         // 4. Browser-eingefügte <tbody>/<\/tbody> entfernen
         // Browser fügt automatisch <tbody> in <table> ein – das verändert das Email-HTML
@@ -7007,7 +7171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 imagesHistory = [];
                 imagesPending = false;
             } else if (fromTab === 'editor') {
-                editorTabHtml = currentWorkingHtml;
+                editorTabHtml = null; // BUG FIX: null statt currentWorkingHtml, damit showEditorTab beim nächsten Öffnen injectQaNodeIds aufruft
                 editorHistory = [];
                 editorPending = false;
                 editorSelectedElement = null;
@@ -7480,8 +7644,8 @@ td[width] { width: auto !important; }
             sourceLabel = 'images';
         } else if (currentInspectorTab === 'editor') {
             if (!editorTabHtml) {
-                editorTabHtml = currentWorkingHtml; // Initialisiere sofort
-                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Editor initialized from currentWorkingHtml');
+                editorTabHtml = injectQaNodeIds(currentWorkingHtml); // BUG FIX: Mit IDs initialisieren (war: currentWorkingHtml ohne IDs → ID-Mismatch mit Preview)
+                if (window.DEV_MODE) console.log('[PREVIEW_SOURCE] Editor initialized from currentWorkingHtml (with injectQaNodeIds)');
             }
             sourceHtml = editorTabHtml;
             sourceLabel = 'editor';
@@ -7678,16 +7842,30 @@ td[width] { width: auto !important; }
         const clickableSelectors = ['a', 'img', 'button', 'table', 'td', 'tr', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'];
         let nodeIdCounter = 0;
         
-        clickableSelectors.forEach(selector => {
-            const elements = doc.querySelectorAll(selector);
-            elements.forEach(el => {
-                nodeIdCounter++;
-                const id = 'N' + String(nodeIdCounter).padStart(4, '0');
-                el.setAttribute('data-qa-node-id', id);
-            });
-        });
+        // BUG FIX: Wenn das Quell-HTML bereits qa-node-ids hat (z.B. editorTabHtml 
+        // aus injectQaNodeIds), diese BEIBEHALTEN statt neu zu vergeben.
+        // Problem: generateAnnotatedPreview durchläuft DOMParser + Fix-Marker-Insertion,
+        // was die Element-Reihenfolge verändern kann. Wenn IDs neu vergeben werden,
+        // können sie von den IDs in editorTabHtml abweichen → Editor schreibt in
+        // das falsche Element (z.B. %header% statt Anrede-TD).
+        const hasExistingNodeIds = doc.querySelector('[data-qa-node-id]') !== null;
         
-        console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
+        if (hasExistingNodeIds) {
+            // IDs bereits vorhanden → beibehalten, nur zählen
+            nodeIdCounter = doc.querySelectorAll('[data-qa-node-id]').length;
+            console.log('[INSPECTOR] Preserving ' + nodeIdCounter + ' existing qa-node-ids (from editorTabHtml)');
+        } else {
+            // Keine IDs vorhanden → neu vergeben
+            clickableSelectors.forEach(selector => {
+                const elements = doc.querySelectorAll(selector);
+                elements.forEach(el => {
+                    nodeIdCounter++;
+                    const id = 'N' + String(nodeIdCounter).padStart(4, '0');
+                    el.setAttribute('data-qa-node-id', id);
+                });
+            });
+            console.log('[INSPECTOR] Annotated ' + nodeIdCounter + ' clickable elements with node-id');
+        }
         
         // EDITOR MODE: Direkt editierbare Textelemente (Preview-only)
         if (tabName === 'editor') {
