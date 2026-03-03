@@ -12187,12 +12187,35 @@ td[width] { width: auto !important; }
             
             const vml = checkVmlStatus(match.index, href, text, fullTag);
             
+            // Bulletproof-Button-Check: Wenn der <a> in einer <td> mit background +
+            // text-align:center steckt, funktioniert es nativ in Outlook (kein VML nötig).
+            let finalVmlStatus = vml.vmlStatus;
+            let finalHasVml = vml.hasVml;
+            if (!vml.hasVml) {
+                const beforeA = html.substring(Math.max(0, match.index - 500), match.index);
+                const allTdOpens = [...beforeA.matchAll(/<td\b[^>]*>/gi)];
+                for (let ti = allTdOpens.length - 1; ti >= 0; ti--) {
+                    const tdM = allTdOpens[ti];
+                    const afterTd = beforeA.substring(tdM.index + tdM[0].length);
+                    if (!/<\/td>/i.test(afterTd)) {
+                        const tdStr = tdM[0];
+                        const tdHasBg = /bgcolor\s*=|background(?:-color)?\s*:\s*#?[a-fA-F0-9]/i.test(tdStr);
+                        const tdCentered = /text-align\s*:\s*center|align\s*=\s*["']center/i.test(tdStr);
+                        if (tdHasBg && tdCentered) {
+                            finalVmlStatus = 'native_ok';
+                            finalHasVml = true;
+                        }
+                        break;
+                    }
+                }
+            }
+            
             const bgImageInfo = checkBackgroundImage(fullTag);
             
             typeAPositions.push(match.index);
             buttons.push({
                 id, type: 'inline', href, text, bgColor, textColor, width, height,
-                borderRadius, fontSize, hasVml: vml.hasVml, vmlStatus: vml.vmlStatus,
+                borderRadius, fontSize, hasVml: finalHasVml, vmlStatus: finalVmlStatus,
                 bgImageInfo: bgImageInfo,
                 matchIndex: match.index, fullMatch: fullTag
             });
