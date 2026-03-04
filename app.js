@@ -15049,6 +15049,7 @@ td[width] { width: auto !important; }
     let eoaCompletedClients = {};
     let eoaBouncedClients = {};
     let eoaSelectedClients = [];
+    let eoaExplicitNone = false; // Verhindert Auto-Auswahl wenn Nutzer explizit "Keine" geklickt hat
     let eoaIsLoading = false;
     let eoaServerOnline = false;
 
@@ -15163,8 +15164,8 @@ td[width] { width: auto !important; }
         var matched = result.matched;
         var unmatched = result.unmatched;
         
-        // Standard: Alle gefundenen auswählen
-        if (eoaSelectedClients.length === 0) {
+        // Standard: Alle gefundenen auswählen – aber NICHT wenn Nutzer explizit "Keine" gewählt hat
+        if (eoaSelectedClients.length === 0 && !eoaExplicitNone) {
             eoaSelectedClients = matched.map(function(c) { return c.id; });
         }
         
@@ -15373,11 +15374,13 @@ td[width] { width: auto !important; }
     // Alle/Keine auswählen
     function eoaSelectAll() {
         if (!eoaAvailableClients) return;
+        eoaExplicitNone = false;
         var result = findMatchingEoaClients(eoaAvailableClients);
         eoaSelectedClients = result.matched.map(function(c) { return c.id; });
         renderEoaTabContent();
     }
     function eoaSelectNone() {
+        eoaExplicitNone = true;
         eoaSelectedClients = [];
         renderEoaTabContent();
     }

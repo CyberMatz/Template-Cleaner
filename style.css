@@ -290,6 +290,10 @@ body {
 }
 
 /* ── Active Tab States: Tab-spezifische Farben ── */
+.inspector-tab.active {
+    background: rgba(242, 169, 59, 0.08);
+}
+
 .inspector-tab.active[data-tab="tracking"] {
     color: #2563eb;
     border-bottom-color: #2563eb;
@@ -329,6 +333,12 @@ body {
     border-bottom-color: #059669;
 }
 .inspector-tab.active[data-tab="placement"] .tab-icon { opacity: 1; }
+
+.inspector-tab.active[data-tab="eoa"] {
+    color: #f2a93b;
+    border-bottom-color: #f2a93b;
+}
+.inspector-tab.active[data-tab="eoa"] .tab-icon { opacity: 1; }
 
 /* ── Count Badge on Tabs ── */
 .tab-count {
