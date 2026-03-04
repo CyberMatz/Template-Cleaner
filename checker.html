@@ -12,6 +12,22 @@
         // Cache-Buster für CSS
         document.getElementById('mainStylesheet').href = 'style.css?v=' + Date.now();
     </script>
+    <style>
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            color: #f2a93b;
+            font-weight: 500;
+            font-size: 14px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 2px solid #f2a93b;
+            transition: all 0.2s;
+        }
+        .back-link:hover { background: #f2a93b; color: #fff; }
+    </style>
 </head>
 <body>
     <!-- Header -->
