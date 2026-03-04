@@ -1,4 +1,4 @@
-// Template Check & Clean - Client-Side Processing
+// Template Checker - Client-Side Processing
 // Keine Server-Komponenten - Alles läuft im Browser
 
 // Phase 13 P6: DEV_MODE Schalter (false = Produktion, true = Debug Logs)
@@ -3975,7 +3975,7 @@ class TemplateProcessor {
 // UI-Logik
 const APP_VERSION = 'v3.8.33-2026-03-03';
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('%c[APP] Template Check & Clean ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
+    console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
     // Sichtbare Versionsanzeige: Versuche mehrere Methoden
     try {
@@ -3988,7 +3988,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Methode 2: Auch als Titel auf den Verarbeiten-Button
         const processBtn2 = document.getElementById('processBtn');
-        if (processBtn2) processBtn2.title = 'Template Check & Clean ' + APP_VERSION;
+        if (processBtn2) processBtn2.title = 'Template Checker ' + APP_VERSION;
     } catch(e) {
         console.warn('[VERSION] Badge konnte nicht erstellt werden:', e);
     }
