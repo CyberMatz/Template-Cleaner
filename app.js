@@ -6734,6 +6734,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (altIdx !== -1) processingResult.attentionItems[altIdx] = msg;
         }
         
+        // --- W05: Relative Bildpfade neu prüfen ---
+        const htmlForRelImg = newHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        const relativeImgSrcRegex = /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+        const templateVarPat = /^(\{\{|%%|__|\[)/;
+        let relativeImgCount = 0;
+        const relativeImgExamples = [];
+        let rImgMatch;
+        while ((rImgMatch = relativeImgSrcRegex.exec(htmlForRelImg)) !== null) {
+            const src = rImgMatch[1];
+            if (!src.match(/^https?:\/\//i) && !src.match(/^\/\//i) && !src.match(/^data:/i) && !templateVarPat.test(src)) {
+                relativeImgCount++;
+                if (relativeImgExamples.length < 3) relativeImgExamples.push('"' + src.substring(0, 50) + '"');
+            }
+        }
+        const oldW05Idx = processingResult.attentionItems.findIndex(item => /relativem Pfad|relative.*Pfad/i.test(item));
+        if (oldW05Idx !== -1) {
+            if (relativeImgCount === 0) {
+                confidenceDelta += 5;
+                changes.push('🖼️ Relative Bildpfade: alle behoben ✓');
+                processingResult.attentionItems[oldW05Idx] = '✅ Bildpfade vollständig (https://...)';
+            } else {
+                const moreRel = relativeImgCount > 3 ? ' und ' + (relativeImgCount - 3) + ' weitere' : '';
+                processingResult.attentionItems[oldW05Idx] = '⚠️ ' + relativeImgCount + ' Bilder mit relativem Pfad: ' + relativeImgExamples.join(', ') + moreRel + ' → vollständige URL (https://...) benötigt';
+            }
+        }
+
         // --- Confidence Score aktualisieren ---
         processingResult.confidence = Math.max(0, Math.min(100, processingResult.confidence + confidenceDelta));
         if (processingResult.confidence >= 80) {
@@ -6770,6 +6796,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             confHtml += '</div>';
             confidenceEl.innerHTML = confHtml;
+        }
+
+        // --- Status neu berechnen und Badge aktualisieren ---
+        const hasErrorItems = processingResult.attentionItems.some(function(item) { return item.indexOf('❌') !== -1; });
+        const hasWarnItems = processingResult.attentionItems.some(function(item) { return item.indexOf('⚠️') !== -1; });
+        const newComputedStatus = hasErrorItems ? 'fail' : (hasWarnItems ? 'warn' : 'pass');
+        if (newComputedStatus !== processingResult.status) {
+            processingResult.status = newComputedStatus;
+            const statusBadgeEl = document.getElementById('statusBadge');
+            if (statusBadgeEl) {
+                statusBadgeEl.className = 'status-badge ' + newComputedStatus;
+                statusBadgeEl.textContent = 'Status: ' + newComputedStatus.toUpperCase();
+            }
+            console.log('[STATUS] Status aktualisiert: ' + newComputedStatus);
         }
         
         console.log('[ASSET] Post-Commit Metriken aktualisiert: Δconfidence=' + confidenceDelta + ', newSize=' + newSizeKB + 'KB, base64=' + base64Images.length + ', images=' + visibleImages);
