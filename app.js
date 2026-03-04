@@ -3973,7 +3973,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.33-2026-03-03';
+const APP_VERSION = 'v3.8.34-2026-03-04';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11519,6 +11519,19 @@ td[width] { width: auto !important; }
                     c.isCurrent = true;
                 }
             });
+            
+            // Fallback: Wenn %header% bereits eingebaut ist, aber keine Kandidatenposition passt
+            // → aktuelle Position als eigene Option hinzufügen und anhaken
+            if (!candidates.some(c => c.isCurrent)) {
+                candidates.unshift({
+                    id: 'header_current_position',
+                    label: 'Aktuelle Position (bereits eingebaut)',
+                    description: 'Der %header%-Platzhalter ist bereits an dieser Stelle im Template vorhanden.',
+                    position: currentPos,
+                    snippet: getSnippetAround(html, currentPos, 40, 60),
+                    isCurrent: true
+                });
+            }
         }
         
         return candidates;
@@ -11717,6 +11730,19 @@ td[width] { width: auto !important; }
                     c.isCurrent = true;
                 }
             });
+            
+            // Fallback: Wenn %footer% bereits eingebaut ist, aber keine Kandidatenposition passt
+            // → aktuelle Position als eigene Option hinzufügen und anhaken
+            if (!candidates.some(c => c.isCurrent)) {
+                candidates.unshift({
+                    id: 'footer_current_position',
+                    label: 'Aktuelle Position (bereits eingebaut)',
+                    description: 'Der %footer%-Platzhalter ist bereits an dieser Stelle im Template vorhanden.',
+                    position: footerPos,
+                    snippet: getSnippetAround(html, footerPos, 60, 40),
+                    isCurrent: true
+                });
+            }
         }
         
         return candidates;
