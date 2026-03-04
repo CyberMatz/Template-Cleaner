@@ -3973,7 +3973,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.37-2026-03-04';
+const APP_VERSION = 'v3.8.39-2026-03-04';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6661,6 +6661,42 @@ document.addEventListener('DOMContentLoaded', () => {
         
         processingResult.attentionItems = newItems;
         
+        // --- P08/P09: Alt-Tags neu prüfen (fehlend UND leer) ---
+        const htmlForAlt = newHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        const imgTagsForAlt = [...htmlForAlt.matchAll(/<img\b[^>]*>/gi)];
+        let missingAltCount = 0;
+        let emptyAltCount = 0;
+        imgTagsForAlt.forEach(m => {
+            const tag = m[0];
+            const w = (tag.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
+            const h = (tag.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
+            if (w === '1' && h === '1') return; // Tracking-Pixel überspringen
+            if (!/\balt\s*=/i.test(tag)) {
+                missingAltCount++;
+            } else if (/\balt\s*=\s*["']\s*["']/i.test(tag)) {
+                emptyAltCount++;
+            }
+        });
+        const totalAltProblems = missingAltCount + emptyAltCount;
+        const hadAltWarn = processingResult.attentionItems.some(item => /alt/i.test(item));
+        if (hadAltWarn && totalAltProblems === 0) {
+            confidenceDelta += 5;
+            changes.push('🖼️ Alt-Tags: alle gesetzt ✓');
+            const altIdx = processingResult.attentionItems.findIndex(item => /alt/i.test(item));
+            if (altIdx !== -1) processingResult.attentionItems[altIdx] = '✅ Alt-Attribute vollständig gepflegt';
+        } else if (totalAltProblems > 0) {
+            const altIdx = processingResult.attentionItems.findIndex(item => /alt/i.test(item));
+            let msg = '';
+            if (emptyAltCount > 0 && missingAltCount === 0) {
+                msg = '⚠️ ' + emptyAltCount + ' Bild(er) mit leerem Alt-Attribut (funktioniert, aber nicht optimal)';
+            } else if (missingAltCount > 0 && emptyAltCount === 0) {
+                msg = '⚠️ ' + missingAltCount + ' Bild(er) ohne alt-Attribut';
+            } else {
+                msg = '⚠️ Alt-Attribute: ' + missingAltCount + ' fehlend, ' + emptyAltCount + ' leer';
+            }
+            if (altIdx !== -1) processingResult.attentionItems[altIdx] = msg;
+        }
+        
         // --- Confidence Score aktualisieren ---
         processingResult.confidence = Math.max(0, Math.min(100, processingResult.confidence + confidenceDelta));
         if (processingResult.confidence >= 80) {
@@ -6999,6 +7035,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update Preview
         updateInspectorPreview();
+        
+        recalculatePostCommitMetrics(currentWorkingHtml);
         
         // Phase 12: EIN Erfolgshinweis als Toast (kein Alert)
         if (committedTabs.length > 0) {
@@ -9330,7 +9368,7 @@ td[width] { width: auto !important; }
             // Update Preview
             updateInspectorPreview();
             
-            // Phase 12: Inline Toast statt Alert
+            recalculatePostCommitMetrics(currentWorkingHtml);
             showInspectorToast('✅ Committed');
         }
     }
@@ -10353,6 +10391,9 @@ td[width] { width: auto !important; }
             // Re-render Images Tab
             showImagesTab(imagesContent);
             
+            // Score & Hinweise sofort aktualisieren
+            recalculatePostCommitMetrics(imagesTabHtml);
+            
             showInspectorToast('✅ Alt-Text für ' + imgId + ' geändert');
             console.log('[INSPECTOR] Image alt changed:', imgId);
         } else {
@@ -11171,7 +11212,7 @@ td[width] { width: auto !important; }
             // Update Preview
             updateInspectorPreview();
             
-            // Phase 12: Inline Toast statt Alert
+            recalculatePostCommitMetrics(currentWorkingHtml);
             showInspectorToast('✅ Committed');
         }
     }
@@ -13437,6 +13478,7 @@ td[width] { width: auto !important; }
             loadInspectorTabContent('buttons');
             
             updateInspectorPreview();
+            recalculatePostCommitMetrics(currentWorkingHtml);
             showInspectorToast('✅ Buttons committed');
         }
     }
@@ -14909,7 +14951,7 @@ td[width] { width: auto !important; }
             // Update Preview
             updateInspectorPreview();
             
-            // Phase 12: Inline Toast statt Alert
+            recalculatePostCommitMetrics(currentWorkingHtml);
             showInspectorToast('✅ Committed');
         }
     }
