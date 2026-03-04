@@ -416,6 +416,43 @@ class TemplateProcessor {
                 fixes.push('Text ersetzt');
             }
             
+            // === WRAPPER-PRÜFUNG: <!--[if !mso]> entfernen ===
+            // Problem: Manche Templates wickeln den Preheader in einen Outlook-Ausschluss-
+            // Kommentar (<!--[if !mso]><!-- -->...<!--<![endif]-->). Outlook ignoriert
+            // dann den Preheader komplett – kein Vorschautext wird angezeigt.
+            // Korrekt: mso-hide:all CSS im Preheader-Div (bereits in _buildPreheaderHtml).
+            // Dieser Block erkennt und entfernt den Wrapper automatisch.
+            {
+                const preheaderForWrapper = this.preheaderText ? newPreheaderHtml : currentPreheader;
+                const phPos = this.html.indexOf(preheaderForWrapper);
+                if (phPos > -1) {
+                    // Schau 150 Zeichen VOR dem Preheader nach dem Wrapper-Öffner
+                    const lookBefore = this.html.substring(Math.max(0, phPos - 150), phPos);
+                    // Erkennt: <!--[if !mso]><!-- --> und <!--[if !mso]><!--> (Varianten)
+                    const notMsoMatch = lookBefore.match(/<!--\[if !mso\]><!--[^>]*>\s*\n?\s*$/i);
+                    if (notMsoMatch) {
+                        // Schau nach dem Wrapper-Schließer (<!--<![endif]-->) nach dem Preheader
+                        const lookAfter = this.html.substring(phPos + preheaderForWrapper.length, phPos + preheaderForWrapper.length + 100);
+                        const endifMatch = lookAfter.match(/^\s*\n?\s*<!--<!\[endif\]-->/i);
+                        
+                        // Wrapper-Öffner entfernen
+                        const wrapStart = phPos - notMsoMatch[0].length;
+                        this.html = this.html.slice(0, wrapStart) + this.html.slice(phPos);
+                        
+                        // Wrapper-Schließer entfernen (Position neu berechnen nach Öffner-Entfernung)
+                        if (endifMatch) {
+                            const newPhPos = this.html.indexOf(preheaderForWrapper);
+                            if (newPhPos > -1) {
+                                const endStart = newPhPos + preheaderForWrapper.length;
+                                this.html = this.html.slice(0, endStart) + this.html.slice(endStart + endifMatch[0].length);
+                            }
+                        }
+                        
+                        fixes.push('Outlook-Wrapper (<!--[if !mso]>) entfernt – Preheader jetzt in Outlook sichtbar');
+                    }
+                }
+            }
+            
             // === POSITIONS-PRÜFUNG ===
             // Pflicht: Preheader muss direkt nach <body> stehen, VOR %header%
             // Prüfe ob zwischen <body> und Preheader sichtbarer Inhalt steht
