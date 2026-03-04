@@ -3973,7 +3973,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.35-2026-03-04';
+const APP_VERSION = 'v3.8.36-2026-03-04';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -7136,6 +7136,32 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.data.type === 'CURSOR_SAVED') {
             savedCursorNodeId = event.data.nodeId;
         }
+        // REVERSE_LOCATE: Klick in Vorschau → zur passenden Karte im linken Panel scrollen
+        else if (event.data.type === 'REVERSE_LOCATE') {
+            const kind = event.data.kind;
+            const id   = event.data.id;
+            
+            let card = null;
+            if (kind === 'link') {
+                card = document.querySelector('[data-link-id="' + id + '"]');
+            } else if (kind === 'img') {
+                card = document.querySelector('[data-img-id="' + id + '"]');
+            }
+            
+            if (card) {
+                // Zur Karte scrollen
+                card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                
+                // Kurzes Aufleuchten – orange Rahmen, faded dann aus
+                card.style.transition = 'box-shadow 0.15s, outline 0.15s';
+                card.style.outline = '3px solid #f39c12';
+                card.style.boxShadow = '0 0 0 5px rgba(243,156,18,0.25)';
+                setTimeout(function() {
+                    card.style.outline = '';
+                    card.style.boxShadow = '';
+                }, 1500);
+            }
+        }
         // PLACEHOLDER_DONE: iframe hat Platzhalter an Cursor-Position eingefügt
         else if (event.data.type === 'PLACEHOLDER_DONE') {
             if (currentInspectorTab === 'editor' && editorTabHtml) {
@@ -8336,7 +8362,41 @@ td[width] { width: auto !important; }
         scriptLines.push('  }');
         scriptLines.push('});');
 
-        // Cursor-Tracking: Position merken wenn in contenteditable geklickt/getippt
+        // REVERSE LOCATE: Klick auf Link/Bild → Card im linken Panel aufleuchten lassen
+        // Nur aktiv wenn KEIN Editor-Tab (dort übernimmt der SELECT_ELEMENT-Handler)
+        if (tabName !== 'editor') {
+            scriptLines.push('');
+            scriptLines.push('// Reverse Locate: Klick in Vorschau → springt zur Karte im linken Panel');
+            scriptLines.push('document.addEventListener("click", function(rlEvt) {');
+            scriptLines.push('  try {');
+            scriptLines.push('    var t = rlEvt.target;');
+            scriptLines.push('    var depth = 0;');
+            scriptLines.push('    while (t && depth < 8) {');
+            scriptLines.push('      var linkId = t.getAttribute && t.getAttribute("data-qa-link-id");');
+            scriptLines.push('      var imgId = t.getAttribute && t.getAttribute("data-qa-img-id");');
+            scriptLines.push('      if (linkId) {');
+            scriptLines.push('        rlEvt.preventDefault();');
+            scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "link", id: linkId }, "*");');
+            scriptLines.push('        // Kurzer visueller Puls auf dem geklickten Element');
+            scriptLines.push('        t.style.transition = "outline 0.1s";');
+            scriptLines.push('        t.style.outline = "3px solid #f39c12";');
+            scriptLines.push('        setTimeout(function() { t.style.outline = ""; }, 1200);');
+            scriptLines.push('        break;');
+            scriptLines.push('      }');
+            scriptLines.push('      if (imgId) {');
+            scriptLines.push('        rlEvt.preventDefault();');
+            scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "img", id: imgId }, "*");');
+            scriptLines.push('        t.style.transition = "outline 0.1s";');
+            scriptLines.push('        t.style.outline = "3px solid #f39c12";');
+            scriptLines.push('        setTimeout(function() { t.style.outline = ""; }, 1200);');
+            scriptLines.push('        break;');
+            scriptLines.push('      }');
+            scriptLines.push('      t = t.parentElement;');
+            scriptLines.push('      depth++;');
+            scriptLines.push('    }');
+            scriptLines.push('  } catch(e) { console.error("[REVERSE LOCATE ERROR]", e); }');
+            scriptLines.push('});');
+        }
         if (tabName === 'editor') {
             scriptLines.push('var _cursorRange = null; var _cursorNodeId = null;');
             scriptLines.push('document.addEventListener("selectionchange", function() {');
