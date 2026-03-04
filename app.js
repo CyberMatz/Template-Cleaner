@@ -7086,28 +7086,54 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.data.type === 'CURSOR_SAVED') {
             savedCursorNodeId = event.data.nodeId;
         }
-        // REVERSE_LOCATE: Klick in Vorschau → zur passenden Karte im linken Panel scrollen
+        // REVERSE_LOCATE: Klick in Vorschau → passende Karte im linken Panel aufleuchten lassen
         else if (event.data.type === 'REVERSE_LOCATE') {
-            const rlKind = event.data.kind;
-            const rlId   = event.data.id;
-            
+            const rl = event.data;
             let card = null;
-            if (rlKind === 'link') {
-                card = document.querySelector('[data-link-id="' + rlId + '"]');
-            } else if (rlKind === 'img') {
-                card = document.querySelector('[data-img-id="' + rlId + '"]');
-            }
-            
-            if (card) {
-                card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                card.style.transition = 'box-shadow 0.15s, outline 0.15s';
-                card.style.outline = '3px solid #f39c12';
-                card.style.boxShadow = '0 0 0 6px rgba(243,156,18,0.25)';
+
+            // Hilfsfunktion: Karte aufleuchten lassen
+            function rlHighlight(el) {
+                if (!el) return;
+                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                el.style.transition = 'box-shadow 0.15s, outline 0.15s';
+                el.style.outline = '3px solid #f39c12';
+                el.style.boxShadow = '0 0 0 6px rgba(243,156,18,0.25)';
                 setTimeout(function() {
-                    card.style.outline = '';
-                    card.style.boxShadow = '';
+                    el.style.outline = '';
+                    el.style.boxShadow = '';
                 }, 1600);
             }
+
+            if (currentInspectorTab === 'images') {
+                // Bilder-Tab: nach Bild-ID suchen, Fallback: src-Übereinstimmung
+                if (rl.imgId) {
+                    card = document.querySelector('[data-img-id="' + rl.imgId + '"]');
+                }
+                if (!card && rl.imgSrc) {
+                    const btn = document.querySelector('.btn-image-locate[data-src="' + CSS.escape(rl.imgSrc) + '"]');
+                    if (btn) card = btn.closest('[data-img-id]');
+                }
+
+            } else if (currentInspectorTab === 'buttons') {
+                // Buttons-Tab: nach btn-id suchen (Preview nutzt B001-Format)
+                if (rl.linkId) {
+                    card = document.querySelector('[data-btn-id="' + rl.linkId + '"]');
+                }
+
+            } else if (currentInspectorTab === 'tracking') {
+                // Tracking-Tab: nach Link-ID suchen, Fallback: href-Übereinstimmung
+                if (rl.linkId) {
+                    card = document.querySelector('[data-link-id="' + rl.linkId + '"]');
+                }
+                if (!card && rl.linkHref) {
+                    const btn = document.querySelector('.btn-tracking-locate[data-href="' + CSS.escape(rl.linkHref) + '"]');
+                    if (btn) card = btn.closest('[data-link-id]');
+                }
+                // Fallback: verlinkte Bilder – wenn nur imgId vorhanden, nichts tun
+                // (im Tracking-Tab sind Bilder-in-Links als normale Link-Karten gelistet)
+            }
+
+            rlHighlight(card);
         }
         // PLACEHOLDER_DONE: iframe hat Platzhalter an Cursor-Position eingefügt
         else if (event.data.type === 'PLACEHOLDER_DONE') {
@@ -8275,32 +8301,46 @@ td[width] { width: auto !important; }
         scriptLines.push('    var isEditable = event.target.getAttribute("data-qa-editable") === "true"');
         scriptLines.push('                  || !!(event.target.closest && event.target.closest("[data-qa-editable]"));');
         scriptLines.push('');
-        scriptLines.push('    // === REVERSE LOCATE: Link- oder Bild-ID nach oben suchen ===');
-        scriptLines.push('    // Läuft IMMER (außer Editor) und findet data-qa-link-id / data-qa-img-id');
+        scriptLines.push('    // === REVERSE LOCATE: alle relevanten IDs + Attribute sammeln ===');
         scriptLines.push('    var rlTarget = event.target;');
         scriptLines.push('    var rlDepth = 0;');
-        scriptLines.push('    var rlFound = false;');
+        scriptLines.push('    var rlLinkId = null; var rlLinkHref = null;');
+        scriptLines.push('    var rlImgId  = null; var rlImgSrc  = null;');
         scriptLines.push('    while (rlTarget && rlDepth < 12) {');
-        scriptLines.push('      var linkId = rlTarget.getAttribute && rlTarget.getAttribute("data-qa-link-id");');
-        scriptLines.push('      var imgId  = rlTarget.getAttribute && rlTarget.getAttribute("data-qa-img-id");');
-        scriptLines.push('      if (linkId) {');
-        scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "link", id: linkId }, "*");');
-        scriptLines.push('        rlTarget.style.transition = "outline 0.1s";');
-        scriptLines.push('        rlTarget.style.outline = "3px solid #f39c12";');
-        scriptLines.push('        setTimeout(function(el) { return function() { el.style.outline = ""; }; }(rlTarget), 1200);');
-        scriptLines.push('        rlFound = true;');
-        scriptLines.push('        break;');
+        scriptLines.push('      var lid = rlTarget.getAttribute && rlTarget.getAttribute("data-qa-link-id");');
+        scriptLines.push('      var iid = rlTarget.getAttribute && rlTarget.getAttribute("data-qa-img-id");');
+        scriptLines.push('      if (lid && !rlLinkId) {');
+        scriptLines.push('        rlLinkId = lid;');
+        scriptLines.push('        rlLinkHref = rlTarget.getAttribute("href") || "";');
         scriptLines.push('      }');
-        scriptLines.push('      if (imgId) {');
-        scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "img", id: imgId }, "*");');
-        scriptLines.push('        rlTarget.style.transition = "outline 0.1s";');
-        scriptLines.push('        rlTarget.style.outline = "3px solid #f39c12";');
-        scriptLines.push('        setTimeout(function(el) { return function() { el.style.outline = ""; }; }(rlTarget), 1200);');
-        scriptLines.push('        rlFound = true;');
-        scriptLines.push('        break;');
+        scriptLines.push('      if (iid && !rlImgId) {');
+        scriptLines.push('        rlImgId = iid;');
+        scriptLines.push('        rlImgSrc = rlTarget.getAttribute("src") || "";');
         scriptLines.push('      }');
         scriptLines.push('      rlTarget = rlTarget.parentElement;');
         scriptLines.push('      rlDepth++;');
+        scriptLines.push('    }');
+        scriptLines.push('    // Sende alle gefundenen IDs ans Elternteil – parent entscheidet je nach aktivem Tab');
+        scriptLines.push('    if (rlLinkId || rlImgId) {');
+        scriptLines.push('      // Visuelles Feedback: erstes gefundenes Element kurz orange');
+        scriptLines.push('      var rlFlash = event.target;');
+        scriptLines.push('      var rlD2 = 0;');
+        scriptLines.push('      while (rlFlash && rlD2 < 12) {');
+        scriptLines.push('        if ((rlFlash.getAttribute && rlFlash.getAttribute("data-qa-link-id")) ||');
+        scriptLines.push('            (rlFlash.getAttribute && rlFlash.getAttribute("data-qa-img-id"))) {');
+        scriptLines.push('          rlFlash.style.transition = "outline 0.1s";');
+        scriptLines.push('          rlFlash.style.outline = "3px solid #f39c12";');
+        scriptLines.push('          setTimeout(function(el) { return function() { el.style.outline = ""; }; }(rlFlash), 1200);');
+        scriptLines.push('          break;');
+        scriptLines.push('        }');
+        scriptLines.push('        rlFlash = rlFlash.parentElement;');
+        scriptLines.push('        rlD2++;');
+        scriptLines.push('      }');
+        scriptLines.push('      window.parent.postMessage({');
+        scriptLines.push('        type: "REVERSE_LOCATE",');
+        scriptLines.push('        linkId: rlLinkId, linkHref: rlLinkHref,');
+        scriptLines.push('        imgId: rlImgId,  imgSrc:  rlImgSrc');
+        scriptLines.push('      }, "*");');
         scriptLines.push('    }');
         scriptLines.push('');
         scriptLines.push('    // === SELECT_ELEMENT (Editor / Tracking Insert Mode) ===');
