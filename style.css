@@ -907,8 +907,7 @@ body {
 }
 
 .btn-footer-left,
-.btn-footer-right,
-.btn-footer-eoa {
+.btn-footer-right {
     padding: 14px 28px;
     border: none;
     border-radius: 6px;
@@ -925,17 +924,6 @@ body {
 
 .btn-footer-left:hover {
     background: #e09930;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.btn-footer-eoa {
-    background: #2196F3;
-    color: white;
-}
-
-.btn-footer-eoa:hover {
-    background: #1976D2;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
@@ -1537,8 +1525,7 @@ body {
     }
     
     .btn-footer-left,
-    .btn-footer-right,
-    .btn-footer-eoa {
+    .btn-footer-right {
         width: 100%;
     }
 }

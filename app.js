@@ -7043,37 +7043,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Email on Acid Button: Template in Zwischenablage kopieren + EOA öffnen
-    const openEmailOnAcidBtn = document.getElementById('openEmailOnAcid');
-    if (openEmailOnAcidBtn) {
-        openEmailOnAcidBtn.addEventListener('click', () => {
-            const htmlToCopy = currentWorkingHtml || '';
-            if (!htmlToCopy) {
-                showInspectorToast('⚠️ Kein Template geladen.');
-                return;
-            }
-            
-            navigator.clipboard.writeText(htmlToCopy).then(() => {
-                showInspectorToast('✅ Template kopiert! In EOA: Email & Spam Testing → HTML einfügen (Strg+V)');
-                setTimeout(() => {
-                    window.open('https://app.emailonacid.com/app/acidtest/#', '_blank');
-                }, 500);
-            }).catch(() => {
-                // Fallback für ältere Browser
-                const textarea = document.createElement('textarea');
-                textarea.value = htmlToCopy;
-                textarea.style.cssText = 'position:fixed;left:-9999px;';
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                showInspectorToast('✅ Template kopiert! In EOA: Email & Spam Testing → HTML einfügen (Strg+V)');
-                setTimeout(() => {
-                    window.open('https://app.emailonacid.com/app/acidtest/#', '_blank');
-                }, 500);
-            });
-        });
-    }
     
     // PATCH: Update downloadManualOptimized state based on pending changes
     function updateDownloadManualOptimizedButton() {
