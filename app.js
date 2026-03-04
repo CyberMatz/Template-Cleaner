@@ -3973,7 +3973,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.36-2026-03-04';
+const APP_VERSION = 'v3.8.37-2026-03-04';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6659,53 +6659,6 @@ document.addEventListener('DOMContentLoaded', () => {
             newItems[base64Idx] = '🖼️ Eingebettete Bilder: noch ' + base64Images.length + ' als Base64 (' + totalSizeKB + ' KB)';
         }
         
-        // --- P16: Leere/fehlende Tracking-Links neu prüfen ---
-        const templateVarPattern = /^(%[a-zA-Z0-9_]+%|\$\{[^}]+\}|\{\{[^}]+\}\}|\[%[^\]]+%\]|https?:\/\/%[^%]+%)$/;
-        const htmlForLinks = newHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
-        const hrefMatches = [...htmlForLinks.matchAll(/href\s*=\s*["']([^"']*)["']/gi)];
-        const emptyLinks = hrefMatches.filter(m => {
-            const val = m[1].trim();
-            return val === '' || val === '#';
-        });
-        const hadLinkWarn = processingResult.attentionItems.some(item => item.startsWith('🔗'));
-        const hasLinkWarn = emptyLinks.length > 0;
-        if (hadLinkWarn && !hasLinkWarn) {
-            confidenceDelta += 5; // Links wurden befüllt
-            changes.push('🔗 Leere Links: alle befüllt ✓');
-            // Item aus Liste entfernen
-            const linkIdx = newItems.findIndex(item => item.startsWith('🔗'));
-            if (linkIdx !== -1) newItems[linkIdx] = '🔗 ✅ Alle Links haben Ziel-URLs';
-        } else if (hasLinkWarn) {
-            const linkIdx = newItems.findIndex(item => item.startsWith('🔗'));
-            const msg = '🔗 Noch ' + emptyLinks.length + ' Link(s) ohne Ziel-URL → im Inspector (Tracking-Tab) eintragen';
-            if (linkIdx !== -1) newItems[linkIdx] = msg;
-            else if (!hadLinkWarn) newItems.push(msg); // neu aufgetaucht (unwahrscheinlich)
-        }
-
-        // --- P08/P09: Alt-Tags neu prüfen ---
-        const imgTagsForAlt = [...htmlForLinks.matchAll(/<img\b[^>]*>/gi)];
-        let missingAltCount = 0;
-        imgTagsForAlt.forEach(m => {
-            const tag = m[0];
-            // 1x1 Tracking-Pixel überspringen
-            const w = (tag.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
-            const h = (tag.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
-            if (w === '1' && h === '1') return;
-            if (!/\balt\s*=/i.test(tag)) missingAltCount++;
-        });
-        const hadAltWarn = processingResult.attentionItems.some(item => /alt/i.test(item) && item.startsWith('⚠️'));
-        const hasAltWarn = missingAltCount > 0;
-        if (hadAltWarn && !hasAltWarn) {
-            confidenceDelta += 5; // Alt-Tags wurden alle ergänzt
-            changes.push('🖼️ Alt-Tags: alle ergänzt ✓');
-            const altIdx = newItems.findIndex(item => /alt/i.test(item) && item.startsWith('⚠️'));
-            if (altIdx !== -1) newItems[altIdx] = '⚠️ ✅ Alt-Attribute: alle Bilder haben alt-Text';
-        } else if (hasAltWarn) {
-            const altIdx = newItems.findIndex(item => /alt/i.test(item) && item.startsWith('⚠️'));
-            const msg = '⚠️ Noch ' + missingAltCount + ' Bild(er) ohne alt-Attribut';
-            if (altIdx !== -1) newItems[altIdx] = msg;
-        }
-        
         processingResult.attentionItems = newItems;
         
         // --- Confidence Score aktualisieren ---
@@ -7047,9 +7000,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update Preview
         updateInspectorPreview();
         
-        // Score & Hinweise nach allen Commits aktualisieren
-        recalculatePostCommitMetrics(currentWorkingHtml);
-        
         // Phase 12: EIN Erfolgshinweis als Toast (kein Alert)
         if (committedTabs.length > 0) {
             showInspectorToast('✅ Finalisiert: ' + committedTabs.join(', '));
@@ -7138,28 +7088,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // REVERSE_LOCATE: Klick in Vorschau → zur passenden Karte im linken Panel scrollen
         else if (event.data.type === 'REVERSE_LOCATE') {
-            const kind = event.data.kind;
-            const id   = event.data.id;
+            const rlKind = event.data.kind;
+            const rlId   = event.data.id;
             
             let card = null;
-            if (kind === 'link') {
-                card = document.querySelector('[data-link-id="' + id + '"]');
-            } else if (kind === 'img') {
-                card = document.querySelector('[data-img-id="' + id + '"]');
+            if (rlKind === 'link') {
+                card = document.querySelector('[data-link-id="' + rlId + '"]');
+            } else if (rlKind === 'img') {
+                card = document.querySelector('[data-img-id="' + rlId + '"]');
             }
             
             if (card) {
-                // Zur Karte scrollen
                 card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                
-                // Kurzes Aufleuchten – orange Rahmen, faded dann aus
                 card.style.transition = 'box-shadow 0.15s, outline 0.15s';
                 card.style.outline = '3px solid #f39c12';
-                card.style.boxShadow = '0 0 0 5px rgba(243,156,18,0.25)';
+                card.style.boxShadow = '0 0 0 6px rgba(243,156,18,0.25)';
                 setTimeout(function() {
                     card.style.outline = '';
                     card.style.boxShadow = '';
-                }, 1500);
+                }, 1600);
             }
         }
         // PLACEHOLDER_DONE: iframe hat Platzhalter an Cursor-Position eingefügt
@@ -8321,12 +8268,42 @@ td[width] { width: auto !important; }
         scriptLines.push('});');
         scriptLines.push('');
 
-        scriptLines.push('// Click Handler für Element-Auswahl');
+        scriptLines.push('// Click Handler für Element-Auswahl + Reverse Locate');
         scriptLines.push('document.addEventListener("click", function(event) {');
         scriptLines.push('  try {');
-        scriptLines.push('    // Bei Klick in editierbares Element: Auswahl senden OHNE preventDefault');
+        scriptLines.push('    event.preventDefault();');
         scriptLines.push('    var isEditable = event.target.getAttribute("data-qa-editable") === "true"');
         scriptLines.push('                  || !!(event.target.closest && event.target.closest("[data-qa-editable]"));');
+        scriptLines.push('');
+        scriptLines.push('    // === REVERSE LOCATE: Link- oder Bild-ID nach oben suchen ===');
+        scriptLines.push('    // Läuft IMMER (außer Editor) und findet data-qa-link-id / data-qa-img-id');
+        scriptLines.push('    var rlTarget = event.target;');
+        scriptLines.push('    var rlDepth = 0;');
+        scriptLines.push('    var rlFound = false;');
+        scriptLines.push('    while (rlTarget && rlDepth < 12) {');
+        scriptLines.push('      var linkId = rlTarget.getAttribute && rlTarget.getAttribute("data-qa-link-id");');
+        scriptLines.push('      var imgId  = rlTarget.getAttribute && rlTarget.getAttribute("data-qa-img-id");');
+        scriptLines.push('      if (linkId) {');
+        scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "link", id: linkId }, "*");');
+        scriptLines.push('        rlTarget.style.transition = "outline 0.1s";');
+        scriptLines.push('        rlTarget.style.outline = "3px solid #f39c12";');
+        scriptLines.push('        setTimeout(function(el) { return function() { el.style.outline = ""; }; }(rlTarget), 1200);');
+        scriptLines.push('        rlFound = true;');
+        scriptLines.push('        break;');
+        scriptLines.push('      }');
+        scriptLines.push('      if (imgId) {');
+        scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "img", id: imgId }, "*");');
+        scriptLines.push('        rlTarget.style.transition = "outline 0.1s";');
+        scriptLines.push('        rlTarget.style.outline = "3px solid #f39c12";');
+        scriptLines.push('        setTimeout(function(el) { return function() { el.style.outline = ""; }; }(rlTarget), 1200);');
+        scriptLines.push('        rlFound = true;');
+        scriptLines.push('        break;');
+        scriptLines.push('      }');
+        scriptLines.push('      rlTarget = rlTarget.parentElement;');
+        scriptLines.push('      rlDepth++;');
+        scriptLines.push('    }');
+        scriptLines.push('');
+        scriptLines.push('    // === SELECT_ELEMENT (Editor / Tracking Insert Mode) ===');
         scriptLines.push('    var target = event.target;');
         scriptLines.push('    var maxDepth = 5;');
         scriptLines.push('    var depth = 0;');
@@ -8349,8 +8326,6 @@ td[width] { width: auto !important; }
         scriptLines.push('          href: href,');
         scriptLines.push('          src: src');
         scriptLines.push('        }, "*");');
-        scriptLines.push('        // Nur preventDefault wenn NICHT editierbar (sonst kein Cursor-Setzen möglich)');
-        scriptLines.push('        if (!isEditable) { event.preventDefault(); }');
         scriptLines.push('        event.stopPropagation();');
         scriptLines.push('        break;');
         scriptLines.push('      }');
@@ -8362,41 +8337,7 @@ td[width] { width: auto !important; }
         scriptLines.push('  }');
         scriptLines.push('});');
 
-        // REVERSE LOCATE: Klick auf Link/Bild → Card im linken Panel aufleuchten lassen
-        // Nur aktiv wenn KEIN Editor-Tab (dort übernimmt der SELECT_ELEMENT-Handler)
-        if (tabName !== 'editor') {
-            scriptLines.push('');
-            scriptLines.push('// Reverse Locate: Klick in Vorschau → springt zur Karte im linken Panel');
-            scriptLines.push('document.addEventListener("click", function(rlEvt) {');
-            scriptLines.push('  try {');
-            scriptLines.push('    var t = rlEvt.target;');
-            scriptLines.push('    var depth = 0;');
-            scriptLines.push('    while (t && depth < 8) {');
-            scriptLines.push('      var linkId = t.getAttribute && t.getAttribute("data-qa-link-id");');
-            scriptLines.push('      var imgId = t.getAttribute && t.getAttribute("data-qa-img-id");');
-            scriptLines.push('      if (linkId) {');
-            scriptLines.push('        rlEvt.preventDefault();');
-            scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "link", id: linkId }, "*");');
-            scriptLines.push('        // Kurzer visueller Puls auf dem geklickten Element');
-            scriptLines.push('        t.style.transition = "outline 0.1s";');
-            scriptLines.push('        t.style.outline = "3px solid #f39c12";');
-            scriptLines.push('        setTimeout(function() { t.style.outline = ""; }, 1200);');
-            scriptLines.push('        break;');
-            scriptLines.push('      }');
-            scriptLines.push('      if (imgId) {');
-            scriptLines.push('        rlEvt.preventDefault();');
-            scriptLines.push('        window.parent.postMessage({ type: "REVERSE_LOCATE", kind: "img", id: imgId }, "*");');
-            scriptLines.push('        t.style.transition = "outline 0.1s";');
-            scriptLines.push('        t.style.outline = "3px solid #f39c12";');
-            scriptLines.push('        setTimeout(function() { t.style.outline = ""; }, 1200);');
-            scriptLines.push('        break;');
-            scriptLines.push('      }');
-            scriptLines.push('      t = t.parentElement;');
-            scriptLines.push('      depth++;');
-            scriptLines.push('    }');
-            scriptLines.push('  } catch(e) { console.error("[REVERSE LOCATE ERROR]", e); }');
-            scriptLines.push('});');
-        }
+        // Cursor-Tracking: Position merken wenn in contenteditable geklickt/getippt
         if (tabName === 'editor') {
             scriptLines.push('var _cursorRange = null; var _cursorNodeId = null;');
             scriptLines.push('document.addEventListener("selectionchange", function() {');
@@ -9348,9 +9289,6 @@ td[width] { width: auto !important; }
             
             // Update Preview
             updateInspectorPreview();
-            
-            // Score & Hinweise aktualisieren
-            recalculatePostCommitMetrics(currentWorkingHtml);
             
             // Phase 12: Inline Toast statt Alert
             showInspectorToast('✅ Committed');
@@ -11193,9 +11131,6 @@ td[width] { width: auto !important; }
             // Update Preview
             updateInspectorPreview();
             
-            // Score & Hinweise aktualisieren
-            recalculatePostCommitMetrics(currentWorkingHtml);
-            
             // Phase 12: Inline Toast statt Alert
             showInspectorToast('✅ Committed');
         }
@@ -11635,19 +11570,6 @@ td[width] { width: auto !important; }
                     c.isCurrent = true;
                 }
             });
-            
-            // Fallback: Wenn %header% bereits eingebaut ist, aber keine Kandidatenposition passt
-            // → aktuelle Position als eigene Option hinzufügen und anhaken
-            if (!candidates.some(c => c.isCurrent)) {
-                candidates.unshift({
-                    id: 'header_current_position',
-                    label: 'Aktuelle Position (bereits eingebaut)',
-                    description: 'Der %header%-Platzhalter ist bereits an dieser Stelle im Template vorhanden.',
-                    position: currentPos,
-                    snippet: getSnippetAround(html, currentPos, 40, 60),
-                    isCurrent: true
-                });
-            }
         }
         
         return candidates;
@@ -11846,19 +11768,6 @@ td[width] { width: auto !important; }
                     c.isCurrent = true;
                 }
             });
-            
-            // Fallback: Wenn %footer% bereits eingebaut ist, aber keine Kandidatenposition passt
-            // → aktuelle Position als eigene Option hinzufügen und anhaken
-            if (!candidates.some(c => c.isCurrent)) {
-                candidates.unshift({
-                    id: 'footer_current_position',
-                    label: 'Aktuelle Position (bereits eingebaut)',
-                    description: 'Der %footer%-Platzhalter ist bereits an dieser Stelle im Template vorhanden.',
-                    position: footerPos,
-                    snippet: getSnippetAround(html, footerPos, 60, 40),
-                    isCurrent: true
-                });
-            }
         }
         
         return candidates;
@@ -13488,7 +13397,6 @@ td[width] { width: auto !important; }
             loadInspectorTabContent('buttons');
             
             updateInspectorPreview();
-            recalculatePostCommitMetrics(currentWorkingHtml);
             showInspectorToast('✅ Buttons committed');
         }
     }
@@ -14960,9 +14868,6 @@ td[width] { width: auto !important; }
             
             // Update Preview
             updateInspectorPreview();
-            
-            // Score & Hinweise aktualisieren
-            recalculatePostCommitMetrics(currentWorkingHtml);
             
             // Phase 12: Inline Toast statt Alert
             showInspectorToast('✅ Committed');
