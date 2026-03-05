@@ -2686,126 +2686,116 @@ class TemplateProcessor {
     fixDarkContainerTextColors() {
         const id = 'S15_DARK_CONTAINER_TEXT';
 
-        // Hilfsfunktion: relative Luminanz
         function hexLum(hex) {
-            const h = hex.replace('#', '').replace(/^([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '$1$1$2$2$3$3');
+            const h = hex.replace('#','').replace(/^([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '$1$1$2$2$3$3');
             if (h.length !== 6) return 0.5;
-            const [r, g, b] = [0, 2, 4].map(i => {
-                const c = parseInt(h.substring(i, i+2), 16) / 255;
-                return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            const [r,g,b] = [0,2,4].map(i => {
+                const c = parseInt(h.substring(i,i+2),16)/255;
+                return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4);
             });
             return 0.2126*r + 0.7152*g + 0.0722*b;
         }
 
-        // HTML-Kommentare temporär schützen (nicht Conditional Comments)
-        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '<<CC>>');
-        
+        let html = this.html;
         let fixCount = 0;
         let colorCorrections = 0;
-        let html = this.html;
 
-        // Finde alle table/td mit dunklem bgcolor und einer style-Textfarbe
-        const containerRegex = /(<(?:table|td)\b[^>]*bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,6})\s*["']?[^>]*>)/gi;
+        // Schritt 1: Alle dunklen Container finden und Textfarbe bestimmen
+        // Direkt auf html arbeiten – keine htmlNoComments Umwege (Positions-Bugs vermeiden)
+        const containerRegex = /<(table|td)\b([^>]*)>/gi;
         let contMatch;
-        const processed = new Set();
+        const ranges = []; // { start, end, textColor }
 
-        while ((contMatch = containerRegex.exec(htmlNoComments)) !== null) {
-            let bgHex = contMatch[2];
-            if (!bgHex.startsWith('#')) bgHex = '#' + bgHex;
-            
-            // Nur dunkle Hintergründe (Luminanz < 0.18)
+        while ((contMatch = containerRegex.exec(html)) !== null) {
+            const attrs = contMatch[2];
+            const bgM = attrs.match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,6})\s*["']?/i);
+            if (!bgM) continue;
+            let bgHex = bgM[1].startsWith('#') ? bgM[1] : '#' + bgM[1];
             if (hexLum(bgHex) >= 0.18) continue;
 
-            // Extrahiere style-Attribut des Containers
-            const contTag = contMatch[1];
-            const styleMatch = contTag.match(/style\s*=\s*["']([^"']*)["']/i);
-            if (!styleMatch) continue;
-            
-            const styleVal = styleMatch[1];
-            const colorInStyle = styleVal.match(/(?:^|;)\s*color\s*:\s*(#?[a-fA-F0-9]{3,6}|[a-z]+)/i);
-            if (!colorInStyle) continue;
+            const styleM = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+            if (!styleM) continue;
+            const colorM = styleM[1].match(/(?:^|;)\s*color\s*:\s*(#?[a-fA-F0-9]{3,6}|[a-z]+)/i);
+            if (!colorM) continue;
 
-            let textColor = colorInStyle[1].trim();
+            let textColor = colorM[1].trim();
             const textHex = textColor.startsWith('#') ? textColor : null;
 
-            // Problem B: Textfarbe selbst dunkel auf dunklem Hintergrund → auf #ffffff korrigieren
+            // Problem B: dunkle Textfarbe auf dunklem Hintergrund → #ffffff
             if (textHex && hexLum(textHex) < 0.18) {
-                const contrast = (Math.max(hexLum(bgHex), hexLum(textHex)) + 0.05) /
-                                 (Math.min(hexLum(bgHex), hexLum(textHex)) + 0.05);
+                const contrast = (Math.max(hexLum(bgHex),hexLum(textHex))+0.05) /
+                                 (Math.min(hexLum(bgHex),hexLum(textHex))+0.05);
                 if (contrast < 3) {
-                    // Korrigiere die Farbe im Container-Tag selbst: #333333 → #ffffff
-                    const oldColorDecl = colorInStyle[0]; // z.B. "; color: #333333"
-                    const newColorDecl = oldColorDecl.replace(
-                        /color\s*:\s*#?[a-fA-F0-9]{3,6}/i,
-                        'color: #ffffff'
+                    const tagStart = contMatch.index;
+                    const tagEnd = tagStart + contMatch[0].length;
+                    const oldTag = html.substring(tagStart, tagEnd);
+                    const newTag = oldTag.replace(
+                        /(\bstyle\s*=\s*["'])([^"']*)(["'])/i,
+                        (full, pre, val, post) => pre + val.replace(
+                            /color\s*:\s*#?[a-fA-F0-9]{3,6}/i, 'color: #ffffff'
+                        ) + post
                     );
-                    // Ersetze im echten HTML (nicht htmlNoComments)
-                    html = html.replace(contMatch[1], contMatch[1].replace(
-                        /style\s*=\s*["'][^"']*["']/i,
-                        styleMatch[0].replace(oldColorDecl, newColorDecl)
-                    ));
+                    if (newTag !== oldTag) {
+                        html = html.substring(0, tagStart) + newTag + html.substring(tagEnd);
+                        containerRegex.lastIndex = tagStart + newTag.length;
+                        colorCorrections++;
+                    }
                     textColor = '#ffffff';
-                    colorCorrections++;
                 }
             }
 
-            // Schlüssel zur Deduplizierung (gleiche bg+color nicht doppelt verarbeiten)
-            const key = bgHex.toLowerCase() + '|' + textColor.toLowerCase();
-            if (processed.has(key)) continue;
-            processed.add(key);
+            // Nur helle Farben propagieren
+            if (textColor.startsWith('#') && hexLum(textColor) < 0.18) continue;
+            if (textColor.toLowerCase() === 'inherit' || textColor.toLowerCase() === 'initial') continue;
 
-            // Nur helle Textfarben propagieren (wäre auf dunklem Hintergrund sichtbar)
-            const finalTextHex = textColor.startsWith('#') ? textColor : null;
-            if (finalTextHex && hexLum(finalTextHex) < 0.18) continue;
-
-            // Finde den Content-Bereich ab dem Container
             const contStart = contMatch.index + contMatch[0].length;
-            const innerSection = htmlNoComments.substring(contStart, contStart + 8000);
+            ranges.push({ start: contStart, end: contStart + 12000, textColor });
+        }
 
-            // Suche alle h1-h6, p, span-Elemente OHNE inline color → color inline setzen
-            // Strategie: Regex auf tatsächlichem HTML ausführen, guided by positions
-            const childRegex = /(<(?:h[1-6]|p|span)\b([^>]*))>/gi;
-            let childMatch;
-            
-            while ((childMatch = childRegex.exec(innerSection)) !== null) {
-                const childAttrs = childMatch[2];
-                const childStyleMatch = childAttrs.match(/style\s*=\s*["']([^"']*)["']/i);
-                const childStyle = childStyleMatch ? childStyleMatch[1] : '';
+        // Schritt 2: Alle h1-h6, p, span ohne inline color finden und patchen
+        // Rückwärts-Sammlung damit Positionen nach dem Ersetzen stimmen
+        const childRegex = /(<(?:h[1-6]|p|span)\b([^>]*))>/gi;
+        let childMatch;
+        const fixes = [];
 
-                // Bereits inline color? → überspringen
-                if (/(?:^|;)\s*color\s*:/i.test(childStyle)) continue;
+        while ((childMatch = childRegex.exec(html)) !== null) {
+            const childPos = childMatch.index;
+            const childStyle = (childMatch[2].match(/style\s*=\s*["']([^"']*)["']/i)||[])[1]||'';
+            if (/(?:^|;)\s*color\s*:/i.test(childStyle)) continue;
 
-                const originalTag = childMatch[0]; // z.B. <h1 style="font-size:24px">
-                let newTag;
+            const range = ranges.find(r => childPos >= r.start && childPos < r.end);
+            if (!range) continue;
 
-                if (childStyleMatch) {
-                    // Hat style-Attribut aber kein color → color vorne einfügen
-                    const quoteChar = childStyleMatch[0].includes('"') ? '"' : "'";
-                    newTag = originalTag.replace(
-                        /style\s*=\s*["']([^"']*)["']/i,
-                        'style=' + quoteChar + 'color:' + textColor + '; ' + childStyle + quoteChar
-                    );
-                } else {
-                    // Kein style-Attribut → style-Attribut einfügen
-                    newTag = childMatch[1] + ' style="color:' + textColor + '">';
-                }
-
-                // Exaktes Ersetzen im echten HTML (nur erste Vorkommen nach Container-Start)
-                const searchFrom = contStart - 50; // etwas Puffer für Positionen
-                const absPos = html.indexOf(originalTag, Math.max(0, searchFrom));
-                if (absPos > -1 && absPos < contStart + 8000) {
-                    html = html.substring(0, absPos) + newTag + html.substring(absPos + originalTag.length);
-                    fixCount++;
-                }
+            const originalTag = childMatch[0];
+            const childStyleM = childMatch[2].match(/style\s*=\s*["']([^"']*)["']/i);
+            let newTag;
+            if (childStyleM) {
+                const q = childStyleM[0].includes('"') ? '"' : "'";
+                newTag = originalTag.replace(
+                    /style\s*=\s*["']([^"']*)["']/i,
+                    'style=' + q + 'color:' + range.textColor + '; ' + childStyle + q
+                );
+            } else {
+                newTag = childMatch[1] + ' style="color:' + range.textColor + '">';
             }
+            if (newTag !== originalTag) {
+                fixes.push({ pos: childPos, oldLen: originalTag.length, newTag });
+            }
+        }
+
+        // Rückwärts anwenden damit Positionen korrekt bleiben
+        for (let i = fixes.length - 1; i >= 0; i--) {
+            const f = fixes[i];
+            html = html.substring(0, f.pos) + f.newTag + html.substring(f.pos + f.oldLen);
+            fixCount++;
         }
 
         this.html = html;
 
         if (fixCount > 0 || colorCorrections > 0) {
-            let msg = [];
-            if (colorCorrections > 0) msg.push(colorCorrections + '× dunkle Textfarbe auf #ffffff korrigiert (dunkler Text auf dunklem Hintergrund)');
-            if (fixCount > 0) msg.push(fixCount + '× Textfarbe inline auf Kind-Elemente propagiert (verhindert unsichtbaren Text in T-Online/GMX)');
+            const msg = [];
+            if (colorCorrections > 0) msg.push(colorCorrections + '\u00d7 dunkle Textfarbe auf #ffffff korrigiert');
+            if (fixCount > 0) msg.push(fixCount + '\u00d7 Textfarbe inline auf Kind-Elemente gesetzt (T-Online/GMX-kompatibel)');
             this.addCheck(id, 'FIXED', msg.join(', '));
         } else {
             this.addCheck(id, 'PASS', 'Keine dunklen Container mit Textfarben-Problem gefunden');
@@ -4374,7 +4364,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.3-2026-03-05';
+const APP_VERSION = 'v3.9.4-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
