@@ -4364,7 +4364,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.4-2026-03-05';
+const APP_VERSION = 'v3.9.5-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -13493,7 +13493,8 @@ td[width] { width: auto !important; }
             
             // 5. Breite: Parent <table width="NNN"> ändern
             if (newWidth !== btnData.width) {
-                const btnPosInHtml = html.indexOf(oldBtnHtml);
+                // matchIndex nutzen damit bei identischen Buttons die richtige Position gefunden wird
+                const btnPosInHtml = html.indexOf(oldBtnHtml, Math.max(0, btnData.matchIndex - 200));
                 if (btnPosInHtml >= 0) {
                     const beforeBtn = html.substring(Math.max(0, btnPosInHtml - 1500), btnPosInHtml);
                     // Finde die nächste parent <table> mit Pixel-width (rückwärts)
@@ -13508,7 +13509,27 @@ td[width] { width: auto !important; }
                         // Ersetze im beforeBtn-Bereich
                         const absPos = Math.max(0, btnPosInHtml - 1500) + lastTableMatch.index;
                         html = html.substring(0, absPos) + newTableTag + html.substring(absPos + oldTableTag.length);
-                        // Recalculate btnPos since html changed
+                    }
+                }
+
+                // VML-Breite auch aktualisieren (falls P14 VML für diesen Button generiert hat)
+                // Suche VML-Block direkt vor dem Button (max 2000 Zeichen vorher)
+                const btnPosForVml = html.indexOf(oldBtnHtml, Math.max(0, btnData.matchIndex - 200));
+                if (btnPosForVml >= 0) {
+                    const beforeBtnVml = html.substring(Math.max(0, btnPosForVml - 2000), btnPosForVml);
+                    // Suche letzten VML-Block
+                    const vmlBlockMatch = [...beforeBtnVml.matchAll(/<!--\[if mso\]>[\s\S]*?<!\[endif\]-->/gi)];
+                    if (vmlBlockMatch.length > 0) {
+                        const lastVml = vmlBlockMatch[vmlBlockMatch.length - 1];
+                        const oldVmlStr = lastVml[0];
+                        // Ersetze width im VML style-Attribut: width:NNNpx oder width="NNN"
+                        const newVmlStr = oldVmlStr
+                            .replace(/\bwidth\s*:\s*\d+px/gi, 'width:' + newWidth + 'px')
+                            .replace(/(<v:(?:roundrect|rect)[^>]*\bwidth\s*=\s*["']?)\d+/gi, '$1' + newWidth);
+                        if (newVmlStr !== oldVmlStr) {
+                            const vmlAbsPos = Math.max(0, btnPosForVml - 2000) + lastVml.index;
+                            html = html.substring(0, vmlAbsPos) + newVmlStr + html.substring(vmlAbsPos + oldVmlStr.length);
+                        }
                     }
                 }
             }
