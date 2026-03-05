@@ -3870,83 +3870,137 @@ class TemplateProcessor {
         }
     }
 
-    // W10: Textfarben nur in CSS-Klassen (unsichtbar in T-Online / GMX / Web.de)
-    // T-Online und ähnliche Clients entfernen <style>-Blöcke → Textfarben die nur per CSS-Klasse
-    // gesetzt sind werden nicht angezeigt → weißer/heller Text auf dunklem Hintergrund unsichtbar
+    // W10: Textfarben die beim CSS-Stripping unsichtbar werden
+    // Erkennt zwei Muster:
+    // A) Textfarbe nur per CSS-Klasse gesetzt → T-Online/GMX entfernen <style>-Block → Text unsichtbar
+    // B) Dunkler Container (bgcolor) mit Textfarbe nur im style-Attribut des Containers →
+    //    Clients wie T-Online entfernen style-Attribut von Table-Elementen → Text erbt Schwarz →
+    //    unsichtbar auf dunklem Hintergrund
+    //    BONUS: Dunkler Container + dunkle Textfarbe (auch ohne CSS-Stripping unsichtbar)
     checkCssOnlyTextColors() {
         const id = 'W10_CSS_ONLY_TEXT_COLORS';
-
-        const styleBlock = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-        if (!styleBlock) {
-            this.addCheck(id, 'PASS', 'Keine CSS-Blöcke gefunden – alle Styles inline');
-            return;
-        }
-
-        const css = styleBlock[1];
-        // @media-Blöcke ignorieren (responsive CSS – gewollt)
-        const cssWithoutMedia = css.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
-
-        // CSS-Klassen mit Textfarbe (color:) finden – nicht background-color
-        const colorClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]+)\}/gi;
-        const colorClasses = [];
-        let m;
-        while ((m = colorClassRegex.exec(cssWithoutMedia)) !== null) {
-            const rules = m[2];
-            // Prüfe ob es ein 'color:' gibt (nicht 'background-color:')
-            const hasTextColor = /(?:^|;|\s)color\s*:/i.test(rules);
-            if (hasTextColor) {
-                // Extrahiere den Farbwert
-                const colorVal = (rules.match(/(?:^|;|\s)color\s*:\s*([^;]+)/i) || [])[1];
-                if (colorVal) {
-                    colorClasses.push({ className: m[1], colorVal: colorVal.trim() });
-                }
-            }
-        }
-
-        if (colorClasses.length === 0) {
-            this.addCheck(id, 'PASS', 'Keine CSS-Klassen mit Textfarben gefunden');
-            return;
-        }
 
         // HTML-Kommentare entfernen für Suche (nicht Conditional Comments)
         const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
 
-        // Prüfe für jede Klasse ob Elemente sie nutzen OHNE inline color
-        let problematicCount = 0;
-        const problematicClasses = [];
+        const issues = [];
 
-        for (const { className, colorVal } of colorClasses) {
-            const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const elRegex = new RegExp(
-                '<(?:p|span|td|div|h[1-6]|a)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escaped + '\\b[^"\']*["\'][^>]*>',
-                'gi'
-            );
-            let elMatch;
-            let foundWithoutInline = false;
-            while ((elMatch = elRegex.exec(htmlNoComments)) !== null) {
-                const tag = elMatch[0];
-                const style = (tag.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
-                // Wenn kein inline color: → Element ist gefährdet
-                if (!/(?:^|;|\s)color\s*:/i.test(style)) {
-                    foundWithoutInline = true;
-                    break;
+        // ── MUSTER A: Textfarbe nur in CSS-Klasse ──────────────────────────────
+        const styleBlock = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (styleBlock) {
+            const css = styleBlock[1];
+            const cssWithoutMedia = css.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
+
+            const colorClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]+)\}/gi;
+            let m;
+            while ((m = colorClassRegex.exec(cssWithoutMedia)) !== null) {
+                const rules = m[2];
+                if (!/(?:^|;|\s)color\s*:/i.test(rules)) continue;
+                const colorVal = (rules.match(/(?:^|;|\s)color\s*:\s*([^;]+)/i) || [])[1];
+                if (!colorVal) continue;
+                const className = m[1];
+
+                const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const elRegex = new RegExp(
+                    '<(?:p|span|td|div|h[1-6]|a)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escaped + '\\b[^"\']*["\'][^>]*>',
+                    'gi'
+                );
+                let elMatch;
+                while ((elMatch = elRegex.exec(htmlNoComments)) !== null) {
+                    const tag = elMatch[0];
+                    const style = (tag.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                    if (!/(?:^|;|\s)color\s*:/i.test(style)) {
+                        issues.push('CSS-Klasse .' + className + ' setzt Textfarbe (' + colorVal.trim() + ') – kein inline Fallback');
+                        break;
+                    }
                 }
-            }
-            if (foundWithoutInline) {
-                problematicCount++;
-                problematicClasses.push('.' + className + ' (' + colorVal + ')');
             }
         }
 
-        if (problematicCount > 0) {
-            const examples = problematicClasses.slice(0, 3).join(', ');
-            const more = problematicClasses.length > 3 ? ' +' + (problematicClasses.length - 3) + ' weitere' : '';
+        // ── MUSTER B: Dunkler Container mit Textfarbe nur im style-Attribut ───
+        // Hilfsfunktion: Hex-Farbe → relative Luminanz (0=schwarz, 1=weiß)
+        function hexLuminance(hex) {
+            const h = hex.replace('#', '');
+            if (h.length !== 3 && h.length !== 6) return 0.5; // unbekannt → neutral
+            const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+            const [r, g, b] = [0, 2, 4].map(i => {
+                const c = parseInt(full.substring(i, i + 2), 16) / 255;
+                return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        }
+
+        // Finde alle <table> und <td> mit dunklem bgcolor + color im style-Attribut
+        const containerRegex = /<(?:table|td)\b([^>]*)>/gi;
+        let contMatch;
+        while ((contMatch = containerRegex.exec(htmlNoComments)) !== null) {
+            const attrs = contMatch[1];
+
+            // bgcolor-Attribut extrahieren
+            const bgcolorMatch = attrs.match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,6})\s*["']?/i);
+            if (!bgcolorMatch) continue;
+            let bgHex = bgcolorMatch[1];
+            if (!bgHex.startsWith('#')) bgHex = '#' + bgHex;
+
+            // Nur dunkle Hintergründe prüfen (Luminanz < 0.18 ≈ dunkler als #444)
+            if (hexLuminance(bgHex) >= 0.18) continue;
+
+            // Hat dieses Element eine Textfarbe im style-Attribut?
+            const styleAttr = (attrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            const colorInStyle = styleAttr.match(/(?:^|;)\s*color\s*:\s*(#?[a-fA-F0-9]{3,6}|[a-z]+)/i);
+            if (!colorInStyle) continue; // Kein color im style → anderes Problem, hier ignorieren
+
+            const textColorVal = colorInStyle[1].trim();
+            const textColorHex = textColorVal.startsWith('#') ? textColorVal : null;
+
+            // FALL 1: Textfarbe ist selbst dunkel → Text schon jetzt unsichtbar (Template-Fehler)
+            if (textColorHex && hexLuminance(textColorHex) < 0.18) {
+                const contrast = (Math.max(hexLuminance(bgHex), hexLuminance(textColorHex)) + 0.05) /
+                                 (Math.min(hexLuminance(bgHex), hexLuminance(textColorHex)) + 0.05);
+                if (contrast < 3) {
+                    issues.push(
+                        'Container bgcolor=' + bgHex + ' mit color:' + textColorVal + ' (Kontrast nur ' +
+                        contrast.toFixed(1) + ':1) – Text ist bereits jetzt kaum sichtbar'
+                    );
+                }
+                continue;
+            }
+
+            // FALL 2: Textfarbe ist hell (korrekt) – aber nur im style-Attribut des Containers
+            // T-Online/GMX entfernen style von Table-Elementen → Text erbt Schwarz → unsichtbar
+            // Prüfe ob direkte Kind-Text-Elemente KEINE eigene inline color haben
+            const contStart = contMatch.index + contMatch[0].length;
+            // Suche die nächsten 3000 Zeichen auf Text-Elemente ohne inline color
+            const innerHtml = htmlNoComments.substring(contStart, contStart + 3000);
+            const textElRegex = /<(?:p|span|td|h[1-6])\b([^>]*)>/gi;
+            let textEl;
+            let foundUnsafeChild = false;
+            while ((textEl = textElRegex.exec(innerHtml)) !== null) {
+                const elStyle = (textEl[1].match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                if (!/(?:^|;)\s*color\s*:/i.test(elStyle)) {
+                    foundUnsafeChild = true;
+                    break;
+                }
+            }
+            if (foundUnsafeChild) {
+                issues.push(
+                    'Container bgcolor=' + bgHex + ' hat Textfarbe nur im style-Attribut (color:' + textColorVal + '). ' +
+                    'T-Online/GMX entfernen Table-Styles → Kind-Elemente erben Browser-Schwarz → unsichtbar'
+                );
+            }
+        }
+
+        // ── Ergebnis ────────────────────────────────────────────────────────────
+        if (issues.length > 0) {
+            const unique = [...new Set(issues)];
+            const examples = unique.slice(0, 2).join(' | ');
+            const more = unique.length > 2 ? ' (+' + (unique.length - 2) + ' weitere)' : '';
             this.addCheck(id, 'WARN',
-                '⚠️ Textfarben nur per CSS-Klasse: ' + problematicCount + ' Klasse(n) setzen Textfarbe nur über CSS (' + examples + more + '). ' +
-                'T-Online, GMX und Web.de entfernen <style>-Blöcke → Text kann unsichtbar werden (z.B. weiße Schrift auf dunklem Hintergrund).'
+                '⚠️ Textfarben-Risiko (' + unique.length + ' Problem(e)): ' + examples + more + '. ' +
+                'Betroffene Texte können in T-Online, GMX, Web.de unsichtbar werden.'
             );
         } else {
-            this.addCheck(id, 'PASS', 'Alle Textfarben aus CSS-Klassen sind auch inline gesetzt oder unkritisch');
+            this.addCheck(id, 'PASS', 'Keine kritischen Textfarben-Probleme gefunden');
         }
     }
 
@@ -4141,7 +4195,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.0-2026-03-05';
+const APP_VERSION = 'v3.9.1-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -15823,44 +15877,85 @@ td[width] { width: auto !important; }
         var container = document.getElementById('eoa-text-btns-' + clientId);
         if (!container || !currentWorkingHtml) return;
 
-        // CSS-Klassen mit Textfarbe parsen
-        var styleBlock = currentWorkingHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-        if (!styleBlock) {
-            container.innerHTML = '<span class="eoa-fix-none">✅ Keine CSS-Blöcke gefunden – alle Styles inline</span>';
-            return;
-        }
+        var html = '<div class="eoa-fix-item-list">';
+        var found = 0;
 
-        var css = styleBlock[1];
-        var cssWithoutMedia = css.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
-        var colorClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]+)\}/gi;
-        var colorClasses = [];
-        var m;
-        while ((m = colorClassRegex.exec(cssWithoutMedia)) !== null) {
-            var rules = m[2];
-            var hasTextColor = /(?:^|;|\s)color\s*:/i.test(rules);
-            if (hasTextColor) {
+        // ── Muster A: CSS-Klassen mit Textfarbe ohne inline Fallback ──
+        var styleBlock = currentWorkingHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (styleBlock) {
+            var css = styleBlock[1].replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
+            var colorClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]+)\}/gi;
+            var m;
+            while ((m = colorClassRegex.exec(css)) !== null) {
+                var rules = m[2];
+                if (!/(?:^|;|\s)color\s*:/i.test(rules)) continue;
                 var colorMatch = rules.match(/(?:^|;|\s)color\s*:\s*([^;]+)/i);
-                if (colorMatch) {
-                    colorClasses.push({ className: m[1], colorVal: colorMatch[1].trim() });
-                }
+                if (!colorMatch) continue;
+                html += '<div class="eoa-fix-item">' +
+                    '<span class="eoa-fix-item-label"><code>.' + escapeHtml(m[1]) + '</code> → ' + escapeHtml(colorMatch[1].trim()) + '</span>' +
+                    '<button class="eoa-fix-item-btn" ' +
+                    'data-class-name="' + escapeHtml(m[1]) + '" ' +
+                    'data-color-val="' + escapeHtml(colorMatch[1].trim()) + '" ' +
+                    'onclick="eoaApplyTextColorFix(this)">🔧 inline einfügen</button>' +
+                    '</div>';
+                found++;
             }
         }
 
-        if (colorClasses.length === 0) {
+        // ── Muster B: Dunkle Container mit Textfarbe nur im style-Attribut ──
+        function hexLum(hex) {
+            var h = hex.replace('#', '');
+            if (h.length === 3) h = h.split('').map(function(c) { return c+c; }).join('');
+            if (h.length !== 6) return 0.5;
+            var vals = [0, 2, 4].map(function(i) {
+                var c = parseInt(h.substring(i, i+2), 16) / 255;
+                return c <= 0.04045 ? c / 12.92 : Math.pow((c+0.055)/1.055, 2.4);
+            });
+            return 0.2126*vals[0] + 0.7152*vals[1] + 0.0722*vals[2];
+        }
+
+        var htmlNoCom = currentWorkingHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        var contReg = /<(?:table|td)\b([^>]*)>/gi;
+        var contMatch;
+        var seenContainers = [];
+        while ((contMatch = contReg.exec(htmlNoCom)) !== null) {
+            var attrs = contMatch[1];
+            var bgM = attrs.match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,6})\s*["']?/i);
+            if (!bgM) continue;
+            var bgHex = bgM[1].startsWith('#') ? bgM[1] : '#' + bgM[1];
+            if (hexLum(bgHex) >= 0.18) continue;
+            var styleAttr = (attrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            var colM = styleAttr.match(/(?:^|;)\s*color\s*:\s*(#?[a-fA-F0-9]{3,6}|[a-z]+)/i);
+            if (!colM) continue;
+            var textCol = colM[1].trim();
+            var key = bgHex.toLowerCase() + '|' + textCol.toLowerCase();
+            if (seenContainers.indexOf(key) !== -1) continue;
+            seenContainers.push(key);
+
+            // Ist die Textfarbe selbst dunkel? → Template-Fehler
+            var textHex = textCol.startsWith('#') ? textCol : null;
+            var isDarkOnDark = textHex && hexLum(textHex) < 0.18;
+
+            html += '<div class="eoa-fix-item">' +
+                '<span class="eoa-fix-item-label">' +
+                (isDarkOnDark
+                    ? '⚠️ Dunkler Text (' + escapeHtml(textCol) + ') auf dunklem Hintergrund (' + escapeHtml(bgHex) + ') – Template-Fehler'
+                    : '⚠️ Container bgcolor=' + escapeHtml(bgHex) + ' – Textfarbe ' + escapeHtml(textCol) + ' nur im style-Attribut (T-Online entfernt das)'
+                ) +
+                '</span>' +
+                '<button class="eoa-fix-item-btn" ' +
+                'data-fix-type="container-color" ' +
+                'data-bg-hex="' + escapeHtml(bgHex) + '" ' +
+                'data-text-color="' + escapeHtml(textCol) + '" ' +
+                'onclick="eoaApplyContainerColorFix(this)">🔧 Farbe auf Kind-Elemente anwenden</button>' +
+                '</div>';
+            found++;
+        }
+
+        if (found === 0) {
             container.innerHTML = '<span class="eoa-fix-none">✅ Keine CSS-Textfarben-Probleme erkannt</span>';
             return;
         }
-
-        var html = '<div class="eoa-fix-item-list">';
-        colorClasses.forEach(function(cls) {
-            html += '<div class="eoa-fix-item">' +
-                '<span class="eoa-fix-item-label"><code>.' + escapeHtml(cls.className) + '</code> → <span style="background:#eee;padding:1px 6px;border-radius:3px;">' + escapeHtml(cls.colorVal) + '</span></span>' +
-                '<button class="eoa-fix-item-btn" ' +
-                'data-class-name="' + escapeHtml(cls.className) + '" ' +
-                'data-color-val="' + escapeHtml(cls.colorVal) + '" ' +
-                'onclick="eoaApplyTextColorFix(this)">🔧 Farbe inline einfügen</button>' +
-                '</div>';
-        });
         html += '</div>';
         container.innerHTML = html;
     }
@@ -15973,10 +16068,84 @@ td[width] { width: auto !important; }
         showInspectorToast('✅ bgcolor="' + bgHex + '" eingefügt');
     }
 
+    // Container-Farb-Fix: Textfarbe vom Container auf alle direkten Kind-Textelemente anwenden
+    function eoaApplyContainerColorFix(btn) {
+        var bgHex = btn.getAttribute('data-bg-hex');
+        var textColor = btn.getAttribute('data-text-color');
+        if (!bgHex || !textColor || !currentWorkingHtml) return;
+
+        var bgNorm = bgHex.toLowerCase().replace('#', '');
+        var html = currentWorkingHtml;
+        var fixCount = 0;
+
+        // Finde alle Container mit diesem bgcolor
+        var bgVariants = [
+            'bgcolor="' + bgHex + '"',
+            'bgcolor="' + bgHex.toUpperCase() + '"',
+            'bgcolor="#' + bgNorm + '"',
+            'bgcolor="#' + bgNorm.toUpperCase() + '"'
+        ];
+
+        // Für jeden Container: finde den Bereich und setze color inline auf p, span, td, h1-h6
+        var contReg = new RegExp('<(?:table|td)\\b([^>]*)>', 'gi');
+        var contMatch;
+        var segments = [];
+
+        while ((contMatch = contReg.exec(html)) !== null) {
+            var attrs = contMatch[1];
+            var bgM = attrs.match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,6})\s*["']?/i);
+            if (!bgM) continue;
+            var bg = bgM[1].startsWith('#') ? bgM[1] : '#' + bgM[1];
+            if (bg.toLowerCase() !== bgHex.toLowerCase()) continue;
+            var styleAttr = (attrs.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+            if (!/(?:^|;)\s*color\s*:/i.test(styleAttr)) continue;
+
+            // Merke den Bereich ab dem Container-Start
+            segments.push(contMatch.index);
+        }
+
+        if (segments.length === 0) {
+            showInspectorToast('⚠️ Container nicht im aktuellen HTML gefunden');
+            return;
+        }
+
+        // Bearbeite HTML: setze color inline auf Text-Kindelemente ohne eigene Farbe
+        var escapedColor = textColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        html = html.replace(
+            /(<(?:p|span|h[1-6])\b[^>]*)(style\s*=\s*["'])([^"']*["'])/gi,
+            function(match, before, styleAttr2, styleValue) {
+                if (/(?:^|;)\s*color\s*:/i.test(styleValue)) return match;
+                var quoteChar = styleValue.charAt(styleValue.length - 1);
+                var content = styleValue.slice(0, -1);
+                fixCount++;
+                return before + styleAttr2 + 'color:' + textColor + '; ' + content + quoteChar;
+            }
+        );
+        // Elemente ohne style-Attribut
+        html = html.replace(
+            /(<(?:p|span|h[1-6])\b)(?![^>]*style\s*=)([^>]*>)/gi,
+            function(match, tag, rest) {
+                fixCount++;
+                return tag + ' style="color:' + textColor + ';"' + rest;
+            }
+        );
+
+        if (fixCount > 0) {
+            currentWorkingHtml = html;
+            updateInspectorPreview(html);
+            btn.textContent = '✅ ' + fixCount + '× inline gesetzt';
+            btn.disabled = true;
+            showInspectorToast('✅ Textfarbe ' + textColor + ' → ' + fixCount + '× inline auf Kind-Elemente angewendet');
+        } else {
+            showInspectorToast('ℹ️ Alle Textelemente haben bereits eine inline Farbe');
+            btn.textContent = '✅ Bereits inline';
+            btn.disabled = true;
+        }
+    }
+
     // ===== ENDE EOA FIX-PANEL FUNKTIONEN =====
 
     function eoaSelectAll() {
-        if (!eoaAvailableClients) return;
         eoaExplicitNone = false;
         var result = findMatchingEoaClients(eoaAvailableClients);
         eoaSelectedClients = result.matched.map(function(c) { return c.id; });
@@ -16296,6 +16465,7 @@ td[width] { width: auto !important; }
     window.eoaApplyTextColorFix = eoaApplyTextColorFix;
     window.eoaLoadOutlookFixes = eoaLoadOutlookFixes;
     window.eoaApplyOutlookBgcolorFix = eoaApplyOutlookBgcolorFix;
+    window.eoaApplyContainerColorFix = eoaApplyContainerColorFix;
 });
 
 
