@@ -2813,18 +2813,24 @@ class TemplateProcessor {
     // background-color und color:#fff verschwinden → Button unsichtbar
     // Fix: Button in <table bgcolor="..."> einwickeln statt bgcolor auf parent-TD
     // (bgcolor auf parent-TD würde das Padding der TD auch einfärben → Button zu groß)
+    // S16: Typ-A Buttons – bgcolor-Wrapper + Textfarbe als <font color> sichern
+    // T-Online/GMX entfernen das style-Attribut von <a>-Tags komplett →
+    // background-color UND color:#fff verschwinden → Button unsichtbar / schwarzer Text
+    // Fix 1: Button in <table bgcolor="..."> einwickeln → Hintergrundfarbe bleibt
+    // Fix 2: Buttontext in <font color="..."> einwickeln → Textfarbe bleibt
+    // Beide nutzen HTML-Attribute statt CSS → überleben T-Onlines Style-Stripping
     fixTypAButtonParentBgcolor() {
         const id = 'S16_TYPA_BUTTON_PARENT_BGCOLOR';
         let html = this.html;
         let fixCount = 0;
 
-        // Suche alle <a>-Tags mit inline background-color die wie ein Button aussehen
         const aRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
         let aMatch;
         const fixes = [];
 
         while ((aMatch = aRegex.exec(html)) !== null) {
             const attrs = aMatch[1];
+            const innerHtml = aMatch[2];
 
             // Hat background-color im style?
             const styleM = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
@@ -2834,34 +2840,43 @@ class TemplateProcessor {
             if (!bgColorM) continue;
             const btnBgColor = bgColorM[1];
 
-            // Nur echte Button-Links: display:inline-block oder weiße Textfarbe
+            // Nur echte Button-Links: display:inline-block oder helle Textfarbe
             const hasDisplayBlock = /display\s*:\s*inline-block/i.test(styleVal);
             const hasWhiteText = /(?:^|;)\s*color\s*:\s*#(?:fff|ffffff)/i.test(styleVal);
             if (!hasDisplayBlock && !hasWhiteText) continue;
 
-            // Liegt dieses <a> innerhalb eines <!--[if !mso]> --> Blocks?
+            // Textfarbe aus style extrahieren (Fallback: #ffffff)
+            const textColorM = styleVal.match(/(?:^|;)\s*color\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+            const btnTextColor = textColorM ? textColorM[1] : '#ffffff';
+
+            // Nur Button-Links (in !mso-Block oder class="button")
             const priorHtml = html.substring(Math.max(0, aMatch.index - 1000), aMatch.index);
             const isInNotMso = /<!--\[if\s*!mso\]>/i.test(priorHtml);
             const hasButtonClass = /class\s*=\s*["'][^"']*button[^"']*["']/i.test(attrs);
             if (!isInNotMso && !hasButtonClass) continue;
 
-            // Schon in einem bgcolor-Wrapper? Dann überspringen.
+            // Schon in einem bgcolor-Wrapper? → überspringen
             const surroundCheck = html.substring(Math.max(0, aMatch.index - 200), aMatch.index);
             if (/bgcolor\s*=\s*["']#?[a-fA-F0-9]/i.test(surroundCheck)) continue;
 
-            // Ersetze: <a ...>TEXT</a> → <table bgcolor="X"><tr><td align="center"><a ...>TEXT</a></td></tr></table>
-            const originalFull = aMatch[0];
+            // Fix 1: Buttontext in <font color> einwickeln (falls noch kein font-Tag)
+            let newInner = innerHtml;
+            if (!/<font\b/i.test(innerHtml)) {
+                newInner = '<font color="' + btnTextColor + '">' + innerHtml.trim() + '</font>';
+            }
+
+            // Neues <a> mit angepasstem Inhalt
+            const newATag = '<a' + attrs + '>' + newInner + '</a>';
+
+            // Fix 2: In bgcolor-Tabelle einwickeln
             const borderRadius = (styleVal.match(/border-radius\s*:\s*([^;]+)/i) || [])[1] || '0';
             const wrappedBtn =
                 '<table cellpadding="0" cellspacing="0" border="0" align="center" bgcolor="' + btnBgColor + '"' +
                 (borderRadius && borderRadius.trim() !== '0' && borderRadius.trim() !== '0px'
-                    ? ' style="border-radius:' + borderRadius.trim() + '"'
-                    : '') +
-                '><tr><td align="center">' +
-                originalFull +
-                '</td></tr></table>';
+                    ? ' style="border-radius:' + borderRadius.trim() + '"' : '') +
+                '><tr><td align="center">' + newATag + '</td></tr></table>';
 
-            fixes.push({ pos: aMatch.index, oldLen: originalFull.length, newTag: wrappedBtn });
+            fixes.push({ pos: aMatch.index, oldLen: aMatch[0].length, newTag: wrappedBtn });
         }
 
         // Rückwärts anwenden
@@ -2875,10 +2890,10 @@ class TemplateProcessor {
 
         if (fixCount > 0) {
             this.addCheck(id, 'FIXED',
-                fixCount + '× Typ-A Button in bgcolor-Tabelle eingebettet – verhindert unsichtbaren Button in T-Online/GMX (style-Attribut von <a>-Tags wird dort entfernt)'
+                fixCount + '\u00d7 Typ-A Button: bgcolor-Wrapper + <font color> gesetzt \u2013 verhindert unsichtbaren Button und schwarzen Text in T-Online/GMX'
             );
         } else {
-            this.addCheck(id, 'PASS', 'Alle Typ-A Buttons sind T-Online-kompatibel oder benötigen keinen bgcolor-Wrapper');
+            this.addCheck(id, 'PASS', 'Alle Typ-A Buttons sind T-Online-kompatibel oder ben\u00f6tigen keinen Fix');
         }
     }
 
@@ -4444,7 +4459,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.7-2026-03-05';
+const APP_VERSION = 'v3.9.8-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
