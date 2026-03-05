@@ -2825,111 +2825,99 @@ class TemplateProcessor {
     // Fix 1: bgcolor-Attribut auf die unmittelbare parent-<td> → Hintergrund bleibt
     //         Dabei padding-bottom auf 0 setzen (sonst färbt sich der Abstand auch ein)
     // Fix 2: Buttontext in <font color="..."> → Textfarbe bleibt ohne CSS
+    // S16: Typ-A Buttons in T-Online-kompatible Tabellen-Buttons umwandeln
+    // Problem: T-Online entfernt style von <a>-Tags → background-color + color weg → Button unsichtbar
+    // Lösung: Den <a>-Button innerhalb des <!--[if !mso]> Blocks durch eine <table>-Struktur
+    //         mit bgcolor auf <td> ersetzen (HTML-Attribut, nicht CSS → überlebt T-Online)
+    //         Der Text wird zusätzlich in <font color> eingebettet.
     fixTypAButtonParentBgcolor() {
         const id = 'S16_TYPA_BUTTON_PARENT_BGCOLOR';
         let html = this.html;
         let fixCount = 0;
 
-        // Alle <a>-Tags mit background-color im style finden
-        const aRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
-        let aMatch;
+        // Suche den <!--[if !mso]> --> Block der einen Typ-A Button enthält
+        // Muster: <!--[if !mso]> --> ... <a ...background-color...>TEXT</a> ... <!--<![endif]-->
+        const blockRegex = /<!--\[if\s*!mso\]>\s*-->\s*([\s\S]*?)\s*<!--<!\[endif\]-->/gi;
+        let blockMatch;
         const fixes = [];
 
-        while ((aMatch = aRegex.exec(html)) !== null) {
-            const attrs = aMatch[1];
-            const innerHtml = aMatch[2];
+        while ((blockMatch = blockRegex.exec(html)) !== null) {
+            const blockContent = blockMatch[1];
 
-            // Hat background-color im style?
-            const styleM = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
+            // Enthält der Block einen <a>-Button mit background-color?
+            const aMatch = blockContent.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
+            if (!aMatch) continue;
+            const aAttrs = aMatch[1];
+            const aInner = aMatch[2].trim();
+
+            const styleM = aAttrs.match(/style\s*=\s*["']([^"']*)["']/i);
             if (!styleM) continue;
             const styleVal = styleM[1];
+
             const bgColorM = styleVal.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
             if (!bgColorM) continue;
             const btnBgColor = bgColorM[1];
 
-            // Nur echte Button-Links
-            const hasDisplayBlock = /display\s*:\s*inline-block/i.test(styleVal);
-            const hasLightText = /(?:^|;)\s*color\s*:\s*#(?:[a-fA-F0-9]{6}|[a-fA-F0-9]{3})/i.test(styleVal);
-            if (!hasDisplayBlock && !hasLightText) continue;
+            // Nur echte Buttons (display:inline-block)
+            if (!/display\s*:\s*inline-block/i.test(styleVal)) continue;
 
-            // Textfarbe extrahieren (Fallback: #ffffff)
+            // Textfarbe aus style (Fallback #ffffff)
             const textColorM = styleVal.match(/(?:^|;)\s*color\s*:\s*(#[a-fA-F0-9]{3,6})/i);
             const btnTextColor = textColorM ? textColorM[1] : '#ffffff';
 
-            // Nur in !mso-Block oder class="button"
-            const priorHtml = html.substring(Math.max(0, aMatch.index - 1500), aMatch.index);
-            const isInNotMso = /<!--\[if\s*!mso\]>/i.test(priorHtml);
-            const hasButtonClass = /class\s*=\s*["'][^"']*button[^"']*["']/i.test(attrs);
-            if (!isInNotMso && !hasButtonClass) continue;
+            // Padding/Höhe aus style ableiten
+            const lineHeightM = styleVal.match(/line-height\s*:\s*(\d+)px/i);
+            const btnHeight = lineHeightM ? parseInt(lineHeightM[1]) : 44;
+            const padV = Math.max(8, Math.round((btnHeight - 20) / 2));
 
-            // Finde die unmittelbare parent-<td>:
-            // Suche rückwärts alle <td> und </td>, ermittle offene TDs (stack)
-            const searchArea = html.substring(Math.max(0, aMatch.index - 3000), aMatch.index);
-            const tagMatches = [...searchArea.matchAll(/<(\/?)td\b([^>]*)>/gi)];
-            let openTds = []; // Stack offener TDs mit ihrer Position
-            let stackDepth = 0;
-            for (const t of tagMatches) {
-                if (t[1] === '/') {
-                    // schließendes </td>
-                    if (openTds.length > 0) openTds.pop();
-                } else {
-                    // öffnendes <td>
-                    const absPos = Math.max(0, aMatch.index - 3000) + t.index;
-                    openTds.push({ tag: t[0], attrs: t[2], absPos });
-                }
-            }
+            // Font-Eigenschaften aus style extrahieren
+            const fontFamilyM = styleVal.match(/font-family\s*:\s*([^;]+)/i);
+            const fontFamily = fontFamilyM ? fontFamilyM[1].trim() : 'sans-serif, Helvetica';
+            const fontSizeM = styleVal.match(/font-size\s*:\s*(\d+)px/i);
+            const fontSize = fontSizeM ? fontSizeM[1] : '14';
 
-            if (openTds.length === 0) continue;
-            // Oberster Stack-Eintrag = unmittelbarer parent
-            const parentTd = openTds[openTds.length - 1];
+            // href aus dem <a>-Tag extrahieren
+            const hrefM = aAttrs.match(/href\s*=\s*["']([^"']*)["']/i);
+            const href = hrefM ? hrefM[1] : '#';
+            const targetM = aAttrs.match(/target\s*=\s*["']([^"']*)["']/i);
+            const target = targetM ? ' target="' + targetM[1] + '"' : '';
 
-            // Hat parent-TD bereits bgcolor? → überspringen
-            if (/bgcolor\s*=/i.test(parentTd.attrs)) continue;
+            // Breite aus style (Fallback 200px)
+            const widthM = styleVal.match(/width\s*:\s*(\d+)px/i);
+            const btnWidth = widthM ? parseInt(widthM[1]) : 200;
 
-            // Neues parent-TD Tag: bgcolor hinzufügen + padding-bottom auf 0
-            let newTdTag = parentTd.tag.replace(/^<td\b/i, '<td bgcolor="' + btnBgColor + '"');
-            // padding-bottom: NNpx → 0px (verhindert blauen Abstand unter Button)
-            newTdTag = newTdTag.replace(/padding-bottom\s*:\s*\d+px/i, 'padding-bottom: 0px');
-            // padding shorthand: top right bottom left → bottom auf 0px setzen
-            newTdTag = newTdTag.replace(
-                /\bpadding\s*:\s*(\d+px)\s+(\d+px)\s+(\d+px)/gi,
-                'padding: $1 $2 0px'
-            );
+            // Neuer table-basierter Button (T-Online-kompatibel)
+            const newButton =
+                '<table cellpadding="0" cellspacing="0" border="0" align="center" width="' + btnWidth + '">' +
+                '<tr><td bgcolor="' + btnBgColor + '" align="center" ' +
+                'style="padding: ' + padV + 'px 20px; font-family: ' + fontFamily + '; font-size: ' + fontSize + 'px;">' +
+                '<a href="' + href + '"' + target + ' ' +
+                'style="color: ' + btnTextColor + '; text-decoration: none; font-family: ' + fontFamily + '; font-size: ' + fontSize + 'px; display: block;">' +
+                '<font color="' + btnTextColor + '">' + aInner + '</font>' +
+                '</a>' +
+                '</td></tr></table>';
 
-            // Buttontext in <font color> einwickeln (falls noch kein font-Tag)
-            let newInner = innerHtml;
-            if (!/<font\b/i.test(innerHtml)) {
-                newInner = '<font color="' + btnTextColor + '">' + innerHtml.trim() + '</font>';
-            }
-            const newATag = '<a' + attrs + '>' + newInner + '</a>';
-
-            fixes.push(
-                { pos: parentTd.absPos, oldLen: parentTd.tag.length, newTag: newTdTag },
-                { pos: aMatch.index, oldLen: aMatch[0].length, newTag: newATag }
-            );
+            // Ersetze den kompletten Block
+            const oldBlock = blockMatch[0];
+            const newBlock = '<!--[if !mso]> -->\n' + newButton + '\n<!--<![endif]-->';
+            fixes.push({ pos: blockMatch.index, oldLen: oldBlock.length, newTag: newBlock });
         }
 
-        // Alle Fixes sortiert rückwärts anwenden
-        fixes.sort((a, b) => b.pos - a.pos);
-        const seen = new Set();
-        for (const f of fixes) {
-            const key = f.pos + '|' + f.oldLen;
-            if (seen.has(key)) continue;
-            seen.add(key);
+        // Rückwärts anwenden
+        for (let i = fixes.length - 1; i >= 0; i--) {
+            const f = fixes[i];
             html = html.substring(0, f.pos) + f.newTag + html.substring(f.pos + f.oldLen);
             fixCount++;
         }
-        // fixCount enthält TD + A fixes, teile durch 2 für echte Button-Anzahl
-        const btnCount = Math.round(fixCount / 2);
 
         this.html = html;
 
-        if (btnCount > 0) {
+        if (fixCount > 0) {
             this.addCheck(id, 'FIXED',
-                btnCount + '\u00d7 Typ-A Button: bgcolor auf parent-TD + <font color> gesetzt \u2013 Button bleibt sichtbar in T-Online/GMX'
+                fixCount + '\u00d7 Typ-A Button in T-Online-kompatiblen Tabellen-Button umgewandelt (bgcolor auf TD + <font color>)'
             );
         } else {
-            this.addCheck(id, 'PASS', 'Alle Typ-A Buttons sind T-Online-kompatibel oder ben\u00f6tigen keinen Fix');
+            this.addCheck(id, 'PASS', 'Alle Typ-A Buttons sind T-Online-kompatibel oder kein Handlungsbedarf');
         }
     }
 
@@ -4495,7 +4483,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.9-2026-03-05';
+const APP_VERSION = 'v3.9.10-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
