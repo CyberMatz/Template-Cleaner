@@ -4374,7 +4374,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.2-2026-03-05';
+const APP_VERSION = 'v3.9.3-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -16049,6 +16049,8 @@ td[width] { width: auto !important; }
         handleGmailFix(btnId, bgColor, cssClass, btn);
         btn.textContent = '✅ Fix angewendet';
         btn.disabled = true;
+        var card = btn.closest('[data-client-id]');
+        if (card) showEoaFixHint(card.getAttribute('data-client-id'));
     }
 
     // T-Online/GMX Textfarben-Fixes laden
@@ -16179,6 +16181,8 @@ td[width] { width: auto !important; }
             btn.textContent = '✅ ' + fixCount + '× inline gesetzt';
             btn.disabled = true;
             showInspectorToast('✅ Textfarbe .' + className + ' → ' + fixCount + '× inline eingefügt');
+            var card = btn.closest('[data-client-id]');
+            if (card) showEoaFixHint(card.getAttribute('data-client-id'));
         } else {
             showInspectorToast('ℹ️ Alle Elemente mit .' + className + ' haben bereits inline color');
         }
@@ -16245,6 +16249,8 @@ td[width] { width: auto !important; }
         btn.textContent = '✅ bgcolor eingefügt';
         btn.disabled = true;
         showInspectorToast('✅ bgcolor="' + bgHex + '" eingefügt');
+        var card = btn.closest('[data-client-id]');
+        if (card) showEoaFixHint(card.getAttribute('data-client-id'));
     }
 
     // Container-Farb-Fix: Textfarbe vom Container auf alle direkten Kind-Textelemente anwenden
@@ -16315,11 +16321,31 @@ td[width] { width: auto !important; }
             btn.textContent = '✅ ' + fixCount + '× inline gesetzt';
             btn.disabled = true;
             showInspectorToast('✅ Textfarbe ' + textColor + ' → ' + fixCount + '× inline auf Kind-Elemente angewendet');
+            var card = btn.closest('[data-client-id]');
+            if (card) showEoaFixHint(card.getAttribute('data-client-id'));
         } else {
             showInspectorToast('ℹ️ Alle Textelemente haben bereits eine inline Farbe');
             btn.textContent = '✅ Bereits inline';
             btn.disabled = true;
         }
+    }
+
+    // Zeigt einen Hinweis nach einem EOA-Fix: Fix ist gespeichert, EoA kann neu gestartet werden
+    function showEoaFixHint(clientId) {
+        var optsEl = document.getElementById('eoa-fix-opts-' + clientId);
+        if (!optsEl) return;
+        // Nur einmal einfügen
+        if (optsEl.querySelector('.eoa-fix-rerun-hint')) return;
+        var hint = document.createElement('div');
+        hint.className = 'eoa-fix-rerun-hint';
+        hint.innerHTML =
+            '<div class="eoa-fix-rerun-icon">✅</div>' +
+            '<div class="eoa-fix-rerun-text">' +
+                '<strong>Fix wurde gespeichert.</strong> Der nächste EoA-Test verwendet automatisch ' +
+                'das korrigierte HTML – deine Änderung geht nicht verloren.' +
+            '</div>' +
+            '<button class="eoa-fix-rerun-btn" onclick="startEoaTest()">🧪 Vorschau neu laden</button>';
+        optsEl.insertBefore(hint, optsEl.firstChild);
     }
 
     // ===== ENDE EOA FIX-PANEL FUNKTIONEN =====
