@@ -2808,19 +2808,18 @@ class TemplateProcessor {
         }
     }
 
-    // S16: Typ-A Buttons – bgcolor auf parent-TD setzen
-    // T-Online/GMX entfernen das style-Attribut von <a>-Tags komplett.
-    // Ein <a>-Button mit background-color:#X + color:#ffffff im style wird dadurch unsichtbar:
-    // Hintergrund weg + Textfarbe weg = weißer Text auf weißem Hintergrund.
-    // Fix: bgcolor="[Button-Farbe]" auf die unmittelbare parent-<td> schreiben.
-    // Das bgcolor-Attribut wird von keinem Client entfernt → Button bleibt farbig sichtbar.
+    // S16: Typ-A Buttons – bgcolor-Wrapper um den Button setzen
+    // T-Online/GMX entfernen das style-Attribut von <a>-Tags komplett →
+    // background-color und color:#fff verschwinden → Button unsichtbar
+    // Fix: Button in <table bgcolor="..."> einwickeln statt bgcolor auf parent-TD
+    // (bgcolor auf parent-TD würde das Padding der TD auch einfärben → Button zu groß)
     fixTypAButtonParentBgcolor() {
         const id = 'S16_TYPA_BUTTON_PARENT_BGCOLOR';
         let html = this.html;
         let fixCount = 0;
 
-        // Suche alle <a>-Tags mit inline background-color
-        const aRegex = /<a\b([^>]*)>/gi;
+        // Suche alle <a>-Tags mit inline background-color die wie ein Button aussehen
+        const aRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
         let aMatch;
         const fixes = [];
 
@@ -2831,52 +2830,43 @@ class TemplateProcessor {
             const styleM = attrs.match(/style\s*=\s*["']([^"']*)["']/i);
             if (!styleM) continue;
             const styleVal = styleM[1];
-            const bgColorM = styleVal.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6}|[a-z]+)/i);
+            const bgColorM = styleVal.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
             if (!bgColorM) continue;
             const btnBgColor = bgColorM[1];
 
-            // Hat display:inline-block oder ist es ein Button-Link?
-            // Mindestkriterium: background-color + entweder color:# oder display:inline-block
+            // Nur echte Button-Links: display:inline-block oder weiße Textfarbe
             const hasDisplayBlock = /display\s*:\s*inline-block/i.test(styleVal);
             const hasWhiteText = /(?:^|;)\s*color\s*:\s*#(?:fff|ffffff)/i.test(styleVal);
             if (!hasDisplayBlock && !hasWhiteText) continue;
 
             // Liegt dieses <a> innerhalb eines <!--[if !mso]> --> Blocks?
-            // (Vermeidet dass reguläre Links als Buttons behandelt werden)
-            const priorHtml = html.substring(Math.max(0, aMatch.index - 500), aMatch.index);
+            const priorHtml = html.substring(Math.max(0, aMatch.index - 1000), aMatch.index);
             const isInNotMso = /<!--\[if\s*!mso\]>/i.test(priorHtml);
-            // Alternativ: hat es class="button" oder ähnliche Button-Merkmale?
             const hasButtonClass = /class\s*=\s*["'][^"']*button[^"']*["']/i.test(attrs);
             if (!isInNotMso && !hasButtonClass) continue;
 
-            // Finde die unmittelbare parent-<td> – Suchbereich 3000 Zeichen wegen langer href-URLs
-            const priorFor = html.substring(Math.max(0, aMatch.index - 3000), aMatch.index);
-            const allTds = [...priorFor.matchAll(/<td\b([^>]*)>/gi)];
-            if (allTds.length === 0) continue;
+            // Schon in einem bgcolor-Wrapper? Dann überspringen.
+            const surroundCheck = html.substring(Math.max(0, aMatch.index - 200), aMatch.index);
+            if (/bgcolor\s*=\s*["']#?[a-fA-F0-9]/i.test(surroundCheck)) continue;
 
-            // Nimm die letzte <td> vor dem Button
-            const lastTdMatch = allTds[allTds.length - 1];
-            const lastTdTag = lastTdMatch[0];
-            const lastTdAttrs = lastTdMatch[1];
+            // Ersetze: <a ...>TEXT</a> → <table bgcolor="X"><tr><td align="center"><a ...>TEXT</a></td></tr></table>
+            const originalFull = aMatch[0];
+            const borderRadius = (styleVal.match(/border-radius\s*:\s*([^;]+)/i) || [])[1] || '0';
+            const wrappedBtn =
+                '<table cellpadding="0" cellspacing="0" border="0" align="center" bgcolor="' + btnBgColor + '"' +
+                (borderRadius && borderRadius.trim() !== '0' && borderRadius.trim() !== '0px'
+                    ? ' style="border-radius:' + borderRadius.trim() + '"'
+                    : '') +
+                '><tr><td align="center">' +
+                originalFull +
+                '</td></tr></table>';
 
-            // Hat diese TD bereits ein bgcolor-Attribut?
-            if (/bgcolor\s*=/i.test(lastTdAttrs)) continue;
-
-            // bgcolor setzen
-            const newTdTag = lastTdTag.replace(/^<td\b/i, '<td bgcolor="' + btnBgColor + '"');
-
-            // Absolute Position der TD im html berechnen
-            const tdAbsPos = Math.max(0, aMatch.index - 3000) + lastTdMatch.index;
-            fixes.push({ pos: tdAbsPos, oldLen: lastTdTag.length, newTag: newTdTag });
+            fixes.push({ pos: aMatch.index, oldLen: originalFull.length, newTag: wrappedBtn });
         }
 
         // Rückwärts anwenden
-        const seen = new Set();
         for (let i = fixes.length - 1; i >= 0; i--) {
             const f = fixes[i];
-            const key = f.pos + '|' + f.oldLen;
-            if (seen.has(key)) continue;
-            seen.add(key);
             html = html.substring(0, f.pos) + f.newTag + html.substring(f.pos + f.oldLen);
             fixCount++;
         }
@@ -2885,10 +2875,10 @@ class TemplateProcessor {
 
         if (fixCount > 0) {
             this.addCheck(id, 'FIXED',
-                fixCount + '× Typ-A Button: bgcolor auf parent-<td> gesetzt – verhindert unsichtbaren Button in T-Online/GMX (style-Attribut von <a>-Tags wird dort entfernt)'
+                fixCount + '× Typ-A Button in bgcolor-Tabelle eingebettet – verhindert unsichtbaren Button in T-Online/GMX (style-Attribut von <a>-Tags wird dort entfernt)'
             );
         } else {
-            this.addCheck(id, 'PASS', 'Alle Typ-A Buttons haben bereits bgcolor auf parent-<td> oder kein T-Online-Risiko');
+            this.addCheck(id, 'PASS', 'Alle Typ-A Buttons sind T-Online-kompatibel oder benötigen keinen bgcolor-Wrapper');
         }
     }
 
@@ -4454,7 +4444,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.6-2026-03-05';
+const APP_VERSION = 'v3.9.7-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
