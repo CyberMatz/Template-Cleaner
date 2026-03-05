@@ -163,6 +163,12 @@ class TemplateProcessor {
         // P13: Link-Text Validierung
         this.checkLinkText();
 
+        // S15: Textfarbe auf Kind-Elemente dunkler Container propagieren
+        // Dunkle Container mit style="color:X" aber Kinder ohne inline color → color inline setzen
+        // Verhindert unsichtbaren Text in T-Online/GMX (die table-styles entfernen)
+        // Korrigiert auch dunkle Textfarbe auf dunklem Hintergrund (Template-Fehler)
+        this.fixDarkContainerTextColors();
+
         // P14: CTA Button Fallback
         this.checkCTAButtonFallback();
 
@@ -2671,6 +2677,141 @@ class TemplateProcessor {
         }
     }
 
+    // S15: Textfarbe auf Kind-Elemente dunkler Container propagieren
+    // Problem A: Container hat bgcolor (dunkel) + style="color:#FFFFFF" → Kinder ohne inline color
+    //            → T-Online/GMX entfernen table-style → Kinder erben Schwarz → unsichtbar
+    //            Fix: color inline auf alle direkten Text-Kinder setzen
+    // Problem B: Container hat bgcolor (dunkel) + style="color:#333333" (auch dunkel) → Template-Fehler
+    //            Fix: color auf #ffffff korrigieren UND inline auf Kinder propagieren
+    fixDarkContainerTextColors() {
+        const id = 'S15_DARK_CONTAINER_TEXT';
+
+        // Hilfsfunktion: relative Luminanz
+        function hexLum(hex) {
+            const h = hex.replace('#', '').replace(/^([a-fA-F0-9])([a-fA-F0-9])([a-fA-F0-9])$/, '$1$1$2$2$3$3');
+            if (h.length !== 6) return 0.5;
+            const [r, g, b] = [0, 2, 4].map(i => {
+                const c = parseInt(h.substring(i, i+2), 16) / 255;
+                return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126*r + 0.7152*g + 0.0722*b;
+        }
+
+        // HTML-Kommentare temporär schützen (nicht Conditional Comments)
+        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '<<CC>>');
+        
+        let fixCount = 0;
+        let colorCorrections = 0;
+        let html = this.html;
+
+        // Finde alle table/td mit dunklem bgcolor und einer style-Textfarbe
+        const containerRegex = /(<(?:table|td)\b[^>]*bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,6})\s*["']?[^>]*>)/gi;
+        let contMatch;
+        const processed = new Set();
+
+        while ((contMatch = containerRegex.exec(htmlNoComments)) !== null) {
+            let bgHex = contMatch[2];
+            if (!bgHex.startsWith('#')) bgHex = '#' + bgHex;
+            
+            // Nur dunkle Hintergründe (Luminanz < 0.18)
+            if (hexLum(bgHex) >= 0.18) continue;
+
+            // Extrahiere style-Attribut des Containers
+            const contTag = contMatch[1];
+            const styleMatch = contTag.match(/style\s*=\s*["']([^"']*)["']/i);
+            if (!styleMatch) continue;
+            
+            const styleVal = styleMatch[1];
+            const colorInStyle = styleVal.match(/(?:^|;)\s*color\s*:\s*(#?[a-fA-F0-9]{3,6}|[a-z]+)/i);
+            if (!colorInStyle) continue;
+
+            let textColor = colorInStyle[1].trim();
+            const textHex = textColor.startsWith('#') ? textColor : null;
+
+            // Problem B: Textfarbe selbst dunkel auf dunklem Hintergrund → auf #ffffff korrigieren
+            if (textHex && hexLum(textHex) < 0.18) {
+                const contrast = (Math.max(hexLum(bgHex), hexLum(textHex)) + 0.05) /
+                                 (Math.min(hexLum(bgHex), hexLum(textHex)) + 0.05);
+                if (contrast < 3) {
+                    // Korrigiere die Farbe im Container-Tag selbst: #333333 → #ffffff
+                    const oldColorDecl = colorInStyle[0]; // z.B. "; color: #333333"
+                    const newColorDecl = oldColorDecl.replace(
+                        /color\s*:\s*#?[a-fA-F0-9]{3,6}/i,
+                        'color: #ffffff'
+                    );
+                    // Ersetze im echten HTML (nicht htmlNoComments)
+                    html = html.replace(contMatch[1], contMatch[1].replace(
+                        /style\s*=\s*["'][^"']*["']/i,
+                        styleMatch[0].replace(oldColorDecl, newColorDecl)
+                    ));
+                    textColor = '#ffffff';
+                    colorCorrections++;
+                }
+            }
+
+            // Schlüssel zur Deduplizierung (gleiche bg+color nicht doppelt verarbeiten)
+            const key = bgHex.toLowerCase() + '|' + textColor.toLowerCase();
+            if (processed.has(key)) continue;
+            processed.add(key);
+
+            // Nur helle Textfarben propagieren (wäre auf dunklem Hintergrund sichtbar)
+            const finalTextHex = textColor.startsWith('#') ? textColor : null;
+            if (finalTextHex && hexLum(finalTextHex) < 0.18) continue;
+
+            // Finde den Content-Bereich ab dem Container
+            const contStart = contMatch.index + contMatch[0].length;
+            const innerSection = htmlNoComments.substring(contStart, contStart + 8000);
+
+            // Suche alle h1-h6, p, span-Elemente OHNE inline color → color inline setzen
+            // Strategie: Regex auf tatsächlichem HTML ausführen, guided by positions
+            const childRegex = /(<(?:h[1-6]|p|span)\b([^>]*))>/gi;
+            let childMatch;
+            
+            while ((childMatch = childRegex.exec(innerSection)) !== null) {
+                const childAttrs = childMatch[2];
+                const childStyleMatch = childAttrs.match(/style\s*=\s*["']([^"']*)["']/i);
+                const childStyle = childStyleMatch ? childStyleMatch[1] : '';
+
+                // Bereits inline color? → überspringen
+                if (/(?:^|;)\s*color\s*:/i.test(childStyle)) continue;
+
+                const originalTag = childMatch[0]; // z.B. <h1 style="font-size:24px">
+                let newTag;
+
+                if (childStyleMatch) {
+                    // Hat style-Attribut aber kein color → color vorne einfügen
+                    const quoteChar = childStyleMatch[0].includes('"') ? '"' : "'";
+                    newTag = originalTag.replace(
+                        /style\s*=\s*["']([^"']*)["']/i,
+                        'style=' + quoteChar + 'color:' + textColor + '; ' + childStyle + quoteChar
+                    );
+                } else {
+                    // Kein style-Attribut → style-Attribut einfügen
+                    newTag = childMatch[1] + ' style="color:' + textColor + '">';
+                }
+
+                // Exaktes Ersetzen im echten HTML (nur erste Vorkommen nach Container-Start)
+                const searchFrom = contStart - 50; // etwas Puffer für Positionen
+                const absPos = html.indexOf(originalTag, Math.max(0, searchFrom));
+                if (absPos > -1 && absPos < contStart + 8000) {
+                    html = html.substring(0, absPos) + newTag + html.substring(absPos + originalTag.length);
+                    fixCount++;
+                }
+            }
+        }
+
+        this.html = html;
+
+        if (fixCount > 0 || colorCorrections > 0) {
+            let msg = [];
+            if (colorCorrections > 0) msg.push(colorCorrections + '× dunkle Textfarbe auf #ffffff korrigiert (dunkler Text auf dunklem Hintergrund)');
+            if (fixCount > 0) msg.push(fixCount + '× Textfarbe inline auf Kind-Elemente propagiert (verhindert unsichtbaren Text in T-Online/GMX)');
+            this.addCheck(id, 'FIXED', msg.join(', '));
+        } else {
+            this.addCheck(id, 'PASS', 'Keine dunklen Container mit Textfarben-Problem gefunden');
+        }
+    }
+
     // P14: CTA Button Fallback Check + Auto-Fix (VML Buttons für Outlook)
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
@@ -2719,12 +2860,50 @@ class TemplateProcessor {
             }
             
             // Typ B (table mit bgcolor):
-            // - Hat bgcolor ATTRIBUT → Outlook versteht es nativ (bulletproof) → überspringen
-            // - Nur background-color im style → Outlook strippt CSS → bgcolor-Attribut automatisch ergänzen
+            // - Hat bgcolor ATTRIBUT + ist NICHT in align=left Multi-Spalten-Layout → bulletproof, kein VML nötig
+            // - Ist in align=left Multi-Spalten-Layout → Outlook kollabiert Spalten → VML erzwingen
+            // - Nur background-color im style → bgcolor-Attribut automatisch ergänzen
             if (cta.type === 'table') {
                 if (!hasVml) {
-                    if (cta.hasBgcolorAttr) {
-                        // Wirklich bulletproof: bgcolor-Attribut vorhanden → kein Fix nötig
+                    // Prüfe ob der Button in einem align=left Multi-Spalten-Layout steckt
+                    // Erkennung: mehrere <table ... align="left"> innerhalb von 2000 Zeichen vor dem Button
+                    const beforeCta = this.html.substring(Math.max(0, cta.index - 2000), cta.index);
+                    const alignLeftTables = (beforeCta.match(/<table\b[^>]*\balign\s*=\s*["']?left["']?/gi) || []).length;
+                    const isMultiColumnLayout = alignLeftTables >= 2;
+
+                    if (isMultiColumnLayout) {
+                        // Outlook kollabiert align=left Spalten → VML erzwingen unabhängig von bgcolor
+                        const btnProps = this._extractButtonProperties(cta);
+                        if (btnProps && btnProps.href) {
+                            const vmlCode = this._generateVmlButton(btnProps);
+                            const notMsoOpen = '<!--[if !mso]><!-->\n';
+                            const notMsoClose = '\n<!--<![endif]-->';
+                            const insertPos = cta.containerIndex || cta.index;
+                            const ctaEndPos = cta.endIndex;
+                            this.html = this.html.substring(0, insertPos) +
+                                        vmlCode + '\n' +
+                                        notMsoOpen +
+                                        this.html.substring(insertPos, ctaEndPos) +
+                                        notMsoClose +
+                                        this.html.substring(ctaEndPos);
+                            ctasFixed++;
+                            const offset = vmlCode.length + 1 + notMsoOpen.length + notMsoClose.length;
+                            for (const otherCta of allCtaPositions) {
+                                if (otherCta.index > insertPos) {
+                                    otherCta.index += offset;
+                                    otherCta.endIndex += offset;
+                                    if (otherCta.containerIndex) otherCta.containerIndex += offset;
+                                }
+                            }
+                            for (const otherVml of vmlPositions) {
+                                if (otherVml.index > insertPos) {
+                                    otherVml.index += offset;
+                                    otherVml.endIndex += offset;
+                                }
+                            }
+                        }
+                    } else if (cta.hasBgcolorAttr) {
+                        // Wirklich bulletproof: bgcolor-Attribut vorhanden, kein Multi-Spalten-Layout → kein Fix nötig
                         ctasSkippedTable++;
                     } else {
                         // Nur CSS background-color: Outlook strippt Styles → bgcolor-Attribut einfügen
@@ -4195,7 +4374,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.1-2026-03-05';
+const APP_VERSION = 'v3.9.2-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
