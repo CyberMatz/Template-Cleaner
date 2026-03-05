@@ -16287,6 +16287,15 @@ td[width] { width: auto !important; }
     window.eoaSelectAll = eoaSelectAll;
     window.eoaSelectNone = eoaSelectNone;
     window.retryEoaConnection = retryEoaConnection;
+
+    // EOA Fix-Panel Funktionen
+    window.eoaToggleFixPanel = eoaToggleFixPanel;
+    window.eoaLoadGmailFixes = eoaLoadGmailFixes;
+    window.eoaApplyGmailFix = eoaApplyGmailFix;
+    window.eoaLoadTextColorFixes = eoaLoadTextColorFixes;
+    window.eoaApplyTextColorFix = eoaApplyTextColorFix;
+    window.eoaLoadOutlookFixes = eoaLoadOutlookFixes;
+    window.eoaApplyOutlookBgcolorFix = eoaApplyOutlookBgcolorFix;
 });
 
 
