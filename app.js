@@ -213,6 +213,9 @@ class TemplateProcessor {
 
         // W09: Fehlende # bei Hex-Farbcodes in Inline-Styles erkennen
         this.checkMissingHashInColors();
+
+        // W10: Textfarben nur in CSS-Klassen (unsichtbar in T-Online/GMX/Web.de)
+        this.checkCssOnlyTextColors();
     }
 
     // P01: DOCTYPE Check
@@ -2690,6 +2693,7 @@ class TemplateProcessor {
         let ctasFixed = 0;
         let ctasMismatched = 0;
         let ctasSkippedTable = 0;
+        let ctasBgcolorFixed = 0;
         
         // Prüfe für jeden CTA ob ein VML-Block in der Nähe ist
         for (const cta of allCtaPositions) {
@@ -2714,10 +2718,48 @@ class TemplateProcessor {
                 }
             }
             
-            // Typ B (table mit bgcolor): Outlook versteht bgcolor nativ → KEIN VML nötig
-            // CSS-class Buttons: Outlook versteht KEIN linear-gradient → VML nötig
-            if (cta.type === 'table' && !hasVml) {
-                ctasSkippedTable++;
+            // Typ B (table mit bgcolor):
+            // - Hat bgcolor ATTRIBUT → Outlook versteht es nativ (bulletproof) → überspringen
+            // - Nur background-color im style → Outlook strippt CSS → bgcolor-Attribut automatisch ergänzen
+            if (cta.type === 'table') {
+                if (!hasVml) {
+                    if (cta.hasBgcolorAttr) {
+                        // Wirklich bulletproof: bgcolor-Attribut vorhanden → kein Fix nötig
+                        ctasSkippedTable++;
+                    } else {
+                        // Nur CSS background-color: Outlook strippt Styles → bgcolor-Attribut einfügen
+                        let bgHex = cta.bgColor || '#333333';
+                        if (bgHex.indexOf('#') !== 0) bgHex = '#' + bgHex;
+                        bgHex = bgHex.toUpperCase();
+                        // Füge bgcolor-Attribut in den öffnenden <td>-Tag ein
+                        const tdOpenRegex = /(<td\b)([^>]*>)/i;
+                        const tdOpenMatch = cta.fullMatch.match(tdOpenRegex);
+                        if (tdOpenMatch) {
+                            const fixedTdOpen = tdOpenMatch[1] + ' bgcolor="' + bgHex + '"' + tdOpenMatch[2];
+                            const newFullMatch = cta.fullMatch.replace(tdOpenRegex, fixedTdOpen);
+                            this.html = this.html.substring(0, cta.index) + newFullMatch + this.html.substring(cta.endIndex);
+                            const offset = newFullMatch.length - cta.fullMatch.length;
+                            if (offset !== 0) {
+                                for (const otherCta of allCtaPositions) {
+                                    if (otherCta.index > cta.index) {
+                                        otherCta.index += offset;
+                                        otherCta.endIndex += offset;
+                                        if (otherCta.containerIndex) otherCta.containerIndex += offset;
+                                    }
+                                }
+                                for (const otherVml of vmlPositions) {
+                                    if (otherVml.index > cta.index) {
+                                        otherVml.index += offset;
+                                        otherVml.endIndex += offset;
+                                    }
+                                }
+                            }
+                            ctasBgcolorFixed++;
+                        } else {
+                            ctasSkippedTable++;
+                        }
+                    }
+                }
                 continue;
             }
             
@@ -2852,10 +2894,11 @@ class TemplateProcessor {
         // Report-Meldung zusammenbauen
         const parts = [];
         if (ctasFixed > 0) parts.push(`${ctasFixed} VML-Button(s) für Outlook generiert`);
+        if (ctasBgcolorFixed > 0) parts.push(`${ctasBgcolorFixed} Button(s) bgcolor-Attribut ergänzt (Outlook CSS-Stripping)`);
         if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
         if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
         
-        if (ctasFixed > 0 || ctasMismatched > 0) {
+        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0) {
             this.addCheck(id, 'FIXED', parts.join(', ') + ` (${totalCtas} CTAs gesamt)`);
         } else {
             this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) Outlook-kompatibel` + (ctasSkippedTable > 0 ? ` (${ctasSkippedTable} Tabellen-Button(s) nativ kompatibel)` : ''));
@@ -2963,7 +3006,8 @@ class TemplateProcessor {
                 tdMatch: fullTdMatch,
                 href: href,
                 linkText: linkText,
-                bgColor: bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? '#' + bgInStyle[1] : '#333333')
+                bgColor: bgcolorAttr ? bgcolorAttr[1] : (bgInStyle ? '#' + bgInStyle[1] : '#333333'),
+                hasBgcolorAttr: !!bgcolorAttr  // true = bgcolor-Attribut vorhanden (bulletproof), false = nur CSS
             });
         }
         
@@ -3826,6 +3870,86 @@ class TemplateProcessor {
         }
     }
 
+    // W10: Textfarben nur in CSS-Klassen (unsichtbar in T-Online / GMX / Web.de)
+    // T-Online und ähnliche Clients entfernen <style>-Blöcke → Textfarben die nur per CSS-Klasse
+    // gesetzt sind werden nicht angezeigt → weißer/heller Text auf dunklem Hintergrund unsichtbar
+    checkCssOnlyTextColors() {
+        const id = 'W10_CSS_ONLY_TEXT_COLORS';
+
+        const styleBlock = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (!styleBlock) {
+            this.addCheck(id, 'PASS', 'Keine CSS-Blöcke gefunden – alle Styles inline');
+            return;
+        }
+
+        const css = styleBlock[1];
+        // @media-Blöcke ignorieren (responsive CSS – gewollt)
+        const cssWithoutMedia = css.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
+
+        // CSS-Klassen mit Textfarbe (color:) finden – nicht background-color
+        const colorClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]+)\}/gi;
+        const colorClasses = [];
+        let m;
+        while ((m = colorClassRegex.exec(cssWithoutMedia)) !== null) {
+            const rules = m[2];
+            // Prüfe ob es ein 'color:' gibt (nicht 'background-color:')
+            const hasTextColor = /(?:^|;|\s)color\s*:/i.test(rules);
+            if (hasTextColor) {
+                // Extrahiere den Farbwert
+                const colorVal = (rules.match(/(?:^|;|\s)color\s*:\s*([^;]+)/i) || [])[1];
+                if (colorVal) {
+                    colorClasses.push({ className: m[1], colorVal: colorVal.trim() });
+                }
+            }
+        }
+
+        if (colorClasses.length === 0) {
+            this.addCheck(id, 'PASS', 'Keine CSS-Klassen mit Textfarben gefunden');
+            return;
+        }
+
+        // HTML-Kommentare entfernen für Suche (nicht Conditional Comments)
+        const htmlNoComments = this.html.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+
+        // Prüfe für jede Klasse ob Elemente sie nutzen OHNE inline color
+        let problematicCount = 0;
+        const problematicClasses = [];
+
+        for (const { className, colorVal } of colorClasses) {
+            const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const elRegex = new RegExp(
+                '<(?:p|span|td|div|h[1-6]|a)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escaped + '\\b[^"\']*["\'][^>]*>',
+                'gi'
+            );
+            let elMatch;
+            let foundWithoutInline = false;
+            while ((elMatch = elRegex.exec(htmlNoComments)) !== null) {
+                const tag = elMatch[0];
+                const style = (tag.match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
+                // Wenn kein inline color: → Element ist gefährdet
+                if (!/(?:^|;|\s)color\s*:/i.test(style)) {
+                    foundWithoutInline = true;
+                    break;
+                }
+            }
+            if (foundWithoutInline) {
+                problematicCount++;
+                problematicClasses.push('.' + className + ' (' + colorVal + ')');
+            }
+        }
+
+        if (problematicCount > 0) {
+            const examples = problematicClasses.slice(0, 3).join(', ');
+            const more = problematicClasses.length > 3 ? ' +' + (problematicClasses.length - 3) + ' weitere' : '';
+            this.addCheck(id, 'WARN',
+                '⚠️ Textfarben nur per CSS-Klasse: ' + problematicCount + ' Klasse(n) setzen Textfarbe nur über CSS (' + examples + more + '). ' +
+                'T-Online, GMX und Web.de entfernen <style>-Blöcke → Text kann unsichtbar werden (z.B. weiße Schrift auf dunklem Hintergrund).'
+            );
+        } else {
+            this.addCheck(id, 'PASS', 'Alle Textfarben aus CSS-Klassen sind auch inline gesetzt oder unkritisch');
+        }
+    }
+
     // Check hinzufügen
     addCheck(id, status, message) {
         this.checks.push({ id, status, message });
@@ -3867,7 +3991,7 @@ class TemplateProcessor {
             // Deliverability-Checks werden separat behandelt
             const deliverabilityIds = ['P16_BROKEN_LINKS', 'P17_TEMPLATE_SIZE', 'P18_TEXT_IMAGE_RATIO', 'P19_LINK_COUNT', 'P21_TITLE_TAG'];
             // W07-W09 werden separat bewertet (eigene Confidence-Abzüge + Attention Items)
-            const separatelyHandledIds = ['W07_BROKEN_CHARACTERS', 'W08_BASE64_IMAGES', 'W09_MISSING_HASH_COLORS'];
+            const separatelyHandledIds = ['W07_BROKEN_CHARACTERS', 'W08_BASE64_IMAGES', 'W09_MISSING_HASH_COLORS', 'W10_CSS_ONLY_TEXT_COLORS'];
             warnChecks.forEach(c => {
                 if (deliverabilityIds.includes(c.id)) return; // separat behandelt
                 if (separatelyHandledIds.includes(c.id)) return; // separat behandelt
@@ -3968,6 +4092,13 @@ class TemplateProcessor {
             const cleanMsg = missingHashCheck.message.replace(/^⚠️\s*/, '');
             attentionItems.push('🎨 ' + cleanMsg);
         }
+
+        const cssOnlyColorsCheck = this.checks.find(c => c.id === 'W10_CSS_ONLY_TEXT_COLORS' && c.status === 'WARN');
+        if (cssOnlyColorsCheck) {
+            confidence -= 8; // Kritisch für T-Online/GMX-Empfänger: Text kann komplett unsichtbar sein
+            const cleanMsg = cssOnlyColorsCheck.message.replace(/^⚠️\s*/, '');
+            attentionItems.push('🎨 ' + cleanMsg);
+        }
         
         // Normalisieren: 0-100
         confidence = Math.max(0, Math.min(100, confidence));
@@ -4010,7 +4141,7 @@ class TemplateProcessor {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.8.39-2026-03-04';
+const APP_VERSION = 'v3.9.0-2026-03-05';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -13357,9 +13488,11 @@ td[width] { width: auto !important; }
             return;
         }
         
-        // Typ B (td mit bgcolor): Outlook versteht bgcolor nativ → kein VML nötig
+        // Typ B (td mit bgcolor): 
+        // - Hat bgcolor-Attribut → Outlook versteht nativ, kein VML nötig
+        // - Nur CSS background-color → wurde beim Verarbeiten automatisch um bgcolor ergänzt
         if (btnData.type === 'table') {
-            showInspectorToast('ℹ️ Tabellen-Button (bgcolor) – kein VML nötig, Outlook zeigt diesen Button korrekt an');
+            showInspectorToast('ℹ️ Tabellen-Button (bgcolor) – Outlook-kompatibel. Bei reinen CSS-Hintergrundfarben wurde beim Verarbeiten automatisch ein bgcolor-Attribut ergänzt.');
             return;
         }
         
@@ -15531,7 +15664,13 @@ td[width] { width: auto !important; }
         }
         
         var osInfo = [result.client, result.os].filter(Boolean).join(' \u00b7 ');
-        
+
+        // Ermittle Client-Kategorie für gezieite Fix-Buttons
+        var clientIdLower = clientId.toLowerCase();
+        var isGmailClient = /gmail/.test(clientIdLower);
+        var isOutlookClient = /outlook|m365|o365/.test(clientIdLower);
+        var isCssStrippingClient = /tonline|webde|gmxnet/.test(clientIdLower);
+
         var cardHtml = '<div class="eoa-screenshot-card" data-client-id="' + clientId + '">' +
             '<div class="eoa-screenshot-header">' +
             '<span class="eoa-screenshot-client-name">' + label + '</span>' +
@@ -15546,7 +15685,46 @@ td[width] { width: auto !important; }
             cardHtml += '<div style="padding: 40px; text-align: center; color: #a8a29e;">Kein Screenshot verf\u00fcgbar</div>';
         }
         
-        cardHtml += '</div></div>';
+        cardHtml += '</div>';
+
+        // Fix-Panel: erscheint wenn Nutzer ein Problem sieht
+        if (isGmailClient || isOutlookClient || isCssStrippingClient) {
+            cardHtml += '<div class="eoa-fix-panel">' +
+                '<button class="eoa-fix-panel-toggle" onclick="eoaToggleFixPanel(this, \'' + clientId + '\')">' +
+                '🔧 Problem gesehen? Fix anwenden</button>' +
+                '<div class="eoa-fix-options" style="display:none;" id="eoa-fix-opts-' + clientId + '">';
+
+            if (isGmailClient) {
+                cardHtml += '<div class="eoa-fix-group">' +
+                    '<div class="eoa-fix-group-title">📧 Gmail-Fixes</div>' +
+                    '<div class="eoa-fix-group-desc">Gmail entfernt CSS-Hintergründe → Buttons werden unsichtbar</div>' +
+                    '<div class="eoa-fix-btn-list" id="eoa-gmail-btns-' + clientId + '">' +
+                    '<button class="eoa-fix-action-btn" onclick="eoaLoadGmailFixes(\'' + clientId + '\')">🔍 Buttons anzeigen und fixen</button>' +
+                    '</div></div>';
+            }
+
+            if (isCssStrippingClient) {
+                cardHtml += '<div class="eoa-fix-group">' +
+                    '<div class="eoa-fix-group-title">📝 Textfarben-Fix</div>' +
+                    '<div class="eoa-fix-group-desc">T-Online/GMX/Web.de entfernen CSS → Textfarben aus Klassen werden unsichtbar</div>' +
+                    '<div class="eoa-fix-btn-list" id="eoa-text-btns-' + clientId + '">' +
+                    '<button class="eoa-fix-action-btn" onclick="eoaLoadTextColorFixes(\'' + clientId + '\')">🔍 Betroffene Texte anzeigen und fixen</button>' +
+                    '</div></div>';
+            }
+
+            if (isOutlookClient) {
+                cardHtml += '<div class="eoa-fix-group">' +
+                    '<div class="eoa-fix-group-title">🖥️ Outlook-Fixes</div>' +
+                    '<div class="eoa-fix-group-desc">Outlook strippt CSS-Hintergründe → Buttons ohne bgcolor-Attribut verschwinden</div>' +
+                    '<div class="eoa-fix-btn-list" id="eoa-outlook-btns-' + clientId + '">' +
+                    '<button class="eoa-fix-action-btn" onclick="eoaLoadOutlookFixes(\'' + clientId + '\')">🔍 Buttons anzeigen und fixen</button>' +
+                    '</div></div>';
+            }
+
+            cardHtml += '</div></div>'; // eoa-fix-options + eoa-fix-panel
+        }
+
+        cardHtml += '</div>'; // eoa-screenshot-card
         return cardHtml;
     }
 
@@ -15582,6 +15760,221 @@ td[width] { width: auto !important; }
     }
 
     // Alle/Keine auswählen
+    // ===== EOA FIX-PANEL FUNKTIONEN =====
+
+    // Fix-Panel ein-/ausklappen
+    function eoaToggleFixPanel(btn, clientId) {
+        var opts = document.getElementById('eoa-fix-opts-' + clientId);
+        if (!opts) return;
+        var isOpen = opts.style.display !== 'none';
+        opts.style.display = isOpen ? 'none' : 'block';
+        btn.classList.toggle('eoa-fix-panel-toggle-open', !isOpen);
+    }
+
+    // Gmail-Fixes laden: Liste aller CSS-Klassen-Buttons mit fehlender inline-Farbe
+    function eoaLoadGmailFixes(clientId) {
+        var container = document.getElementById('eoa-gmail-btns-' + clientId);
+        if (!container || !currentWorkingHtml) return;
+
+        var buttons = extractCTAButtonsFromHTML(currentWorkingHtml);
+        var gmailProblems = buttons.filter(function(b) {
+            return (b.type === 'css-class' || b.type === 'css-class-link') && b.hasGradient;
+        });
+
+        if (gmailProblems.length === 0) {
+            container.innerHTML = '<span class="eoa-fix-none">✅ Keine Gmail-Button-Probleme erkannt – alle Buttons haben Fallback-Farbe</span>';
+            return;
+        }
+
+        var html = '<div class="eoa-fix-item-list">';
+        gmailProblems.forEach(function(btn) {
+            html += '<div class="eoa-fix-item">' +
+                '<span class="eoa-fix-item-label">' + escapeHtml(btn.text || btn.id) + ' <code>.' + escapeHtml(btn.cssClass || '') + '</code></span>' +
+                '<button class="eoa-fix-item-btn" ' +
+                'data-btn-id="' + escapeHtml(btn.id) + '" ' +
+                'data-bg-color="' + escapeHtml(btn.bgColor) + '" ' +
+                'data-css-class="' + escapeHtml(btn.cssClass || '') + '" ' +
+                'onclick="eoaApplyGmailFix(this)">🔧 Farbe inline einfügen</button>' +
+                '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // Einzelner Gmail-Fix aus EOA-Tab
+    function eoaApplyGmailFix(btn) {
+        var btnId = btn.getAttribute('data-btn-id');
+        var bgColor = btn.getAttribute('data-bg-color');
+        var cssClass = btn.getAttribute('data-css-class');
+        if (!cssClass || !bgColor) return;
+
+        // Nutze bestehende handleGmailFix Logik – arbeitet auf buttonsTabHtml
+        // Wenn buttonsTabHtml noch nicht geladen ist, erst laden
+        if (!buttonsTabHtml) {
+            buttonsTabHtml = currentWorkingHtml;
+        }
+        handleGmailFix(btnId, bgColor, cssClass, btn);
+        btn.textContent = '✅ Fix angewendet';
+        btn.disabled = true;
+    }
+
+    // T-Online/GMX Textfarben-Fixes laden
+    function eoaLoadTextColorFixes(clientId) {
+        var container = document.getElementById('eoa-text-btns-' + clientId);
+        if (!container || !currentWorkingHtml) return;
+
+        // CSS-Klassen mit Textfarbe parsen
+        var styleBlock = currentWorkingHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (!styleBlock) {
+            container.innerHTML = '<span class="eoa-fix-none">✅ Keine CSS-Blöcke gefunden – alle Styles inline</span>';
+            return;
+        }
+
+        var css = styleBlock[1];
+        var cssWithoutMedia = css.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/gi, '');
+        var colorClassRegex = /\.([a-zA-Z][\w-]*)\s*\{([^}]+)\}/gi;
+        var colorClasses = [];
+        var m;
+        while ((m = colorClassRegex.exec(cssWithoutMedia)) !== null) {
+            var rules = m[2];
+            var hasTextColor = /(?:^|;|\s)color\s*:/i.test(rules);
+            if (hasTextColor) {
+                var colorMatch = rules.match(/(?:^|;|\s)color\s*:\s*([^;]+)/i);
+                if (colorMatch) {
+                    colorClasses.push({ className: m[1], colorVal: colorMatch[1].trim() });
+                }
+            }
+        }
+
+        if (colorClasses.length === 0) {
+            container.innerHTML = '<span class="eoa-fix-none">✅ Keine CSS-Textfarben-Probleme erkannt</span>';
+            return;
+        }
+
+        var html = '<div class="eoa-fix-item-list">';
+        colorClasses.forEach(function(cls) {
+            html += '<div class="eoa-fix-item">' +
+                '<span class="eoa-fix-item-label"><code>.' + escapeHtml(cls.className) + '</code> → <span style="background:#eee;padding:1px 6px;border-radius:3px;">' + escapeHtml(cls.colorVal) + '</span></span>' +
+                '<button class="eoa-fix-item-btn" ' +
+                'data-class-name="' + escapeHtml(cls.className) + '" ' +
+                'data-color-val="' + escapeHtml(cls.colorVal) + '" ' +
+                'onclick="eoaApplyTextColorFix(this)">🔧 Farbe inline einfügen</button>' +
+                '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // Textfarbe einer CSS-Klasse inline einfügen
+    function eoaApplyTextColorFix(btn) {
+        var className = btn.getAttribute('data-class-name');
+        var colorVal = btn.getAttribute('data-color-val');
+        if (!className || !colorVal) return;
+
+        var html = currentWorkingHtml;
+        if (!html) return;
+
+        var escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var fixCount = 0;
+
+        // Elemente mit dieser Klasse: inline color ergänzen wenn nicht vorhanden
+        // Variante 1: Hat style-Attribut aber kein color:
+        html = html.replace(
+            new RegExp('(<(?:p|span|td|div|h[1-6]|a)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escaped + '\\b[^"\']*["\'][^>]*)(style\\s*=\\s*["\'])([^"\']*["\'])', 'gi'),
+            function(match, before, styleAttr, styleValue) {
+                if (/(?:^|;|\s)color\s*:/i.test(styleValue)) return match;
+                var quoteChar = styleValue.charAt(styleValue.length - 1);
+                var stylesContent = styleValue.slice(0, -1);
+                fixCount++;
+                return before + styleAttr + 'color:' + colorVal + '; ' + stylesContent + quoteChar;
+            }
+        );
+
+        // Variante 2: Hat KEIN style-Attribut
+        html = html.replace(
+            new RegExp('(<(?:p|span|td|div|h[1-6]|a)\\b[^>]*class\\s*=\\s*["\'][^"\']*\\b' + escaped + '\\b[^"\']*["\'])(?![^>]*style\\s*=)([^>]*>)', 'gi'),
+            function(match, before, after) {
+                fixCount++;
+                return before + ' style="color:' + colorVal + ';"' + after;
+            }
+        );
+
+        if (fixCount > 0) {
+            currentWorkingHtml = html;
+            updateInspectorPreview(html);
+            btn.textContent = '✅ ' + fixCount + '× inline gesetzt';
+            btn.disabled = true;
+            showInspectorToast('✅ Textfarbe .' + className + ' → ' + fixCount + '× inline eingefügt');
+        } else {
+            showInspectorToast('ℹ️ Alle Elemente mit .' + className + ' haben bereits inline color');
+        }
+    }
+
+    // Outlook-Fixes laden: Buttons ohne bgcolor-Attribut
+    function eoaLoadOutlookFixes(clientId) {
+        var container = document.getElementById('eoa-outlook-btns-' + clientId);
+        if (!container || !currentWorkingHtml) return;
+
+        var buttons = extractCTAButtonsFromHTML(currentWorkingHtml);
+        // Suche table-Buttons ohne VML und ohne bgcolor-Attribut
+        var outlookProblems = buttons.filter(function(b) {
+            return b.type === 'table' && !b.hasVml &&
+                !/bgcolor\s*=/i.test(b.fullMatch ? b.fullMatch.substring(0, 200) : '');
+        });
+
+        if (outlookProblems.length === 0) {
+            container.innerHTML = '<span class="eoa-fix-none">✅ Keine Outlook-Button-Probleme erkannt – alle Buttons haben bgcolor-Attribut oder VML</span>';
+            return;
+        }
+
+        var html = '<div class="eoa-fix-item-list">';
+        outlookProblems.forEach(function(btn) {
+            html += '<div class="eoa-fix-item">' +
+                '<span class="eoa-fix-item-label">' + escapeHtml(btn.text || btn.id) + ' (Hintergrund: ' + escapeHtml(btn.bgColor) + ')</span>' +
+                '<button class="eoa-fix-item-btn" ' +
+                'data-btn-match-idx="' + btn.matchIndex + '" ' +
+                'data-bg-color="' + escapeHtml(btn.bgColor) + '" ' +
+                'onclick="eoaApplyOutlookBgcolorFix(this)">🔧 bgcolor-Attribut einfügen</button>' +
+                '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // Outlook bgcolor-Attribut für einen einzelnen Button einfügen
+    function eoaApplyOutlookBgcolorFix(btn) {
+        var matchIdx = parseInt(btn.getAttribute('data-btn-match-idx') || '-1');
+        var bgColor = btn.getAttribute('data-bg-color') || '#333333';
+        if (matchIdx < 0 || !currentWorkingHtml) return;
+
+        var html = currentWorkingHtml;
+        // Finde <td> ab matchIdx und füge bgcolor ein
+        var segment = html.substring(matchIdx, matchIdx + 500);
+        var tdMatch = segment.match(/^(<td\b)([^>]*>)/i);
+        if (!tdMatch) {
+            showInspectorToast('⚠️ Button-Position konnte nicht gefunden werden');
+            return;
+        }
+        // Prüfe ob bgcolor schon da ist
+        if (/bgcolor\s*=/i.test(tdMatch[2])) {
+            showInspectorToast('ℹ️ bgcolor-Attribut ist bereits vorhanden');
+            btn.textContent = '✅ Bereits vorhanden';
+            btn.disabled = true;
+            return;
+        }
+        var bgHex = bgColor.toUpperCase();
+        if (bgHex.indexOf('#') !== 0) bgHex = '#' + bgHex;
+        var fixedTd = tdMatch[1] + ' bgcolor="' + bgHex + '"' + tdMatch[2];
+        var newHtml = html.substring(0, matchIdx) + fixedTd + html.substring(matchIdx + tdMatch[0].length);
+        currentWorkingHtml = newHtml;
+        updateInspectorPreview(newHtml);
+        btn.textContent = '✅ bgcolor eingefügt';
+        btn.disabled = true;
+        showInspectorToast('✅ bgcolor="' + bgHex + '" eingefügt');
+    }
+
+    // ===== ENDE EOA FIX-PANEL FUNKTIONEN =====
+
     function eoaSelectAll() {
         if (!eoaAvailableClients) return;
         eoaExplicitNone = false;

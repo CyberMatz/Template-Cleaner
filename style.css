@@ -3876,6 +3876,119 @@ body {
     color: #c62828;
 }
 
+/* --- EOA Fix-Panel --- */
+.eoa-fix-panel {
+    border-top: 1px solid #e7e5e4;
+    background: #fafaf9;
+}
+.eoa-fix-panel-toggle {
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    color: #78716c;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+.eoa-fix-panel-toggle:hover {
+    background: #f5f5f4;
+    color: #292524;
+}
+.eoa-fix-panel-toggle.eoa-fix-panel-toggle-open {
+    color: #f2a93b;
+    background: #fffbf5;
+}
+.eoa-fix-options {
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-top: 1px solid #e7e5e4;
+}
+.eoa-fix-group {
+    background: #fff;
+    border: 1px solid #e7e5e4;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.eoa-fix-group-title {
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #f5f5f4;
+    border-bottom: 1px solid #e7e5e4;
+    color: #44403c;
+}
+.eoa-fix-group-desc {
+    padding: 6px 10px 4px;
+    font-size: 11px;
+    color: #78716c;
+}
+.eoa-fix-btn-list {
+    padding: 6px 10px 10px;
+}
+.eoa-fix-action-btn {
+    padding: 5px 12px;
+    background: #f2a93b;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.eoa-fix-action-btn:hover { background: #e09528; }
+.eoa-fix-item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+}
+.eoa-fix-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #fafaf9;
+    border: 1px solid #e7e5e4;
+    border-radius: 4px;
+    padding: 5px 8px;
+}
+.eoa-fix-item-label {
+    font-size: 11px;
+    color: #44403c;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.eoa-fix-item-btn {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    background: #292524;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.eoa-fix-item-btn:hover { background: #f2a93b; }
+.eoa-fix-item-btn:disabled { background: #4caf50; cursor: default; }
+.eoa-fix-none {
+    font-size: 11px;
+    color: #4caf50;
+    display: block;
+    padding: 4px 0;
+}
+
 /* --- Lightbox (Vollbild-Ansicht) --- */
 .eoa-lightbox {
     position: fixed;
