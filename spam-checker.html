@@ -298,7 +298,6 @@ const pwError   = document.getElementById('pwError');
 
 function checkPw() {
     if(pwInput.value === PW) {
-        sessionStorage.setItem('sc_auth', '1');
         pwScreen.style.display='none';
         mainContent.style.display='block';
         checkServer();
@@ -313,11 +312,6 @@ function checkPw() {
 pwBtn.addEventListener('click', checkPw);
 pwInput.addEventListener('keydown', e=>{ if(e.key==='Enter') checkPw(); });
 
-// Auto-Login wenn Session noch aktiv
-if(sessionStorage.getItem('sc_auth')==='1') {
-    pwScreen.style.display='none';
-    mainContent.style.display='block';
-}
 
 // ── Domain-Liste ──────────────────────────────────────────
 const DOMAINS = {
