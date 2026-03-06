@@ -97,6 +97,9 @@
             <button id="downloadOptimized" class="btn-download" disabled>
                 ⬇️ Download Optimized Temp.
             </button>
+            <button id="suggestTextsBtn" class="btn-suggest" disabled title="Betreffzeilen, Pre-Header und Absender-Vorschläge generieren">
+                ✨ Texte vorschlagen
+            </button>
         </div>
 
         <!-- Inspector Button: Rechts separat -->
@@ -119,6 +122,20 @@
         <button id="showTagReviewBtn" style="display: none;"></button>
         <button id="showAssetReviewBtn" style="display: none;"></button>
         <div id="tagReviewHint" style="display: none;"></div>
+    </div>
+
+    <!-- Texte vorschlagen Modal -->
+    <div id="suggestModal" class="suggest-modal">
+        <div class="suggest-modal-content">
+            <div class="suggest-modal-header">
+                <h2>✨ Textvorschläge</h2>
+                <button class="close-modal" id="closeSuggestModal">&times;</button>
+            </div>
+            <p class="suggest-modal-hint">Diese Vorschläge basieren auf dem Inhalt deines Templates. Sie sind als Inspiration gedacht – einfach den gewünschten Text kopieren.</p>
+            <div id="suggestModalBody">
+                <!-- Wird per JS befüllt -->
+            </div>
+        </div>
     </div>
 
     <!-- Inspector Section (gemäß Scribble) -->
