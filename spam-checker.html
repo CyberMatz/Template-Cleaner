@@ -438,6 +438,19 @@
         <!-- Detail-Ergebnisse -->
         <div class="spam-results-grid" id="resultsGrid"></div>
 
+        <!-- Optimierungshinweise -->
+        <div id="optimizationHints" style="display:none; margin-top:20px;">
+            <div class="spam-card-title" style="margin-bottom:12px;">🔧 Optimierungshinweise</div>
+            <div id="hintsList"></div>
+            <div style="margin-top:16px; padding:16px; background:#fffbf4; border:1px solid #f2a93b; border-radius:8px;">
+                <div style="font-weight:700; font-size:14px; color:#44403c; margin-bottom:8px;">📋 Template im Checker optimieren</div>
+                <div style="font-size:13px; color:#666; margin-bottom:12px;">Das Template direkt im Template Checker öffnen um die gefundenen Probleme zu beheben.</div>
+                <button class="spam-btn" id="openInCheckerBtn">
+                    ⚙️ Im Template Checker öffnen
+                </button>
+            </div>
+        </div>
+
         <div class="section-divider"></div>
 
         <button class="spam-btn secondary" id="newTestBtn">
@@ -548,29 +561,29 @@ startTestBtn.addEventListener('click', async () => {
     startSpinner.style.display = 'block';
 
     try {
-        // 1. Test erstellen
+        // 1. Spam-Test erstellen (eigener Endpunkt, nicht Email-Test)
         const subject = document.getElementById('subjectInput').value || 'Spam-Test – PW Werkbank';
-        const testRes = await fetch(EOA_SERVER_URL + '/test', {
+        const testRes = await fetch(EOA_SERVER_URL + '/spam/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ html: currentHtml, subject })
         });
 
-        if (!testRes.ok) throw new Error('Test konnte nicht erstellt werden');
+        if (!testRes.ok) throw new Error('Spam-Test konnte nicht erstellt werden');
         const testData = await testRes.json();
         currentTestId = testData.testId;
 
         // 2. Seed-Liste abrufen
-        const seedRes = await fetch(EOA_SERVER_URL + '/test/' + currentTestId + '/spam/seedlist');
+        const seedRes = await fetch(EOA_SERVER_URL + '/spam/test/' + currentTestId + '/seedlist');
         if (!seedRes.ok) throw new Error('Seed-Liste konnte nicht abgerufen werden');
         const seedData = await seedRes.json();
 
-        // Seed-Adressen extrahieren
-        const raw = seedData.seedlist;
-        if (raw && raw.seed_address_list) {
-            seedAddresses = raw.seed_address_list.split(',').map(a => a.trim()).filter(Boolean);
-        } else if (raw && Array.isArray(raw)) {
-            seedAddresses = raw;
+        // Seed-Adressen extrahieren (EOA v5 gibt Array zurück)
+        const raw = seedData.addresses;
+        if (Array.isArray(raw)) {
+            seedAddresses = raw.map(a => typeof a === 'string' ? a : a.email || a.address || '').filter(Boolean);
+        } else if (typeof raw === 'string') {
+            seedAddresses = raw.split(',').map(a => a.trim()).filter(Boolean);
         } else {
             seedAddresses = [];
         }
@@ -628,7 +641,7 @@ fetchResultsBtn.addEventListener('click', async () => {
     fetchSpinner.style.display = 'block';
 
     try {
-        const res = await fetch(EOA_SERVER_URL + '/test/' + currentTestId + '/spam/results');
+        const res = await fetch(EOA_SERVER_URL + '/spam/test/' + currentTestId + '/results');
 
         if (!res.ok) throw new Error('Ergebnisse konnten nicht abgerufen werden (Status ' + res.status + ')');
 
@@ -728,6 +741,9 @@ function renderResults(results) {
         `;
     }).join('');
 
+    // Optimierungshinweise generieren
+    renderOptimizationHints(items, failCount);
+
     // Fazit-Toast
     if (failCount === 0) {
         showToast('🎉 Alle Spam-Filter bestanden!', 5000);
@@ -737,6 +753,79 @@ function renderResults(results) {
 
     phase3.scrollIntoView({ behavior: 'smooth' });
 }
+
+// ── Optimierungshinweise ──────────────────────────────────────────
+function renderOptimizationHints(items, failCount) {
+    const hintsEl = document.getElementById('optimizationHints');
+    const hintsList = document.getElementById('hintsList');
+    if (!hintsEl || !hintsList) return;
+
+    const hints = [];
+
+    items.forEach(item => {
+        const status  = (item.status || '').toLowerCase();
+        const name    = (item.name || item.filter || '').toLowerCase();
+        const details = String(item.details || item.message || '').toLowerCase();
+
+        if (status !== 'fail' && status !== 'failed' && status !== 'spam') return;
+
+        // Bekannte Spam-Filter und passende Hinweise
+        if (/spamassassin/i.test(name)) {
+            if (item.score && parseFloat(item.score) > 5) {
+                hints.push({ icon: '⚠️', text: 'SpamAssassin Score zu hoch (' + item.score + '). Mögliche Ursachen: zu viele Links, Spam-Wörter im Text, fehlendes Text-Bild-Verhältnis.' });
+            } else {
+                hints.push({ icon: '⚠️', text: 'SpamAssassin: Template hat den Filter nicht bestanden. Prüfe Text-Bild-Verhältnis, Links und Spam-Wörter.' });
+            }
+        }
+        if (/barracuda/i.test(name)) {
+            hints.push({ icon: '🔒', text: 'Barracuda: Absender-Domain oder IP könnte auf einer Sperrliste stehen. Domain-Reputation prüfen.' });
+        }
+        if (/cloudmark/i.test(name)) {
+            hints.push({ icon: '🔒', text: 'Cloudmark: Sehr restriktiver Filter. Häufig ausgelöst durch zu viele Links oder Bilder ohne Alt-Text.' });
+        }
+        if (/links|url/i.test(details)) {
+            hints.push({ icon: '🔗', text: 'Zu viele oder unsichere Links gefunden. HTTP-Links auf HTTPS umstellen und Link-Anzahl reduzieren.' });
+        }
+        if (/image|bild/i.test(details)) {
+            hints.push({ icon: '🖼️', text: 'Zu wenig Text im Verhältnis zu Bildern. Mehr Textinhalt hinzufügen.' });
+        }
+    });
+
+    // Allgemeiner Hinweis wenn Fehler vorhanden aber keine spezifischen
+    if (failCount > 0 && hints.length === 0) {
+        hints.push({ icon: '🔧', text: 'Template vom Template Checker prüfen und optimieren lassen – besonders HTTP-Links, Text-Bild-Verhältnis und Alt-Texte.' });
+    }
+
+    if (hints.length === 0 && failCount === 0) {
+        hintsEl.style.display = 'none';
+        return;
+    }
+
+    hintsEl.style.display = 'block';
+    hintsList.innerHTML = hints.map(h => `
+        <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 14px; background:#f9f9f9; border-radius:6px; margin-bottom:8px; font-size:14px; color:#44403c;">
+            <span style="flex-shrink:0; font-size:16px;">${h.icon}</span>
+            <span>${escapeHtml(h.text)}</span>
+        </div>
+    `).join('');
+}
+
+// ── Im Template Checker öffnen ────────────────────────────────────
+document.addEventListener('click', e => {
+    if (e.target && e.target.id === 'openInCheckerBtn') {
+        if (!currentHtml) {
+            showToast('❌ Kein Template geladen', 3000);
+            return;
+        }
+        try {
+            sessionStorage.setItem('spamCheckerHtml', currentHtml);
+            sessionStorage.setItem('spamCheckerFilename', 'vom-spam-checker.html');
+            window.location.href = 'checker.html';
+        } catch(e) {
+            showToast('❌ Übergabe fehlgeschlagen: ' + e.message, 4000);
+        }
+    }
+});
 
 // ── Neuen Test starten ────────────────────────────────────────────
 newTestBtn.addEventListener('click', () => {

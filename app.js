@@ -4831,7 +4831,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.15-2026-03-06';
+const APP_VERSION = 'v3.9.16-2026-03-06';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5332,6 +5332,45 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadBtn.addEventListener('click', () => {
             fileInput.click();
         });
+    }
+
+    // ── Spam-Checker Übergabe: Template automatisch laden ──────────
+    // Wenn der Spam-Checker ein Template zur Optimierung übergibt,
+    // liegt es in sessionStorage unter 'spamCheckerHtml'
+    try {
+        const spamHtml = sessionStorage.getItem('spamCheckerHtml');
+        const spamFilename = sessionStorage.getItem('spamCheckerFilename') || 'spam-checker-template.html';
+        if (spamHtml) {
+            sessionStorage.removeItem('spamCheckerHtml');
+            sessionStorage.removeItem('spamCheckerFilename');
+
+            // HTML direkt als selectedHtml setzen (wie beim normalen Upload)
+            selectedHtml = spamHtml;
+            selectedFilename = spamFilename;
+
+            // UI wie nach normalem Upload aktualisieren
+            fileName.textContent = '📄 ' + spamFilename + ' (vom Spam Checker)';
+            processBtn.disabled = false;
+            processBtn.classList.remove('disabled');
+            processBtn.removeAttribute('aria-disabled');
+            isProcessed = false;
+            processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
+            if (downloadOptimized) downloadOptimized.disabled = true;
+            if (showInspectorBtn) showInspectorBtn.disabled = true;
+            uploadHint.style.display = 'none';
+
+            // Hinweis-Banner anzeigen
+            const banner = document.createElement('div');
+            banner.style.cssText = 'background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:10px 16px;font-size:13px;color:#1565c0;margin-top:8px;';
+            banner.innerHTML = '📨 Template vom <strong>Spam Checker</strong> geladen – bereit zur Verarbeitung.';
+            const controlPanel = document.querySelector('.control-panel');
+            if (controlPanel) controlPanel.appendChild(banner);
+            setTimeout(() => banner.remove(), 6000);
+
+            console.log('[SPAM-CHECKER] Template automatisch geladen: ' + spamFilename);
+        }
+    } catch(e) {
+        console.warn('[SPAM-CHECKER] sessionStorage nicht verfügbar:', e);
     }
 
     // Template verarbeiten
