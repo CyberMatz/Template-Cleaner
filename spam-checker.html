@@ -8,848 +8,332 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css" id="mainStylesheet">
-    <script>
-        document.getElementById('mainStylesheet').href = 'style.css?v=' + Date.now();
-    </script>
+    <script>document.getElementById('mainStylesheet').href = 'style.css?v=' + Date.now();</script>
     <style>
         .back-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            text-decoration: none;
-            color: #f2a93b;
-            font-weight: 500;
-            font-size: 14px;
-            padding: 6px 14px;
-            border-radius: 6px;
-            border: 2px solid #f2a93b;
-            transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 6px;
+            text-decoration: none; color: #f2a93b; font-weight: 500; font-size: 14px;
+            padding: 6px 14px; border-radius: 6px; border: 2px solid #f2a93b; transition: all 0.2s;
         }
         .back-link:hover { background: #f2a93b; color: #fff; }
-
-        /* ── Schritte ── */
-        .spam-steps {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-        .spam-step {
-            flex: 1;
-            background: #f9f9f9;
-            border: 2px solid #e0ddd9;
-            border-radius: 8px;
-            padding: 14px 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 14px;
-            color: #888;
-            transition: all 0.3s;
-        }
-        .spam-step.active {
-            border-color: #f2a93b;
-            background: #fffbf4;
-            color: #44403c;
-            font-weight: 500;
-        }
-        .spam-step.done {
-            border-color: #4caf50;
-            background: #f4fff4;
-            color: #2e7d32;
-        }
-        .spam-step-num {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: #e0ddd9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 13px;
-            flex-shrink: 0;
-            color: #888;
-            transition: all 0.3s;
-        }
-        .spam-step.active .spam-step-num {
-            background: #f2a93b;
-            color: white;
-        }
-        .spam-step.done .spam-step-num {
-            background: #4caf50;
-            color: white;
-        }
-
-        /* ── Upload-Zone ── */
-        .spam-upload-zone {
-            border: 2px dashed #ccc;
-            border-radius: 8px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: #fafafa;
-        }
-        .spam-upload-zone:hover, .spam-upload-zone.drag-over {
-            border-color: #f2a93b;
-            background: #fffbf4;
-        }
-        .spam-upload-zone.has-file {
-            border-color: #4caf50;
-            background: #f4fff4;
-        }
-        .spam-upload-icon { font-size: 40px; margin-bottom: 10px; }
-        .spam-upload-text { font-size: 15px; color: #666; }
-        .spam-upload-text strong { color: #44403c; }
-        .spam-upload-hint { font-size: 12px; color: #aaa; margin-top: 6px; }
-
-        /* ── Eingabefelder ── */
-        .spam-field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .spam-field label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-        .spam-field input {
-            padding: 10px 14px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-            font-family: inherit;
-            transition: border-color 0.2s;
-        }
-        .spam-field input:focus {
-            outline: none;
-            border-color: #f2a93b;
-        }
-
-        /* ── Karten ── */
-        .spam-card {
-            background: white;
-            border-radius: 8px;
-            padding: 24px 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-        }
-        .spam-card-title {
-            font-size: 16px;
-            font-weight: 700;
-            color: #44403c;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid #f2a93b;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        /* ── Seed-Adressen ── */
-        .seed-info {
-            background: #fffbf4;
-            border: 1px solid #f2a93b;
-            border-radius: 8px;
-            padding: 16px 20px;
-            margin-bottom: 16px;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        .seed-info strong { color: #f2a93b; }
-        .seed-list {
-            background: #f9f9f9;
-            border: 1px solid #e0ddd9;
-            border-radius: 6px;
-            padding: 14px;
-            font-family: monospace;
-            font-size: 13px;
-            line-height: 1.8;
-            margin-bottom: 12px;
-            word-break: break-all;
-        }
-        .seed-copy-btn {
-            background: #f2a93b;
-            color: white;
-            border: none;
-            padding: 8px 18px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .seed-copy-btn:hover { background: #e09930; }
-        .seed-copy-btn.copied { background: #4caf50; }
-
-        /* ── Ergebnisse ── */
-        .spam-results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 14px;
-            margin-top: 16px;
-        }
-        .spam-result-item {
-            background: #f9f9f9;
-            border-radius: 8px;
-            padding: 14px 16px;
-            border-left: 4px solid #ccc;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .spam-result-item.pass { border-left-color: #4caf50; background: #f4fff4; }
-        .spam-result-item.fail { border-left-color: #f44336; background: #fff4f4; }
-        .spam-result-item.warn { border-left-color: #ff9800; background: #fffbf4; }
-        .spam-result-item.unknown { border-left-color: #9e9e9e; }
-        .spam-result-name { font-weight: 600; font-size: 14px; color: #44403c; }
-        .spam-result-status { font-size: 13px; color: #666; }
-        .spam-result-score { font-size: 12px; color: #999; margin-top: 2px; }
-
-        /* ── Score-Zusammenfassung ── */
-        .spam-summary {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .spam-summary-item {
-            flex: 1;
-            min-width: 120px;
-            background: #f9f9f9;
-            border-radius: 8px;
-            padding: 16px;
-            text-align: center;
-            border: 1px solid #e0ddd9;
-        }
-        .spam-summary-value {
-            font-size: 32px;
-            font-weight: 700;
-            line-height: 1;
-            margin-bottom: 6px;
-        }
-        .spam-summary-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.4px; }
-        .spam-summary-item.green .spam-summary-value { color: #4caf50; }
-        .spam-summary-item.red .spam-summary-value { color: #f44336; }
-        .spam-summary-item.orange .spam-summary-value { color: #ff9800; }
-
-        /* ── Buttons ── */
-        .spam-btn {
-            background: #f2a93b;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .spam-btn:hover:not(:disabled) { background: #e09930; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
-        .spam-btn:disabled { background: #ccc; cursor: not-allowed; }
-        .spam-btn.secondary {
-            background: white;
-            color: #f2a93b;
-            border: 2px solid #f2a93b;
-        }
-        .spam-btn.secondary:hover:not(:disabled) { background: #f2a93b; color: white; }
-
-        /* ── Status/Toast ── */
-        .spam-toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: #44403c;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            z-index: 9999;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s;
-            pointer-events: none;
-        }
-        .spam-toast.show { opacity: 1; transform: translateY(0); }
-
-        /* ── Warte-Hinweis ── */
-        .spam-waiting {
-            background: #e3f2fd;
-            border: 1px solid #90caf9;
-            border-radius: 8px;
-            padding: 20px 24px;
-            margin-bottom: 20px;
-            display: none;
-        }
-        .spam-waiting.visible { display: block; }
-        .spam-waiting-title { font-weight: 700; font-size: 15px; color: #1565c0; margin-bottom: 8px; }
-        .spam-waiting-text { font-size: 14px; color: #1976d2; line-height: 1.6; }
-
-        /* ── Server offline ── */
-        .spam-offline {
-            background: #fff4f4;
-            border: 1px solid #ffcdd2;
-            border-radius: 8px;
-            padding: 16px 20px;
-            font-size: 14px;
-            color: #c62828;
-            display: none;
-        }
-        .spam-offline.visible { display: block; }
-
-        /* ── Spinner ── */
-        .spam-spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.4);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
+        .sc-card { background: white; border-radius: 8px; padding: 24px 30px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        .sc-card-title { font-size: 16px; font-weight: 700; color: #44403c; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #f2a93b; display: flex; align-items: center; gap: 8px; }
+        .sc-upload { border: 2px dashed #ccc; border-radius: 8px; padding: 36px; text-align: center; cursor: pointer; transition: all 0.2s; background: #fafafa; }
+        .sc-upload:hover, .sc-upload.drag-over { border-color: #f2a93b; background: #fffbf4; }
+        .sc-upload.has-file { border-color: #4caf50; background: #f4fff4; }
+        .sc-upload-icon { font-size: 36px; margin-bottom: 8px; }
+        .sc-upload-text { font-size: 15px; color: #666; }
+        .sc-upload-hint { font-size: 12px; color: #aaa; margin-top: 4px; }
+        .sc-field label { display: block; font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+        .sc-field input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .sc-field input:focus { outline: none; border-color: #f2a93b; }
+        .sc-btn { background: #f2a93b; color: white; border: none; padding: 11px 22px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+        .sc-btn:hover:not(:disabled) { background: #e09930; transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+        .sc-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+        .sc-btn.secondary { background: white; color: #f2a93b; border: 2px solid #f2a93b; }
+        .sc-btn.secondary:hover:not(:disabled) { background: #f2a93b; color: white; }
+        .sc-btn.green { background: #4caf50; }
+        .sc-btn.green:hover:not(:disabled) { background: #388e3c; }
+        .sc-spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.4); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* ── Test-ID Anzeige ── */
-        .spam-testid {
-            font-size: 12px;
-            color: #aaa;
-            margin-top: 8px;
-        }
-
-        .section-divider {
-            height: 1px;
-            background: #f0ece8;
-            margin: 20px 0;
-        }
+        .sc-loading { display: none; font-size: 13px; color: #888; margin-top: 10px; align-items: center; gap: 8px; }
+        .sc-loading.visible { display: flex; }
+        .sc-loading .sc-spinner { border-color: rgba(0,0,0,0.15); border-top-color: #f2a93b; }
+        .sc-tabs { display: flex; gap: 0; border-bottom: 2px solid #e0ddd9; margin-bottom: 20px; }
+        .sc-tab { padding: 10px 20px; font-size: 14px; font-weight: 500; color: #888; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+        .sc-tab.active { color: #f2a93b; border-bottom-color: #f2a93b; }
+        .sc-tab-content { display: none; }
+        .sc-tab-content.active { display: block; }
+        .sc-summary { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .sc-summary-item { flex: 1; min-width: 100px; background: #f9f9f9; border-radius: 8px; padding: 14px; text-align: center; border: 1px solid #e0ddd9; }
+        .sc-summary-value { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+        .sc-summary-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.4px; }
+        .sc-summary-item.green .sc-summary-value { color: #4caf50; }
+        .sc-summary-item.red .sc-summary-value { color: #f44336; }
+        .sc-summary-item.orange .sc-summary-value { color: #ff9800; }
+        .sc-results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+        .sc-result-item { background: #f9f9f9; border-radius: 8px; padding: 12px 14px; border-left: 4px solid #ccc; }
+        .sc-result-item.pass { border-left-color: #4caf50; background: #f4fff4; }
+        .sc-result-item.fail { border-left-color: #f44336; background: #fff4f4; }
+        .sc-result-item.pending { border-left-color: #ff9800; background: #fffbf4; }
+        .sc-result-name { font-weight: 600; font-size: 13px; color: #44403c; }
+        .sc-result-status { font-size: 12px; color: #666; margin-top: 2px; }
+        .sc-result-detail { font-size: 11px; color: #999; margin-top: 4px; font-style: italic; }
+        .sc-hint-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; background: #fff4f4; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #44403c; border-left: 3px solid #f44336; }
+        .sc-hint-item.info { background: #fffbf4; border-left-color: #f2a93b; }
+        .sc-seed-box { background: #f9f9f9; border: 1px solid #e0ddd9; border-radius: 6px; padding: 14px; font-family: monospace; font-size: 12px; line-height: 2; white-space: pre; overflow-x: auto; margin-bottom: 12px; }
+        .sc-info-box { background: #fffbf4; border: 1px solid #f2a93b; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; color: #44403c; }
+        .sc-info-box strong { color: #f2a93b; }
+        .sc-waiting { background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; padding: 18px 22px; margin-bottom: 20px; display: none; }
+        .sc-waiting-title { font-weight: 700; font-size: 14px; color: #1565c0; margin-bottom: 6px; }
+        .sc-waiting-text { font-size: 13px; color: #1976d2; line-height: 1.6; }
+        .sc-offline { background: #fff4f4; border: 1px solid #ffcdd2; border-radius: 8px; padding: 14px 18px; font-size: 13px; color: #c62828; display: none; margin-bottom: 16px; }
+        .sc-offline.visible { display: block; }
+        .sc-divider { height: 1px; background: #f0ece8; margin: 20px 0; }
+        .sc-testid { font-size: 11px; color: #bbb; margin-top: 8px; }
+        .sc-toast { position: fixed; bottom: 24px; right: 24px; background: #44403c; color: white; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 9999; box-shadow: 0 4px 16px rgba(0,0,0,0.2); opacity: 0; transform: translateY(8px); transition: all 0.3s; pointer-events: none; }
+        .sc-toast.show { opacity: 1; transform: translateY(0); }
     </style>
 </head>
 <body>
 
-    <!-- Header -->
-    <header class="main-header">
-        <a href="index.html" class="back-link">← <span style="font-weight:700;color:#f2a93b;">werk</span><span style="font-weight:300;color:#44403c;">bank</span></a>
-        <h1>🛡️ Spam Checker</h1>
-    </header>
+<header class="main-header">
+    <a href="index.html" class="back-link">← <span style="font-weight:700;color:#f2a93b;">werk</span><span style="font-weight:300;color:#44403c;">bank</span></a>
+    <h1>🛡️ Spam Checker</h1>
+</header>
 
-    <!-- Server offline Hinweis -->
-    <div id="offlineHint" class="spam-offline">
-        ⚠️ EOA-Server nicht erreichbar (localhost:3457). Bitte starte den EOA-Server und lade die Seite neu.
+<div id="offlineHint" class="sc-offline">⚠️ EOA-Server nicht erreichbar (localhost:3457). Bitte starte den EOA-Server und lade die Seite neu.</div>
+
+<!-- SCHRITT 1: Upload -->
+<div class="sc-card" id="cardUpload">
+    <div class="sc-card-title">📄 Template hochladen</div>
+    <div class="sc-upload" id="uploadZone">
+        <div class="sc-upload-icon">📄</div>
+        <div class="sc-upload-text"><strong>HTML-Template hier ablegen</strong></div>
+        <div class="sc-upload-hint">oder klicken zum Auswählen · nur .html Dateien</div>
+        <input type="file" id="fileInput" accept=".html" style="display:none">
+    </div>
+    <div id="fileInfo" style="display:none; margin-top:10px; font-size:13px; color:#4caf50; font-weight:500;"></div>
+    <div class="sc-divider"></div>
+    <div class="sc-field" style="margin-bottom:16px;">
+        <label>Betreffzeile (empfohlen für genaue Ergebnisse)</label>
+        <input type="text" id="subjectInput" placeholder="z.B. Ihr persönliches Angebot im März">
+    </div>
+    <button class="sc-btn" id="startBtn" disabled>🚀 Spam-Test starten</button>
+    <div class="sc-loading" id="startLoading"><span class="sc-spinner"></span> Tests werden vorbereitet…</div>
+</div>
+
+<!-- ERGEBNISSE -->
+<div class="sc-card" id="cardResults" style="display:none;">
+    <div class="sc-card-title">🛡️ Ergebnisse</div>
+    <div class="sc-tabs">
+        <div class="sc-tab active" data-tab="Eoa">📊 Inhaltsanalyse <span id="eoaBadge" style="font-size:11px; margin-left:4px;"></span></div>
+        <div class="sc-tab" data-tab="Seed">📬 Versand-Reputation <span id="seedBadge" style="font-size:11px; margin-left:4px;"></span></div>
     </div>
 
-    <!-- Schritt-Anzeige -->
-    <div class="spam-card">
-        <div class="spam-steps">
-            <div class="spam-step active" id="step1">
-                <div class="spam-step-num">1</div>
-                <div>Template hochladen &amp; Test starten</div>
-            </div>
-            <div class="spam-step" id="step2">
-                <div class="spam-step-num">2</div>
-                <div>Test-Mail versenden</div>
-            </div>
-            <div class="spam-step" id="step3">
-                <div class="spam-step-num">3</div>
-                <div>Ergebnisse abrufen</div>
-            </div>
-        </div>
-
-        <!-- SCHRITT 1: Upload + Start -->
-        <div id="phase1">
-            <div class="spam-upload-zone" id="uploadZone">
-                <div class="spam-upload-icon">📄</div>
-                <div class="spam-upload-text"><strong>HTML-Template hier ablegen</strong></div>
-                <div class="spam-upload-hint">oder klicken zum Auswählen · nur .html Dateien</div>
-                <input type="file" id="fileInput" accept=".html" style="display:none">
-            </div>
-            <div id="fileInfo" style="display:none; margin-top:12px; font-size:14px; color:#4caf50; font-weight:500;"></div>
-
-            <div class="section-divider"></div>
-
-            <div style="display:flex; gap:16px; flex-wrap:wrap;">
-                <div class="spam-field" style="flex:1; min-width:200px;">
-                    <label>Betreffzeile (optional)</label>
-                    <input type="text" id="subjectInput" placeholder="z.B. Ihr Angebot im März">
-                </div>
-            </div>
-
-            <div style="margin-top:20px;">
-                <button class="spam-btn" id="startTestBtn" disabled>
-                    🚀 Spam-Test starten
-                </button>
-                <div id="startSpinner" style="display:none; margin-top:12px; font-size:14px; color:#888;">
-                    <span class="spam-spinner" style="border-color: rgba(0,0,0,0.2); border-top-color: #f2a93b;"></span>
-                    &nbsp;Test wird erstellt…
-                </div>
-            </div>
-        </div>
+    <!-- Tab Inhaltsanalyse -->
+    <div class="sc-tab-content active" id="tabEoa">
+        <div class="sc-info-box"><strong>Was wird hier geprüft?</strong> EOA analysiert den Inhalt deines Templates – Spam-Wörter, Text-Bild-Verhältnis, Link-Anzahl, HTML-Qualität. Ergebnisse erscheinen in wenigen Sekunden inkl. Begründung.</div>
+        <div class="sc-loading visible" id="eoaLoading" style="margin-bottom:16px;"><span class="sc-spinner"></span> Inhaltsanalyse läuft…</div>
+        <div class="sc-summary" id="eoaSummary" style="display:none;"></div>
+        <div class="sc-results-grid" id="eoaResults"></div>
+        <div id="eoaHints" style="margin-top:16px;"></div>
     </div>
 
-    <!-- SCHRITT 2: Seed-Adressen + Warte-Hinweis -->
-    <div class="spam-card" id="phase2" style="display:none;">
-        <div class="spam-card-title">📬 Test-E-Mail-Adressen (Seed-Liste)</div>
-
-        <div class="seed-info">
-            <strong>So geht's weiter:</strong> Kopiere die folgenden E-Mail-Adressen und füge sie in Kajomi oder Promio als Testempfänger ein. Dann versende die Test-Mail wie gewohnt. EOA empfängt die Mails und prüft automatisch wie sie bei den Spam-Filtern ankommen.
+    <!-- Tab Versand-Reputation -->
+    <div class="sc-tab-content" id="tabSeed">
+        <div class="sc-info-box"><strong>Was wird hier geprüft?</strong> Testet den echten Versandweg – deine IP-Adresse und Domain-Reputation in Kajomi/Promio.</div>
+        <div style="margin-bottom:12px; font-size:14px; color:#44403c;">Sende die Test-Mail an diese Adressen:</div>
+        <div id="seedList" class="sc-seed-box">Seed-Adressen werden geladen…</div>
+        <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+            <button class="sc-btn" id="copySeedBtn">📋 Adressen kopieren</button>
         </div>
-
-        <div id="seedListContainer" class="seed-list">
-            Seed-Adressen werden geladen…
-        </div>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="seed-copy-btn" id="copySeedBtn">📋 Alle Adressen kopieren</button>
-        </div>
-
-        <div class="spam-testid" id="testIdDisplay"></div>
-    </div>
-
-    <!-- Warte-Hinweis + Ergebnisse abrufen -->
-    <div class="spam-waiting" id="waitingHint">
-        <div class="spam-waiting-title">⏳ Warte auf Testergebnisse</div>
-        <div class="spam-waiting-text">
-            Sobald du die Test-Mail in Kajomi / Promio versendet hast, klicke auf den Button unten.<br>
-            EOA braucht nach dem Empfang ca. 1–3 Minuten um alle Spam-Filter zu prüfen.
-        </div>
-        <div style="margin-top:16px;">
-            <button class="spam-btn" id="fetchResultsBtn">
-                🔍 Ergebnisse abrufen
-            </button>
-            <div id="fetchSpinner" style="display:none; margin-top:12px; font-size:14px; color:#888;">
-                <span class="spam-spinner" style="border-color: rgba(0,0,0,0.2); border-top-color: #f2a93b;"></span>
-                &nbsp;Ergebnisse werden abgerufen…
+        <div class="sc-testid" id="seedTestIdEl"></div>
+        <div class="sc-waiting" id="seedWaiting">
+            <div class="sc-waiting-title">⏳ Warte auf Ergebnisse</div>
+            <div class="sc-waiting-text">Sobald du die Test-Mail versendet hast, klicke auf „Ergebnisse abrufen". EOA braucht ca. 1–5 Minuten.</div>
+            <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <button class="sc-btn green" id="fetchSeedBtn">🔍 Ergebnisse abrufen</button>
+                <div class="sc-loading" id="seedLoading"><span class="sc-spinner"></span> Wird abgerufen…</div>
             </div>
         </div>
+        <div class="sc-summary" id="seedSummary" style="display:none; margin-top:16px;"></div>
+        <div class="sc-results-grid" id="seedResults"></div>
     </div>
 
-    <!-- SCHRITT 3: Ergebnisse -->
-    <div class="spam-card" id="phase3" style="display:none;">
-        <div class="spam-card-title">🛡️ Spam-Test Ergebnisse</div>
-
-        <!-- Zusammenfassung -->
-        <div class="spam-summary" id="resultsSummary"></div>
-
-        <!-- Detail-Ergebnisse -->
-        <div class="spam-results-grid" id="resultsGrid"></div>
-
-        <!-- Optimierungshinweise -->
-        <div id="optimizationHints" style="display:none; margin-top:20px;">
-            <div class="spam-card-title" style="margin-bottom:12px;">🔧 Optimierungshinweise</div>
-            <div id="hintsList"></div>
-            <div style="margin-top:16px; padding:16px; background:#fffbf4; border:1px solid #f2a93b; border-radius:8px;">
-                <div style="font-weight:700; font-size:14px; color:#44403c; margin-bottom:8px;">📋 Template im Checker optimieren</div>
-                <div style="font-size:13px; color:#666; margin-bottom:12px;">Das Template direkt im Template Checker öffnen um die gefundenen Probleme zu beheben.</div>
-                <button class="spam-btn" id="openInCheckerBtn">
-                    ⚙️ Im Template Checker öffnen
-                </button>
-            </div>
-        </div>
-
-        <div class="section-divider"></div>
-
-        <button class="spam-btn secondary" id="newTestBtn">
-            🔄 Neuen Test starten
-        </button>
+    <div class="sc-divider"></div>
+    <div id="checkerSection" style="padding:16px; background:#fffbf4; border:1px solid #f2a93b; border-radius:8px; margin-bottom:16px;">
+        <div style="font-weight:700; font-size:14px; color:#44403c; margin-bottom:6px;">⚙️ Template optimieren</div>
+        <div style="font-size:13px; color:#666; margin-bottom:12px;">Template direkt im Template Checker öffnen um gefundene Probleme zu beheben.</div>
+        <button class="sc-btn" id="openCheckerBtn">⚙️ Im Template Checker öffnen</button>
     </div>
+    <button class="sc-btn secondary" id="newTestBtn">🔄 Neuen Test starten</button>
+</div>
 
-    <!-- Toast -->
-    <div class="spam-toast" id="spamToast"></div>
+<div class="sc-toast" id="toast"></div>
 
 <script>
-const EOA_SERVER_URL = 'http://localhost:3457';
+const EOA = 'http://localhost:3457';
+let html = null, eoaId = null, seedId = null, seedAddrs = [];
 
-let currentTestId = null;
-let currentHtml = null;
-let seedAddresses = [];
+const $  = id => document.getElementById(id);
+const uploadZone = $('uploadZone'), fileInput = $('fileInput');
 
-// ── DOM-Elemente ──────────────────────────────────────────────────
-const uploadZone     = document.getElementById('uploadZone');
-const fileInput      = document.getElementById('fileInput');
-const fileInfo       = document.getElementById('fileInfo');
-const startTestBtn   = document.getElementById('startTestBtn');
-const startSpinner   = document.getElementById('startSpinner');
-const phase1         = document.getElementById('phase1');
-const phase2         = document.getElementById('phase2');
-const phase3         = document.getElementById('phase3');
-const waitingHint    = document.getElementById('waitingHint');
-const seedListEl     = document.getElementById('seedListContainer');
-const copySeedBtn    = document.getElementById('copySeedBtn');
-const testIdDisplay  = document.getElementById('testIdDisplay');
-const fetchResultsBtn = document.getElementById('fetchResultsBtn');
-const fetchSpinner   = document.getElementById('fetchSpinner');
-const resultsSummary = document.getElementById('resultsSummary');
-const resultsGrid    = document.getElementById('resultsGrid');
-const newTestBtn     = document.getElementById('newTestBtn');
-const offlineHint    = document.getElementById('offlineHint');
-
-// ── Toast ─────────────────────────────────────────────────────────
-function showToast(msg, duration = 3000) {
-    const toast = document.getElementById('spamToast');
-    toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), duration);
+function toast(msg, ms=3500) {
+    const el = $('toast'); el.textContent = msg;
+    el.classList.add('show'); setTimeout(() => el.classList.remove('show'), ms);
 }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Schritte aktualisieren ────────────────────────────────────────
-function setStep(active) {
-    [1,2,3].forEach(n => {
-        const el = document.getElementById('step' + n);
-        el.classList.remove('active', 'done');
-        if (n < active) el.classList.add('done');
-        if (n === active) el.classList.add('active');
-    });
-}
-
-// ── Server prüfen ─────────────────────────────────────────────────
 async function checkServer() {
-    try {
-        const res = await fetch(EOA_SERVER_URL + '/health', { signal: AbortSignal.timeout(3000) });
-        if (res.ok) {
-            offlineHint.classList.remove('visible');
-            return true;
-        }
-    } catch(e) {}
-    offlineHint.classList.add('visible');
-    return false;
+    try { const r = await fetch(EOA+'/health',{signal:AbortSignal.timeout(3000)}); if(r.ok){$('offlineHint').classList.remove('visible');return true;} } catch(e){}
+    $('offlineHint').classList.add('visible'); return false;
 }
 
-// ── Datei-Upload ──────────────────────────────────────────────────
+// Upload
 uploadZone.addEventListener('click', () => fileInput.click());
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-uploadZone.addEventListener('drop', e => {
-    e.preventDefault();
-    uploadZone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-});
-fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) handleFile(fileInput.files[0]);
-});
-
-function handleFile(file) {
-    if (!file.name.endsWith('.html')) {
-        showToast('❌ Bitte nur .html Dateien hochladen');
-        return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => {
-        currentHtml = e.target.result;
-        uploadZone.classList.add('has-file');
-        fileInfo.style.display = 'block';
-        fileInfo.textContent = '✅ ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
-        startTestBtn.disabled = false;
-        showToast('✅ Template geladen');
-    };
-    reader.readAsText(file);
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) loadFile(fileInput.files[0]); });
+function loadFile(file) {
+    if(!file.name.endsWith('.html')) { toast('❌ Nur .html Dateien'); return; }
+    new FileReader().onload = e => { html = e.target.result; uploadZone.classList.add('has-file'); $('fileInfo').style.display='block'; $('fileInfo').textContent='✅ '+file.name+' ('+Math.round(file.size/1024)+' KB)'; $('startBtn').disabled=false; toast('✅ Template geladen'); };
+    const r = new FileReader(); r.onload = e => { html=e.target.result; uploadZone.classList.add('has-file'); $('fileInfo').style.display='block'; $('fileInfo').textContent='✅ '+file.name+' ('+Math.round(file.size/1024)+' KB)'; $('startBtn').disabled=false; toast('✅ Template geladen'); }; r.readAsText(file);
 }
 
-// ── Test starten ──────────────────────────────────────────────────
-startTestBtn.addEventListener('click', async () => {
-    if (!currentHtml) return;
-
-    const online = await checkServer();
-    if (!online) return;
-
-    startTestBtn.disabled = true;
-    startSpinner.style.display = 'block';
-
+// Test starten
+$('startBtn').addEventListener('click', async () => {
+    if(!html) return;
+    if(!await checkServer()) return;
+    $('startBtn').disabled = true;
+    $('startLoading').classList.add('visible');
+    const subject = $('subjectInput').value || 'Spam-Test – PW Werkbank';
     try {
-        // 1. Spam-Test erstellen (eigener Endpunkt, nicht Email-Test)
-        const subject = document.getElementById('subjectInput').value || 'Spam-Test – PW Werkbank';
-        const testRes = await fetch(EOA_SERVER_URL + '/spam/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: currentHtml, subject })
-        });
-
-        if (!testRes.ok) throw new Error('Spam-Test konnte nicht erstellt werden');
-        const testData = await testRes.json();
-        currentTestId = testData.testId;
-
-        // 2. Seed-Liste abrufen
-        const seedRes = await fetch(EOA_SERVER_URL + '/spam/test/' + currentTestId + '/seedlist');
-        if (!seedRes.ok) throw new Error('Seed-Liste konnte nicht abgerufen werden');
-        const seedData = await seedRes.json();
-
-        // Seed-Adressen extrahieren (EOA v5 gibt Array zurück)
-        const raw = seedData.addresses;
-        if (Array.isArray(raw)) {
-            seedAddresses = raw.map(a => typeof a === 'string' ? a : a.email || a.address || '').filter(Boolean);
-        } else if (typeof raw === 'string') {
-            seedAddresses = raw.split(',').map(a => a.trim()).filter(Boolean);
-        } else {
-            seedAddresses = [];
-        }
-
-        // UI aktualisieren
-        startSpinner.style.display = 'none';
-        showPhase2();
-
-    } catch(err) {
-        startSpinner.style.display = 'none';
-        startTestBtn.disabled = false;
-        showToast('❌ Fehler: ' + err.message, 5000);
-        console.error(err);
+        const [r1, r2] = await Promise.all([
+            fetch(EOA+'/spam/test', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({html,subject,method:'eoa'})}),
+            fetch(EOA+'/spam/test', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({html,subject,method:'seed'})})
+        ]);
+        if(!r1.ok) throw new Error('EOA-Test fehlgeschlagen: '+(await r1.text()));
+        if(!r2.ok) throw new Error('Seed-Test fehlgeschlagen: '+(await r2.text()));
+        const d1 = await r1.json(), d2 = await r2.json();
+        eoaId = d1.testId; seedId = d2.testId;
+        $('startLoading').classList.remove('visible');
+        $('cardUpload').style.display = 'none';
+        $('cardResults').style.display = 'block';
+        $('cardResults').scrollIntoView({behavior:'smooth'});
+        setTimeout(() => loadEoaResults(), 4000);
+        loadSeedList();
+    } catch(e) {
+        $('startLoading').classList.remove('visible');
+        $('startBtn').disabled = false;
+        toast('❌ '+e.message, 6000);
     }
 });
 
-// ── Phase 2 anzeigen ──────────────────────────────────────────────
-function showPhase2() {
-    phase2.style.display = 'block';
-    waitingHint.classList.add('visible');
-    setStep(2);
-
-    // Seed-Adressen anzeigen
-    if (seedAddresses.length > 0) {
-        seedListEl.textContent = seedAddresses.join('\n');
-        seedListEl.style.whiteSpace = 'pre';
-    } else {
-        seedListEl.textContent = 'Keine Seed-Adressen verfügbar – bitte EOA-Account prüfen.';
+// EOA Ergebnisse
+async function loadEoaResults() {
+    try {
+        const r = await fetch(EOA+'/spam/test/'+eoaId+'/results');
+        if(!r.ok) throw new Error('Status '+r.status);
+        const d = await r.json();
+        renderEoa(d.results);
+    } catch(e) {
+        $('eoaLoading').classList.remove('visible');
+        $('eoaResults').innerHTML = '<p style="color:#c62828;font-size:13px;">❌ '+esc(e.message)+'</p>';
     }
-
-    // Test-ID anzeigen
-    testIdDisplay.textContent = 'Test-ID: ' + currentTestId;
-
-    // Scrollen
-    phase2.scrollIntoView({ behavior: 'smooth' });
 }
 
-// ── Seed-Adressen kopieren ────────────────────────────────────────
-copySeedBtn.addEventListener('click', () => {
-    const text = seedAddresses.join('\n');
-    navigator.clipboard.writeText(text).then(() => {
-        copySeedBtn.textContent = '✓ Kopiert';
-        copySeedBtn.classList.add('copied');
-        setTimeout(() => {
-            copySeedBtn.textContent = '📋 Alle Adressen kopieren';
-            copySeedBtn.classList.remove('copied');
-        }, 2500);
-    });
-});
-
-// ── Ergebnisse abrufen ────────────────────────────────────────────
-fetchResultsBtn.addEventListener('click', async () => {
-    if (!currentTestId) return;
-
-    fetchResultsBtn.disabled = true;
-    fetchSpinner.style.display = 'block';
-
-    try {
-        const res = await fetch(EOA_SERVER_URL + '/spam/test/' + currentTestId + '/results');
-
-        if (!res.ok) throw new Error('Ergebnisse konnten nicht abgerufen werden (Status ' + res.status + ')');
-
-        const data = await res.json();
-        fetchSpinner.style.display = 'none';
-
-        renderResults(data.results);
-
-    } catch(err) {
-        fetchSpinner.style.display = 'none';
-        fetchResultsBtn.disabled = false;
-        showToast('❌ ' + err.message + ' – Wurde die Test-Mail bereits versendet?', 6000);
-        console.error(err);
-    }
-});
-
-// ── Ergebnisse rendern ────────────────────────────────────────────
-function renderResults(results) {
-    if (!results) {
-        showToast('❌ Keine Ergebnisse erhalten – bitte erneut versuchen', 5000);
-        fetchResultsBtn.disabled = false;
-        return;
-    }
-
-    phase3.style.display = 'block';
-    waitingHint.classList.remove('visible');
-    setStep(3);
-
-    // Ergebnisse normalisieren – EOA gibt verschiedene Formate zurück
-    let items = [];
-    if (Array.isArray(results)) {
-        items = results;
-    } else if (typeof results === 'object') {
-        items = Object.values(results);
-    }
-
-    if (items.length === 0) {
-        resultsGrid.innerHTML = '<p style="color:#888; font-size:14px;">Noch keine Ergebnisse verfügbar. Bitte warte 1–2 Minuten und versuche es erneut.</p>';
-        fetchResultsBtn.disabled = false;
-        return;
-    }
-
-    // Zusammenfassung – EOA: spam=-1 bestanden, spam=1 fail, spam=0 ausstehend
-    let passCount = 0, failCount = 0, unknownCount = 0;
-    items.forEach(item => {
-        if (item.spam === -1) passCount++;
-        else if (item.spam === 1) failCount++;
-        else unknownCount++;
-    });
-
-    resultsSummary.innerHTML = `
-        <div class="spam-summary-item green">
-            <div class="spam-summary-value">${passCount}</div>
-            <div class="spam-summary-label">✅ Bestanden</div>
-        </div>
-        <div class="spam-summary-item red">
-            <div class="spam-summary-value">${failCount}</div>
-            <div class="spam-summary-label">❌ Spam erkannt</div>
-        </div>
-        <div class="spam-summary-item orange">
-            <div class="spam-summary-value">${unknownCount}</div>
-            <div class="spam-summary-label">⚪ Unbekannt</div>
-        </div>
-        <div class="spam-summary-item">
-            <div class="spam-summary-value" style="color:#44403c;">${items.length}</div>
-            <div class="spam-summary-label">Filter gesamt</div>
-        </div>
-    `;
-
-    // Detail-Karten – EOA Format: { client, type, spam, details }
-    // spam: 1 = Spam, -1 = Bestanden, 0 = ausstehend
-    resultsGrid.innerHTML = items.map(item => {
-        const name    = item.client || item.name || item.filter || item.id || 'Unbekannt';
-        const spamVal = item.spam;
-        const details = typeof item.details === 'string' ? item.details : '';
-        const type    = item.type ? item.type.toUpperCase() : '';
-
-        let cssClass, icon, statusText;
-        if (spamVal === -1) {
-            cssClass = 'pass'; icon = '✅'; statusText = 'Bestanden – Inbox';
-        } else if (spamVal === 1) {
-            cssClass = 'fail'; icon = '❌'; statusText = 'Als Spam markiert';
-        } else {
-            cssClass = 'unknown'; icon = '⏳'; statusText = 'Ausstehend';
-        }
-
-        return `
-            <div class="spam-result-item ${cssClass}">
-                <div class="spam-result-name">${icon} ${escapeHtml(name)}</div>
-                <div class="spam-result-status">${statusText}${type ? ' · ' + type : ''}</div>
-                ${details ? '<div class="spam-result-score">' + escapeHtml(details.substring(0, 120)) + '</div>' : ''}
-            </div>
-        `;
+function renderEoa(results) {
+    $('eoaLoading').classList.remove('visible');
+    const items = Array.isArray(results) ? results : Object.values(results||{});
+    if(!items.length) { $('eoaResults').innerHTML='<p style="color:#888;font-size:13px;">⏳ Noch keine Ergebnisse – bitte kurz warten.</p>'; return; }
+    let pass=0,fail=0,pend=0;
+    items.forEach(i => { if(i.spam===-1)pass++; else if(i.spam===1)fail++; else pend++; });
+    $('eoaBadge').textContent = fail>0 ? '⚠️ '+fail+' Problem(e)' : pass>0 ? '✅ Alles ok' : '';
+    const sum = $('eoaSummary'); sum.style.display='flex';
+    sum.innerHTML = `<div class="sc-summary-item green"><div class="sc-summary-value">${pass}</div><div class="sc-summary-label">✅ Bestanden</div></div><div class="sc-summary-item red"><div class="sc-summary-value">${fail}</div><div class="sc-summary-label">❌ Spam</div></div><div class="sc-summary-item orange"><div class="sc-summary-value">${pend}</div><div class="sc-summary-label">⏳ Ausstehend</div></div><div class="sc-summary-item"><div class="sc-summary-value" style="color:#44403c;">${items.length}</div><div class="sc-summary-label">Filter gesamt</div></div>`;
+    $('eoaResults').innerHTML = items.map(item => {
+        const name=item.client||'Unbekannt', detail=typeof item.details==='string'?item.details:'', type=item.type?item.type.toUpperCase():'';
+        let cls,icon,status;
+        if(item.spam===-1){cls='pass';icon='✅';status='Bestanden';}
+        else if(item.spam===1){cls='fail';icon='❌';status='Spam erkannt';}
+        else{cls='pending';icon='⏳';status='Ausstehend';}
+        return `<div class="sc-result-item ${cls}"><div class="sc-result-name">${icon} ${esc(name)}</div><div class="sc-result-status">${status}${type?' · '+type:''}</div>${detail?'<div class="sc-result-detail">'+esc(detail.substring(0,150))+'</div>':''}</div>`;
     }).join('');
-
-    // Optimierungshinweise generieren
-    renderOptimizationHints(items, failCount);
-
-    // Fazit-Toast
-    if (failCount === 0) {
-        showToast('🎉 Alle Spam-Filter bestanden!', 5000);
-    } else {
-        showToast('⚠️ ' + failCount + ' Spam-Filter nicht bestanden', 5000);
+    // Hinweise
+    const failed = items.filter(i=>i.spam===1);
+    if(failed.length>0) {
+        const hints = failed.map(item => {
+            const n=(item.client||'').toLowerCase(), d=String(item.details||'');
+            if(/spamassassin/i.test(n)) return 'SpamAssassin: '+(d||'Template als Spam markiert')+'. Prüfe Spam-Wörter im Betreff, Text-Bild-Verhältnis und Link-Anzahl.';
+            if(/barracuda/i.test(n)) return 'Barracuda: Domain-Reputation prüfen – könnte auf einer Sperrliste stehen.';
+            if(/cloudmark/i.test(n)) return 'Cloudmark: Zu viele Links oder Bilder ohne Alt-Text. '+(d||'');
+            return esc(item.client||'Filter')+' nicht bestanden.'+(d?' Grund: '+d:'');
+        });
+        $('eoaHints').innerHTML = '<div style="font-weight:700;font-size:14px;color:#44403c;margin-bottom:10px;">🔧 Was solltest du prüfen?</div>'+hints.map(h=>`<div class="sc-hint-item"><span>⚠️</span><span>${h}</span></div>`).join('');
+    } else if(fail===0&&pend===0) {
+        $('eoaHints').innerHTML = '<div class="sc-hint-item info"><span>🎉</span><span>Alle Filter bestanden – kein Handlungsbedarf beim Inhalt.</span></div>';
+        toast('🎉 Inhaltsanalyse bestanden!', 4000);
     }
-
-    phase3.scrollIntoView({ behavior: 'smooth' });
 }
 
-// ── Optimierungshinweise ──────────────────────────────────────────
-function renderOptimizationHints(items, failCount) {
-    const hintsEl = document.getElementById('optimizationHints');
-    const hintsList = document.getElementById('hintsList');
-    if (!hintsEl || !hintsList) return;
+// Seed-Liste
+async function loadSeedList() {
+    try {
+        const r = await fetch(EOA+'/spam/test/'+seedId+'/seedlist');
+        if(!r.ok) throw new Error('Status '+r.status);
+        const d = await r.json();
+        const raw = d.addresses;
+        seedAddrs = Array.isArray(raw) ? raw.map(a=>typeof a==='string'?a:a.email||'').filter(Boolean) : typeof raw==='string' ? raw.split(',').map(a=>a.trim()).filter(Boolean) : [];
+        $('seedList').textContent = seedAddrs.length>0 ? seedAddrs.join('\n') : 'Keine Adressen verfügbar';
+        $('seedTestIdEl').textContent = 'Test-ID: '+seedId;
+        $('seedWaiting').style.display = 'block';
+    } catch(e) { $('seedList').textContent = '❌ '+e.message; }
+}
 
-    const hints = [];
+$('copySeedBtn').addEventListener('click', () => {
+    navigator.clipboard.writeText(seedAddrs.join('\n')).then(() => { $('copySeedBtn').textContent='✓ Kopiert'; setTimeout(()=>{ $('copySeedBtn').innerHTML='📋 Adressen kopieren'; },2500); });
+});
 
-    items.forEach(item => {
-        const spamVal = item.spam;
-        const name    = (item.client || '').toLowerCase();
-        const details = String(item.details || '').toLowerCase();
+$('fetchSeedBtn').addEventListener('click', async () => {
+    $('fetchSeedBtn').disabled=true; $('seedLoading').classList.add('visible');
+    try {
+        const r = await fetch(EOA+'/spam/test/'+seedId+'/results');
+        if(!r.ok) throw new Error('Status '+r.status);
+        const d = await r.json();
+        $('seedLoading').classList.remove('visible');
+        renderSeed(d.results);
+    } catch(e) { $('seedLoading').classList.remove('visible'); $('fetchSeedBtn').disabled=false; toast('❌ '+e.message+' – Wurde die Mail bereits versendet?',6000); }
+});
 
-        if (spamVal !== 1) return; // nur fehlgeschlagene
+function renderSeed(results) {
+    const items = Array.isArray(results)?results:Object.values(results||{});
+    if(!items.length) { $('fetchSeedBtn').disabled=false; toast('⏳ Noch keine Ergebnisse – bitte warte etwas länger',5000); return; }
+    let pass=0,fail=0,pend=0;
+    items.forEach(i=>{ if(i.spam===-1)pass++; else if(i.spam===1)fail++; else pend++; });
+    $('seedBadge').textContent = fail>0?'⚠️ '+fail+' Problem(e)':pass>0?'✅ Alles ok':'';
+    const sum=$('seedSummary'); sum.style.display='flex';
+    sum.innerHTML=`<div class="sc-summary-item green"><div class="sc-summary-value">${pass}</div><div class="sc-summary-label">✅ Inbox</div></div><div class="sc-summary-item red"><div class="sc-summary-value">${fail}</div><div class="sc-summary-label">❌ Spam</div></div><div class="sc-summary-item orange"><div class="sc-summary-value">${pend}</div><div class="sc-summary-label">⏳ Ausstehend</div></div><div class="sc-summary-item"><div class="sc-summary-value" style="color:#44403c;">${items.length}</div><div class="sc-summary-label">Gesamt</div></div>`;
+    $('seedResults').innerHTML=items.map(item=>{
+        const name=item.client||'Unbekannt';
+        let cls,icon,status;
+        if(item.spam===-1){cls='pass';icon='✅';status='Inbox';}
+        else if(item.spam===1){cls='fail';icon='❌';status='Spam';}
+        else{cls='pending';icon='⏳';status='Ausstehend';}
+        return `<div class="sc-result-item ${cls}"><div class="sc-result-name">${icon} ${esc(name)}</div><div class="sc-result-status">${status}</div></div>`;
+    }).join('');
+    if(fail===0) toast('🎉 Versand-Reputation bestanden!',4000); else toast('⚠️ '+fail+' Filter nicht bestanden',4000);
+}
 
-        if (/spamassassin/i.test(name)) {
-            hints.push({ icon: '⚠️', text: 'SpamAssassin: Template als Spam markiert. Prüfe Text-Bild-Verhältnis, Anzahl Links und Spam-Wörter im Betreff.' });
-        } else if (/barracuda/i.test(name)) {
-            hints.push({ icon: '🔒', text: 'Barracuda: Absender-Domain könnte auf einer Sperrliste stehen. Domain-Reputation prüfen.' });
-        } else if (/cloudmark/i.test(name)) {
-            hints.push({ icon: '🔒', text: 'Cloudmark: Häufig ausgelöst durch zu viele Links oder Bilder ohne Alt-Text.' });
-        } else if (/gmail/i.test(name)) {
-            hints.push({ icon: '📧', text: 'Gmail: Template landet im Spam. HTTP-Links prüfen, Text-Anteil erhöhen.' });
-        } else if (/outlook/i.test(name)) {
-            hints.push({ icon: '📧', text: 'Outlook: Template als Spam markiert. Betreffzeile und Absender-Reputation prüfen.' });
-        } else {
-            hints.push({ icon: '⚠️', text: name.charAt(0).toUpperCase() + name.slice(1) + ': Filter nicht bestanden.' + (details ? ' ' + details : '') });
-        }
+// Tabs
+document.querySelectorAll('.sc-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.sc-tab').forEach(t=>t.classList.remove('active'));
+        document.querySelectorAll('.sc-tab-content').forEach(c=>c.classList.remove('active'));
+        tab.classList.add('active');
+        $('tab'+tab.dataset.tab).classList.add('active');
     });
-
-    // Allgemeiner Hinweis wenn Fehler vorhanden aber keine spezifischen
-    if (failCount > 0 && hints.length === 0) {
-        hints.push({ icon: '🔧', text: 'Template vom Template Checker prüfen und optimieren lassen – besonders HTTP-Links, Text-Bild-Verhältnis und Alt-Texte.' });
-    }
-
-    if (hints.length === 0 && failCount === 0) {
-        hintsEl.style.display = 'none';
-        return;
-    }
-
-    hintsEl.style.display = 'block';
-    hintsList.innerHTML = hints.map(h => `
-        <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 14px; background:#f9f9f9; border-radius:6px; margin-bottom:8px; font-size:14px; color:#44403c;">
-            <span style="flex-shrink:0; font-size:16px;">${h.icon}</span>
-            <span>${escapeHtml(h.text)}</span>
-        </div>
-    `).join('');
-}
-
-// ── Im Template Checker öffnen ────────────────────────────────────
-document.addEventListener('click', e => {
-    if (e.target && e.target.id === 'openInCheckerBtn') {
-        if (!currentHtml) {
-            showToast('❌ Kein Template geladen', 3000);
-            return;
-        }
-        try {
-            sessionStorage.setItem('spamCheckerHtml', currentHtml);
-            sessionStorage.setItem('spamCheckerFilename', 'vom-spam-checker.html');
-            window.location.href = 'checker.html';
-        } catch(e) {
-            showToast('❌ Übergabe fehlgeschlagen: ' + e.message, 4000);
-        }
-    }
 });
 
-// ── Neuen Test starten ────────────────────────────────────────────
-newTestBtn.addEventListener('click', () => {
-    currentTestId = null;
-    currentHtml = null;
-    seedAddresses = [];
-
-    phase2.style.display = 'none';
-    phase3.style.display = 'none';
-    waitingHint.classList.remove('visible');
-    fetchResultsBtn.disabled = false;
-    fetchSpinner.style.display = 'none';
-
-    uploadZone.classList.remove('has-file');
-    fileInfo.style.display = 'none';
-    fileInfo.textContent = '';
-    startTestBtn.disabled = true;
-    document.getElementById('subjectInput').value = '';
-    fileInput.value = '';
-
-    setStep(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+$('openCheckerBtn').addEventListener('click', () => {
+    if(!html){toast('❌ Kein Template');return;}
+    try { sessionStorage.setItem('spamCheckerHtml',html); sessionStorage.setItem('spamCheckerFilename','vom-spam-checker.html'); window.location.href='checker.html'; }
+    catch(e){toast('❌ Übergabe fehlgeschlagen');}
 });
 
-// ── Hilfsfunktion ─────────────────────────────────────────────────
-function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
+$('newTestBtn').addEventListener('click', () => {
+    html=null;eoaId=null;seedId=null;seedAddrs=[];
+    $('cardResults').style.display='none'; $('cardUpload').style.display='block';
+    uploadZone.classList.remove('has-file'); $('fileInfo').style.display='none';
+    $('startBtn').disabled=true; fileInput.value=''; $('subjectInput').value='';
+    $('eoaSummary').style.display='none'; $('eoaResults').innerHTML=''; $('eoaHints').innerHTML='';
+    $('eoaLoading').classList.add('visible');
+    $('seedSummary').style.display='none'; $('seedResults').innerHTML=''; $('seedWaiting').style.display='none';
+    $('eoaBadge').textContent=''; $('seedBadge').textContent='';
+    window.scrollTo({top:0,behavior:'smooth'});
+});
 
-// ── Start: Server prüfen ──────────────────────────────────────────
 checkServer();
 </script>
 </body>
