@@ -685,12 +685,11 @@ function renderResults(results) {
         return;
     }
 
-    // Zusammenfassung
+    // Zusammenfassung – EOA: spam=-1 bestanden, spam=1 fail, spam=0 ausstehend
     let passCount = 0, failCount = 0, unknownCount = 0;
     items.forEach(item => {
-        const s = (item.status || '').toLowerCase();
-        if (s === 'pass' || s === 'passed' || s === 'inbox') passCount++;
-        else if (s === 'fail' || s === 'failed' || s === 'spam') failCount++;
+        if (item.spam === -1) passCount++;
+        else if (item.spam === 1) failCount++;
         else unknownCount++;
     });
 
@@ -713,31 +712,28 @@ function renderResults(results) {
         </div>
     `;
 
-    // Detail-Karten
+    // Detail-Karten – EOA Format: { client, type, spam, details }
+    // spam: 1 = Spam, -1 = Bestanden, 0 = ausstehend
     resultsGrid.innerHTML = items.map(item => {
-        const name    = item.name || item.filter || item.id || 'Unbekannt';
-        const status  = (item.status || 'unknown').toLowerCase();
-        const score   = item.score !== undefined ? 'Score: ' + item.score : '';
-        const details = item.details || item.message || '';
+        const name    = item.client || item.name || item.filter || item.id || 'Unbekannt';
+        const spamVal = item.spam;
+        const details = typeof item.details === 'string' ? item.details : '';
+        const type    = item.type ? item.type.toUpperCase() : '';
 
-        let cssClass = 'unknown';
-        let icon = '⚪';
-        let statusText = status;
-
-        if (status === 'pass' || status === 'passed' || status === 'inbox') {
-            cssClass = 'pass'; icon = '✅'; statusText = 'Bestanden';
-        } else if (status === 'fail' || status === 'failed' || status === 'spam') {
+        let cssClass, icon, statusText;
+        if (spamVal === -1) {
+            cssClass = 'pass'; icon = '✅'; statusText = 'Bestanden – Inbox';
+        } else if (spamVal === 1) {
             cssClass = 'fail'; icon = '❌'; statusText = 'Als Spam markiert';
-        } else if (status === 'warn' || status === 'warning') {
-            cssClass = 'warn'; icon = '⚠️'; statusText = 'Warnung';
+        } else {
+            cssClass = 'unknown'; icon = '⏳'; statusText = 'Ausstehend';
         }
 
         return `
             <div class="spam-result-item ${cssClass}">
                 <div class="spam-result-name">${icon} ${escapeHtml(name)}</div>
-                <div class="spam-result-status">${statusText}</div>
-                ${score ? '<div class="spam-result-score">' + escapeHtml(score) + '</div>' : ''}
-                ${details ? '<div class="spam-result-score">' + escapeHtml(String(details).substring(0, 100)) + '</div>' : ''}
+                <div class="spam-result-status">${statusText}${type ? ' · ' + type : ''}</div>
+                ${details ? '<div class="spam-result-score">' + escapeHtml(details.substring(0, 120)) + '</div>' : ''}
             </div>
         `;
     }).join('');
@@ -764,31 +760,24 @@ function renderOptimizationHints(items, failCount) {
     const hints = [];
 
     items.forEach(item => {
-        const status  = (item.status || '').toLowerCase();
-        const name    = (item.name || item.filter || '').toLowerCase();
-        const details = String(item.details || item.message || '').toLowerCase();
+        const spamVal = item.spam;
+        const name    = (item.client || '').toLowerCase();
+        const details = String(item.details || '').toLowerCase();
 
-        if (status !== 'fail' && status !== 'failed' && status !== 'spam') return;
+        if (spamVal !== 1) return; // nur fehlgeschlagene
 
-        // Bekannte Spam-Filter und passende Hinweise
         if (/spamassassin/i.test(name)) {
-            if (item.score && parseFloat(item.score) > 5) {
-                hints.push({ icon: '⚠️', text: 'SpamAssassin Score zu hoch (' + item.score + '). Mögliche Ursachen: zu viele Links, Spam-Wörter im Text, fehlendes Text-Bild-Verhältnis.' });
-            } else {
-                hints.push({ icon: '⚠️', text: 'SpamAssassin: Template hat den Filter nicht bestanden. Prüfe Text-Bild-Verhältnis, Links und Spam-Wörter.' });
-            }
-        }
-        if (/barracuda/i.test(name)) {
-            hints.push({ icon: '🔒', text: 'Barracuda: Absender-Domain oder IP könnte auf einer Sperrliste stehen. Domain-Reputation prüfen.' });
-        }
-        if (/cloudmark/i.test(name)) {
-            hints.push({ icon: '🔒', text: 'Cloudmark: Sehr restriktiver Filter. Häufig ausgelöst durch zu viele Links oder Bilder ohne Alt-Text.' });
-        }
-        if (/links|url/i.test(details)) {
-            hints.push({ icon: '🔗', text: 'Zu viele oder unsichere Links gefunden. HTTP-Links auf HTTPS umstellen und Link-Anzahl reduzieren.' });
-        }
-        if (/image|bild/i.test(details)) {
-            hints.push({ icon: '🖼️', text: 'Zu wenig Text im Verhältnis zu Bildern. Mehr Textinhalt hinzufügen.' });
+            hints.push({ icon: '⚠️', text: 'SpamAssassin: Template als Spam markiert. Prüfe Text-Bild-Verhältnis, Anzahl Links und Spam-Wörter im Betreff.' });
+        } else if (/barracuda/i.test(name)) {
+            hints.push({ icon: '🔒', text: 'Barracuda: Absender-Domain könnte auf einer Sperrliste stehen. Domain-Reputation prüfen.' });
+        } else if (/cloudmark/i.test(name)) {
+            hints.push({ icon: '🔒', text: 'Cloudmark: Häufig ausgelöst durch zu viele Links oder Bilder ohne Alt-Text.' });
+        } else if (/gmail/i.test(name)) {
+            hints.push({ icon: '📧', text: 'Gmail: Template landet im Spam. HTTP-Links prüfen, Text-Anteil erhöhen.' });
+        } else if (/outlook/i.test(name)) {
+            hints.push({ icon: '📧', text: 'Outlook: Template als Spam markiert. Betreffzeile und Absender-Reputation prüfen.' });
+        } else {
+            hints.push({ icon: '⚠️', text: name.charAt(0).toUpperCase() + name.slice(1) + ': Filter nicht bestanden.' + (details ? ' ' + details : '') });
         }
     });
 
