@@ -205,7 +205,8 @@ $('startBtn').addEventListener('click', async () => {
         $('cardUpload').style.display = 'none';
         $('cardResults').style.display = 'block';
         $('cardResults').scrollIntoView({behavior:'smooth'});
-        setTimeout(() => loadEoaResults(), 4000);
+        setTimeout(() => loadEoaResults(), 10000);
+        startAutoRefresh();
         loadSeedList();
     } catch(e) {
         $('startLoading').classList.remove('visible');
@@ -215,6 +216,19 @@ $('startBtn').addEventListener('click', async () => {
 });
 
 // EOA Ergebnisse
+let autoRefreshTimer = null;
+
+function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(() => {
+        if(eoaId) loadEoaResults();
+    }, 30000);
+}
+
+function stopAutoRefresh() {
+    if(autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+}
+
 async function loadEoaResults() {
     try {
         const r = await fetch(EOA+'/spam/test/'+eoaId+'/results');
@@ -224,6 +238,7 @@ async function loadEoaResults() {
     } catch(e) {
         $('eoaLoading').classList.remove('visible');
         $('eoaResults').innerHTML = '<p style="color:#c62828;font-size:13px;">❌ '+esc(e.message)+'</p>';
+        stopAutoRefresh();
     }
 }
 
@@ -231,9 +246,18 @@ function renderEoa(results) {
     $('eoaLoading').classList.remove('visible');
     $('refreshEoaBtn').style.display = 'inline-flex';
     const items = Array.isArray(results) ? results : Object.values(results||{});
-    if(!items.length) { $('eoaResults').innerHTML='<p style="color:#888;font-size:13px;">⏳ Noch keine Ergebnisse – bitte kurz warten.</p>'; return; }
+    if(!items.length) { $('eoaResults').innerHTML='<p style="color:#888;font-size:13px;">⏳ Noch keine Ergebnisse – bitte kurz warten.</p>'; startAutoRefresh(); return; }
     let pass=0,fail=0,pend=0;
     items.forEach(i => { if(i.spam===-1)pass++; else if(i.spam===1)fail++; else pend++; });
+
+    // Auto-Refresh: weiterlaufen wenn noch ausstehend, sonst stoppen
+    if(pend > 0) {
+        startAutoRefresh();
+        $('refreshEoaBtn').textContent = '🔄 Aktualisieren (läuft automatisch alle 30s)';
+    } else {
+        stopAutoRefresh();
+        $('refreshEoaBtn').textContent = '🔄 Ergebnisse aktualisieren';
+    }
     $('eoaBadge').textContent = fail>0 ? '⚠️ '+fail+' Problem(e)' : pass>0 ? '✅ Alles ok' : '';
     const sum = $('eoaSummary'); sum.style.display='flex';
     sum.innerHTML = `<div class="sc-summary-item green"><div class="sc-summary-value">${pass}</div><div class="sc-summary-label">✅ Bestanden</div></div><div class="sc-summary-item red"><div class="sc-summary-value">${fail}</div><div class="sc-summary-label">❌ Spam</div></div><div class="sc-summary-item orange"><div class="sc-summary-value">${pend}</div><div class="sc-summary-label">⏳ Ausstehend</div></div><div class="sc-summary-item"><div class="sc-summary-value" style="color:#44403c;">${items.length}</div><div class="sc-summary-label">Filter gesamt</div></div>`;
@@ -338,6 +362,7 @@ $('openCheckerBtn').addEventListener('click', () => {
 });
 
 $('newTestBtn').addEventListener('click', () => {
+    stopAutoRefresh();
     html=null;eoaId=null;seedId=null;seedAddrs=[];
     $('cardResults').style.display='none'; $('cardUpload').style.display='block';
     uploadZone.classList.remove('has-file'); $('fileInfo').style.display='none';
