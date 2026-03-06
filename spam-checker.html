@@ -110,7 +110,7 @@
         .sc-rec-action { font-size:12px;color:#f2a93b;font-weight:600;margin-top:4px; }
 
         /* ── Domain-Historie ── */
-        .sc-history-item { display:flex;align-items:center;gap:12px;padding:10px 14px;background:#f9f9f9;border-radius:6px;margin-bottom:8px;font-size:13px; }
+        .sc-history-item { display:flex;flex-direction:column;gap:8px;padding:12px 16px;background:#f9f9f9;border-radius:6px;margin-bottom:10px;font-size:13px;border:1px solid #e0ddd9; }
         .sc-history-domain { font-weight:600;color:#44403c;flex:1; }
         .sc-history-badge { padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700; }
         .sc-history-badge.pass { background:#e8f5e9;color:#2e7d32; }
@@ -555,31 +555,154 @@ function renderResults(results, isRefresh) {
     $('checkerBox').style.display=fail>0?'block':'none';
 
     // In Historie speichern
-    if(!isRefresh || pend===0) saveToHistory(currentPortal, currentDomain, currentKampagne, pass, fail, pend, items.length);
+    if(!isRefresh || pend===0) saveToHistory(currentPortal, currentDomain, currentKampagne, pass, fail, pend, items.length, items);
 
     $('cardStep3').scrollIntoView({behavior:'smooth'});
 }
 
 function renderRecommendations(items, fail) {
-    const recs=[];
-    items.filter(i=>i.spam===1).forEach(item=>{
-        const name=(item.client||'').toLowerCase(), detail=String(item.details||'');
-        if(/spamassassin/i.test(name)) recs.push({icon:'⚠️',type:'fail',title:'SpamAssassin: Inhalt-Problem',text:'SpamAssassin bewertet die Mail mit einem Score. Ab Score 5 gilt sie als Spam.'+(detail?' Rückmeldung: '+detail:''),action:'Im Template Checker prüfen: Spam-Wörter, Text-Bild-Verhältnis, Link-Anzahl'});
-        else if(/gmail/i.test(name)) recs.push({icon:'📧',type:'fail',title:'Gmail: Mail landet im Spam',text:'Gmail ist sehr reputation-sensitiv. Häufige Ursachen: schlechte Domain-Reputation, zu viele Links, fehlende Abmeldeoption.',action:'Domain-Reputation prüfen, Abmeldelink sicherstellen, HTTP-Links auf HTTPS umstellen'});
-        else if(/yahoo/i.test(name)) recs.push({icon:'📧',type:'fail',title:'Yahoo: Mail nicht zugestellt',text:'Yahoo prüft stark auf Domain- und IP-Reputation des Absenders.',action:'Andere Versanddomain aus der Liste testen'});
-        else if(/aol/i.test(name)) recs.push({icon:'📧',type:'fail',title:'AOL: Mail als Spam markiert',text:'AOL verwendet ähnliche Filter wie Yahoo. Oft Reputation-Problem des Absenders.',action:'Andere Versanddomain testen'});
-        else if(/outlook|hotmail|microsoft/i.test(name)) recs.push({icon:'📧',type:'fail',title:'Outlook/Hotmail: Mail blockiert',text:'Microsoft prüft sehr streng auf IP-Reputation und Absender-Domain.',action:'IP-Pool in Kajomi wechseln oder andere Domain testen'});
-        else if(/barracuda/i.test(name)) recs.push({icon:'🔒',type:'fail',title:'Barracuda: Domain oder IP auf Sperrliste',text:'Deine Versand-IP oder Domain könnte auf einer Blockliste stehen.',action:'Domain/IP auf mxtoolbox.com/blacklists prüfen'});
-        else if(/cloudmark/i.test(name)) recs.push({icon:'🔒',type:'fail',title:'Cloudmark: Inhalt oder Reputation-Problem',text:'Cloudmark reagiert empfindlich auf Link-Anzahl und Absender-Reputation.',action:'Link-Anzahl reduzieren, Alt-Texte ergänzen, Domain-Reputation prüfen'});
-        else if(/spf/i.test(name)) recs.push({icon:'🔑',type:'fail',title:'SPF: Authentifizierung fehlgeschlagen',text:'SPF prüft ob deine Versand-IP für deine Domain autorisiert ist.',action:'DNS-Eintrag prüfen – IT oder Domain-Administrator kontaktieren'});
-        else if(/dkim/i.test(name)) recs.push({icon:'🔑',type:'fail',title:'DKIM: Digitale Signatur fehlt',text:'DKIM bestätigt dass die Mail von deiner Domain kommt.',action:'DKIM-Einrichtung in Kajomi prüfen – IT kontaktieren'});
-        else recs.push({icon:'⚠️',type:'fail',title:esc(item.client||'Filter')+' nicht bestanden',text:detail||'Keine weiteren Details.',action:'Im Template Checker prüfen'});
+    const recs = [];
+
+    // ── Diagnose-Logik: Kombinationen auswerten ───────────────
+    const spamAssassin = items.find(i => /spamassassin/i.test(i.client||''));
+    const spf          = items.find(i => /^spf$/i.test(i.client||''));
+    const dkim         = items.find(i => /^dkim$/i.test(i.client||''));
+    const failedItems  = items.filter(i => i.spam === 1);
+
+    const spamAssassinOk  = spamAssassin && spamAssassin.spam === -1;
+    const spamAssassinFail = spamAssassin && spamAssassin.spam === 1;
+    const spfOk   = spf   && spf.spam   === -1;
+    const dkimOk  = dkim  && dkim.spam  === -1;
+    const spfFail  = spf  && spf.spam   === 1;
+    const dkimFail = dkim && dkim.spam  === 1;
+
+    const failedProviders = failedItems.filter(i => /gmail|yahoo|aol|outlook|hotmail|microsoft/i.test(i.client||''));
+    const hasInfraFailures = failedProviders.length > 0;
+
+    // ── Diagnose-Box: Was ist die Ursache? ────────────────────
+    if(fail > 0) {
+        if(spfFail || dkimFail) {
+            // Technischer Authentifizierungsfehler – höchste Priorität
+            recs.push({
+                icon: '🚨', type: 'fail',
+                title: 'Diagnose: Technischer Authentifizierungsfehler',
+                text: 'SPF oder DKIM schlagen fehl. Das ist ein kritischer Konfigurationsfehler der alle Mailprovider betrifft – unabhängig von Template oder Domain.',
+                action: 'Sofort IT oder Domain-Administrator kontaktieren. Ohne SPF/DKIM wird fast jede Mail als Spam eingestuft.'
+            });
+        } else if(spamAssassinFail && hasInfraFailures) {
+            // Sowohl Inhalt als auch Provider – Template ist das Problem
+            recs.push({
+                icon: '🔍', type: 'fail',
+                title: 'Diagnose: Template-Inhalt ist wahrscheinlich die Ursache',
+                text: 'SpamAssassin (reiner Inhaltsfilter) hat nicht bestanden – das deutet darauf hin dass der Template-Inhalt das Problem ist, nicht die Domain oder IP.',
+                action: 'Template zuerst im Template Checker optimieren. Erst danach erneut testen.'
+            });
+        } else if(spamAssassinOk && hasInfraFailures) {
+            // SpamAssassin ok, aber Provider nicht – Infrastruktur ist das Problem
+            recs.push({
+                icon: '🔍', type: 'fail',
+                title: 'Diagnose: Domain oder IP ist wahrscheinlich die Ursache',
+                text: 'SpamAssassin (Inhaltsfilter) hat bestanden – das Template ist inhaltlich in Ordnung. Die Probleme liegen wahrscheinlich an der Reputation der Versanddomain oder IP-Adresse.',
+                action: 'Schritt 1: Andere Versanddomain aus der Liste wählen und erneut testen → Schritt 2: Falls weiterhin Probleme, IP-Pool in Kajomi wechseln'
+            });
+        } else if(!spamAssassin && hasInfraFailures) {
+            // Kein SpamAssassin-Ergebnis – keine eindeutige Diagnose möglich
+            recs.push({
+                icon: '🔍', type: 'warn',
+                title: 'Diagnose: Ursache unklar – SpamAssassin noch ausstehend',
+                text: 'Ohne SpamAssassin-Ergebnis kann nicht unterschieden werden ob der Template-Inhalt oder die Infrastruktur das Problem ist.',
+                action: 'Warte bis SpamAssassin ein Ergebnis liefert und aktualisiere dann die Ergebnisse.'
+            });
+        }
+    }
+
+    // ── Einzelne Filter-Empfehlungen ──────────────────────────
+    failedItems.forEach(item => {
+        const name   = (item.client||'').toLowerCase();
+        const detail = String(item.details||'');
+
+        if(/spamassassin/i.test(name)) {
+            recs.push({icon:'⚠️', type:'fail',
+                title:'SpamAssassin: Inhalt-Problem',
+                text:'SpamAssassin hat den Template-Inhalt als Spam eingestuft.'+(detail?' Rückmeldung: '+detail:''),
+                action:'Im Template Checker prüfen: Spam-Wörter im Betreff/Text, Text-Bild-Verhältnis, Anzahl Links'
+            });
+        } else if(/gmail/i.test(name)) {
+            recs.push({icon:'📧', type:'fail',
+                title:'Gmail nicht bestanden',
+                text: spamAssassinOk
+                    ? 'Da SpamAssassin bestanden hat, liegt das Problem wahrscheinlich an der Domain- oder IP-Reputation.'
+                    : 'Mögliche Ursachen: Template-Inhalt, Domain- oder IP-Reputation.',
+                action: spamAssassinOk
+                    ? 'Andere Versanddomain testen'
+                    : 'Erst Template Checker, dann andere Domain testen'
+            });
+        } else if(/yahoo/i.test(name)) {
+            recs.push({icon:'📧', type:'fail',
+                title:'Yahoo nicht bestanden',
+                text: spamAssassinOk
+                    ? 'Da SpamAssassin bestanden hat, liegt das Problem wahrscheinlich an der Domain- oder IP-Reputation.'
+                    : 'Mögliche Ursachen: Template-Inhalt, Domain- oder IP-Reputation.',
+                action: spamAssassinOk ? 'Andere Versanddomain testen' : 'Erst Template Checker, dann andere Domain testen'
+            });
+        } else if(/aol/i.test(name)) {
+            recs.push({icon:'📧', type:'fail',
+                title:'AOL nicht bestanden',
+                text: spamAssassinOk
+                    ? 'Da SpamAssassin bestanden hat, liegt das Problem wahrscheinlich an der Domain- oder IP-Reputation.'
+                    : 'Mögliche Ursachen: Template-Inhalt, Domain- oder IP-Reputation.',
+                action: spamAssassinOk ? 'Andere Versanddomain testen' : 'Erst Template Checker, dann andere Domain testen'
+            });
+        } else if(/outlook|hotmail|microsoft/i.test(name)) {
+            recs.push({icon:'📧', type:'fail',
+                title:'Outlook nicht bestanden',
+                text: spamAssassinOk
+                    ? 'Da SpamAssassin bestanden hat, liegt das Problem wahrscheinlich an der Domain- oder IP-Reputation.'
+                    : 'Mögliche Ursachen: Template-Inhalt, Domain- oder IP-Reputation.',
+                action: spamAssassinOk
+                    ? 'Andere Versanddomain testen → Falls weiterhin Fehler: IP-Pool in Kajomi wechseln'
+                    : 'Erst Template Checker → dann andere Domain testen → dann IP-Pool wechseln'
+            });
+        } else if(/barracuda/i.test(name)) {
+            recs.push({icon:'🔒', type:'fail',
+                title:'Barracuda: Domain oder IP auf Sperrliste',
+                text:'Deine Versand-IP oder Domain könnte auf einer Blockliste stehen. Das ist unabhängig vom Template-Inhalt.',
+                action:'Domain/IP auf mxtoolbox.com/blacklists prüfen und ggf. Delisting beantragen'
+            });
+        } else if(/cloudmark/i.test(name)) {
+            recs.push({icon:'🔒', type:'fail',
+                title:'Cloudmark nicht bestanden',
+                text: spamAssassinOk
+                    ? 'Da SpamAssassin bestanden hat, liegt es wahrscheinlich an der Absender-Reputation.'
+                    : 'Cloudmark prüft sowohl Inhalt als auch Absender-Reputation.',
+                action: spamAssassinOk ? 'Andere Versanddomain testen' : 'Template Checker prüfen, dann andere Domain testen'
+            });
+        } else if(/spf/i.test(name)) {
+            recs.push({icon:'🔑', type:'fail',
+                title:'SPF: Authentifizierung fehlgeschlagen',
+                text:'SPF prüft ob die Versand-IP für diese Domain autorisiert ist. Kritischer Konfigurationsfehler.',
+                action:'DNS-Eintrag der Versanddomain prüfen – IT oder Domain-Administrator kontaktieren'
+            });
+        } else if(/dkim/i.test(name)) {
+            recs.push({icon:'🔑', type:'fail',
+                title:'DKIM: Digitale Signatur fehlt',
+                text:'DKIM bestätigt dass die Mail wirklich von dieser Domain kommt. Kritischer Konfigurationsfehler.',
+                action:'DKIM-Einrichtung in Kajomi prüfen – IT kontaktieren'
+            });
+        } else {
+            recs.push({icon:'⚠️', type:'fail',
+                title:esc(item.client||'Filter')+' nicht bestanden',
+                text:detail||'Keine weiteren Details von EOA verfügbar.',
+                action:'Im Template Checker auf allgemeine Probleme prüfen'
+            });
+        }
     });
-    const passedSPF=items.find(i=>/spf/i.test(i.client||'')&&i.spam===-1);
-    const passedDKIM=items.find(i=>/dkim/i.test(i.client||'')&&i.spam===-1);
-    if(passedSPF) recs.push({icon:'✅',type:'ok',title:'SPF korrekt konfiguriert',text:'Deine Domain ist korrekt für den Versand autorisiert.',action:''});
-    if(passedDKIM) recs.push({icon:'✅',type:'ok',title:'DKIM Signatur vorhanden',text:'Deine Mails werden korrekt digital signiert.',action:''});
-    if(recs.length===0&&fail===0) recs.push({icon:'🎉',type:'ok',title:'Alles in Ordnung',text:'Alle Filter bestanden. Kein Handlungsbedarf.',action:''});
+
+    // ── Positive Bestätigungen ────────────────────────────────
+    if(spfOk)  recs.push({icon:'✅', type:'ok', title:'SPF korrekt konfiguriert', text:'Deine Domain ist korrekt für den Versand autorisiert.', action:''});
+    if(dkimOk) recs.push({icon:'✅', type:'ok', title:'DKIM Signatur vorhanden',  text:'Deine Mails werden korrekt digital signiert.', action:''});
+    if(spamAssassinOk) recs.push({icon:'✅', type:'ok', title:'Template-Inhalt in Ordnung', text:'SpamAssassin hat den Inhalt als unbedenklich eingestuft. Das Template selbst ist nicht die Ursache für Spam-Einstufungen.', action:''});
+    if(recs.length===0 && fail===0) recs.push({icon:'🎉', type:'ok', title:'Alles in Ordnung', text:'Alle Filter bestanden. Kein Handlungsbedarf.', action:''});
 
     if(recs.length>0) {
         $('recsSection').style.display='block';
@@ -588,10 +711,12 @@ function renderRecommendations(items, fail) {
 }
 
 // ── Domain-Historie ───────────────────────────────────────
-function saveToHistory(portal, domain, pass, fail, pend, total) {
+function saveToHistory(portal, domain, kampagne, pass, fail, pend, total, items) {
     const history = JSON.parse(localStorage.getItem('sc_history')||'[]');
+    const failedFilters = (items||[]).filter(i=>i.spam===1).map(i=>i.client||'?');
+    const passedFilters = (items||[]).filter(i=>i.spam===-1).map(i=>i.client||'?');
     history.unshift({
-        portal, domain, pass, fail, pend, total,
+        portal, domain, kampagne, pass, fail, pend, total, failedFilters, passedFilters,
         date: new Date().toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
     });
     // Max 100 Einträge
@@ -605,13 +730,25 @@ function loadHistory() {
     if(history.length===0) { $('cardHistory').style.display='none'; return; }
     $('cardHistory').style.display='block';
     $('historyList').innerHTML = history.map(h=>`
-        <div class="sc-history-item">
-            <div class="sc-history-domain">
-                <div style="font-weight:700;">${esc(h.domain)}</div>
-                <div style="font-size:11px;color:#888;">${esc(h.portal)}</div>
+        <div class="sc-history-item" style="flex-direction:column;align-items:stretch;gap:8px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="flex:1;">
+                    <div style="font-weight:700;font-size:14px;">${esc(h.domain)}</div>
+                    <div style="font-size:11px;color:#888;margin-top:2px;">
+                        ${esc(h.portal)}${h.kampagne?' · <strong>'+esc(h.kampagne)+'</strong>':''}
+                    </div>
+                </div>
+                <span class="sc-history-badge ${h.fail===0?'pass':'fail'}">${h.fail===0?'✅ Alle bestanden':'❌ '+h.fail+' nicht bestanden'}</span>
+                <div class="sc-history-date">${h.date}</div>
             </div>
-            <span class="sc-history-badge ${h.fail===0?'pass':'fail'}">${h.fail===0?'✅ Bestanden':'❌ '+h.fail+' Fehler'}</span>
-            <div class="sc-history-date">${h.date}</div>
+            ${h.failedFilters&&h.failedFilters.length>0?`
+            <div style="font-size:12px;color:#c62828;background:#fff4f4;border-radius:4px;padding:6px 10px;">
+                ❌ Nicht bestanden: ${h.failedFilters.map(f=>esc(f)).join(', ')}
+            </div>`:''}
+            ${h.passedFilters&&h.passedFilters.length>0?`
+            <div style="font-size:12px;color:#2e7d32;background:#f4fff4;border-radius:4px;padding:6px 10px;">
+                ✅ Bestanden: ${h.passedFilters.map(f=>esc(f)).join(', ')}
+            </div>`:''}
         </div>
     `).join('');
 }
