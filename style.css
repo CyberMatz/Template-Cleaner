@@ -241,6 +241,124 @@ body {
     opacity: 0.6;
 }
 
+/* Suggest Button */
+.btn-suggest {
+    background: #7c5cbf;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+}
+.btn-suggest:hover:not(:disabled) {
+    background: #6a4dab;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+.btn-suggest:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Suggest Modal */
+.suggest-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    overflow: auto;
+}
+.suggest-modal-content {
+    background: white;
+    margin: 40px auto;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 720px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.suggest-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #7c5cbf;
+}
+.suggest-modal-header h2 {
+    font-size: 20px;
+    color: #44403c;
+    margin: 0;
+}
+.suggest-modal-hint {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 24px;
+}
+.suggest-section {
+    margin-bottom: 28px;
+}
+.suggest-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #7c5cbf;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #ede9fe;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.suggest-item {
+    padding: 10px 14px;
+    background: #faf9ff;
+    border: 1px solid #e8e4f5;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: background 0.15s;
+}
+.suggest-item:hover {
+    background: #f2eeff;
+}
+.suggest-item-text {
+    flex: 1;
+    font-size: 14px;
+    color: #333;
+    line-height: 1.45;
+}
+.suggest-copy-all-btn {
+    background: none;
+    border: 1px solid #b8a8e0;
+    color: #7c5cbf;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+    text-transform: none;
+    letter-spacing: 0;
+}
+.suggest-copy-all-btn:hover {
+    background: #7c5cbf;
+    color: white;
+    border-color: #7c5cbf;
+}
+.suggest-copy-all-btn.copied {
+    background: #4caf50;
+    color: white;
+    border-color: #4caf50;
+}
+
 /* ===========================
    INSPECTOR SECTION
    =========================== */

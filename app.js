@@ -175,6 +175,12 @@ class TemplateProcessor {
         // Fix: bgcolor-Attribut auf der unmittelbaren parent-<td> des Buttons setzen
         this.fixTypAButtonParentBgcolor();
 
+        // S17: Mobile-Hidden-Bilder Fix
+        // Manche Templates verstecken Desktop-Bilder per hidden-sm und haben einen
+        // separaten mobilen Ersatzblock (visible-sm-table). In Gmail/GMX (kein CSS)
+        // werden BEIDE unsichtbar. Fix: hidden-sm entfernen + Ersatzblock löschen.
+        this.fixMobileHiddenImages();
+
         // P14: CTA Button Fallback
         this.checkCTAButtonFallback();
 
@@ -2921,6 +2927,124 @@ class TemplateProcessor {
         }
     }
 
+    // S17: Mobile-Hidden-Bilder Fix
+    // Problem: Templates die Desktop-Bilder per class="hidden-sm" verstecken und stattdessen
+    // einen mobilen Ersatzblock (visible-sm-table) einblenden wollen, versagen in Gmail/GMX/Web.de:
+    // Diese Clients entfernen <style>-Blöcke komplett → hidden-sm hat keine Wirkung mehr →
+    // Desktop-Bild bleibt TROTZDEM versteckt (inline display:none fehlt zwar nicht, aber die
+    // CSS-Regel .hidden-sm { display:none } wird gar nicht erst angewendet – stattdessen
+    // greift der Fallback: das Bild ist sichtbar... NEIN: hidden-sm ist eine CSS-Klasse ohne
+    // inline-Entsprechung, also wird das Bild sichtbar. ABER der Ersatzblock hat display:none
+    // als inline-Style → bleibt versteckt. Ergebnis: Desktop-Bild sichtbar, Ersatz versteckt.
+    // Auf iPhone (Apple Mail, CSS ok): hidden-sm greift → Desktop weg, Ersatz erscheint → OK.
+    // In Gmail: hidden-sm greift NICHT → Desktop sichtbar, Ersatz hat display:none → Doppelt?
+    // Nein: hidden-sm ist class → ohne CSS-Regel hat es keine Wirkung → Desktop sichtbar.
+    // Ersatzblock hat display:none inline → bleibt versteckt. ALSO: in Gmail sieht man das
+    // Desktop-Bild UND der Ersatzblock bleibt weg. Klingt gut, aber auf iPhone sieht man
+    // dann: Desktop versteckt + Ersatz eingeblendet (weil visible-sm-table greift).
+    // Das eigentliche Problem: inkonsistentes Verhalten je nach Client.
+    // Lösung: hidden-sm entfernen (Desktop immer sichtbar) + Ersatzblock löschen (kein Doppelbild).
+    // Sicherheitschecks: Nur <table>-Tags mit hidden-sm die <img> enthalten werden angefasst.
+    // Der Ersatzblock wird nur entfernt wenn er visible-sm-table enthält (eindeutiges Muster).
+    fixMobileHiddenImages() {
+        const id = 'S17_MOBILE_HIDDEN_IMAGES';
+        let html = this.html;
+        const fixes = [];
+
+        // Suche alle <table>-Tags mit hidden-sm in der class
+        // Regex erfasst die class-Attribute-Grenzen sauber
+        const hiddenSmRegex = /(<table\b[^>]*class\s*=\s*["'])([^"']*\bhidden-sm\b[^"']*)(")/gi;
+        let match;
+
+        while ((match = hiddenSmRegex.exec(html)) !== null) {
+            const tableTagStart = match.index;
+            const fullTag = match[0];
+
+            // Sicherheitscheck 1: Enthält die nächsten 2000 Zeichen nach dem Tag ein <img>?
+            // Verhindert dass reine Text-Blöcke mit hidden-sm angefasst werden
+            const afterTag = html.substring(tableTagStart + fullTag.length, tableTagStart + fullTag.length + 2000);
+            if (!/<img\b/i.test(afterTag)) {
+                console.log('[S17] hidden-sm table ohne <img> in Nähe – übersprungen');
+                continue;
+            }
+
+            // Bereinige die class: hidden-sm und ggf. doppelte Leerzeichen entfernen
+            const newClassValue = match[2].replace(/\s*\bhidden-sm\b\s*/g, ' ').trim();
+            const newTableTag = match[1] + newClassValue + match[3];
+
+            // Suche nach mobilem Ersatzblock in den nächsten 5000 Zeichen nach dem Tag
+            const searchStart = tableTagStart + fullTag.length;
+            const searchArea = html.substring(searchStart, searchStart + 5000);
+
+            // Pattern: optionaler HTML-Kommentar + <div class="...hidden-outlook...">
+            // Inhalt + schließender Kommentar + </div> + optionaler Kommentar
+            const mobileBlockRegex = /((?:<!--\s*-->\s*)?<div\b[^>]*class\s*=\s*["'][^"']*\bhidden-outlook\b[^"']*["'][^>]*>[\s\S]*?<!--[^>]*>\s*<\/div>\s*(?:<!--[^>]*-->)?)/i;
+            const divMatch = mobileBlockRegex.exec(searchArea);
+
+            if (divMatch) {
+                // Sicherheitscheck 2: Enthält der Block visible-sm-table?
+                // Starkes Indiz dass es ein echter mobiler Ersatzblock ist
+                const hasVisibleSmTable = /visible-sm-table/i.test(divMatch[0]);
+                if (!hasVisibleSmTable) {
+                    console.log('[S17] hidden-outlook div gefunden aber kein visible-sm-table – nur class-Fix');
+                    fixes.push({ type: 'class-only', pos: tableTagStart, oldLen: fullTag.length, newTag: newTableTag });
+                    continue;
+                }
+
+                const divAbsStart = searchStart + divMatch.index;
+                const divAbsEnd = divAbsStart + divMatch[0].length;
+
+                console.log('[S17] Vollständiger Fix: hidden-sm entfernt + Ersatzblock gelöscht (pos ' + tableTagStart + ')');
+                fixes.push({
+                    type: 'full',
+                    tablePos: tableTagStart,
+                    tableOldLen: fullTag.length,
+                    tableNewTag: newTableTag,
+                    divPos: divAbsStart,
+                    divOldLen: divAbsEnd - divAbsStart
+                });
+            } else {
+                // Kein Ersatzblock gefunden – nur hidden-sm entfernen
+                console.log('[S17] Nur class-Fix (kein Ersatzblock gefunden) bei pos ' + tableTagStart);
+                fixes.push({ type: 'class-only', pos: tableTagStart, oldLen: fullTag.length, newTag: newTableTag });
+            }
+        }
+
+        if (fixes.length === 0) {
+            this.addCheck(id, 'PASS', 'Keine per hidden-sm versteckten Bilder gefunden');
+            return;
+        }
+
+        // Operationen nach Position absteigend sortieren und rückwärts anwenden
+        // Bei 'full'-Fixes: div (höhere Position) vor table-tag (niedrigere Position) entfernen
+        const operations = [];
+        for (const fix of fixes) {
+            if (fix.type === 'full') {
+                operations.push({ pos: fix.divPos, oldLen: fix.divOldLen, newStr: '' });
+                operations.push({ pos: fix.tablePos, oldLen: fix.tableOldLen, newStr: fix.tableNewTag });
+            } else {
+                operations.push({ pos: fix.pos, oldLen: fix.oldLen, newStr: fix.newTag });
+            }
+        }
+        operations.sort((a, b) => b.pos - a.pos);
+
+        for (const op of operations) {
+            html = html.substring(0, op.pos) + op.newStr + html.substring(op.pos + op.oldLen);
+        }
+
+        this.html = html;
+
+        const fullFixCount = fixes.filter(f => f.type === 'full').length;
+        const classOnlyCount = fixes.filter(f => f.type === 'class-only').length;
+
+        let msg = fixes.length + '\u00d7 per hidden-sm verstecktes Bild';
+        if (fullFixCount > 0) msg += ': ' + fullFixCount + '\u00d7 hidden-sm entfernt + mobiler Ersatzblock gel\u00f6scht';
+        if (classOnlyCount > 0) msg += (fullFixCount > 0 ? ', ' : ': ') + classOnlyCount + '\u00d7 nur hidden-sm entfernt (kein Ersatzblock gefunden)';
+        msg += ' \u2192 Bild(er) jetzt in allen E-Mail-Clients sichtbar';
+
+        this.addCheck(id, 'FIXED', msg);
+    }
+
     // P14: CTA Button Fallback Check + Auto-Fix (VML Buttons für Outlook)
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
@@ -4482,8 +4606,232 @@ class TemplateProcessor {
 
 }
 
+// =====================================================================
+// TEXTVORSCHLÄGE: Regelbasierte Generierung aus Template-Inhalt
+// =====================================================================
+
+function extractTemplateKeywords(html) {
+    // HTML-Kommentare + Style/Script-Blöcke entfernen
+    let clean = html.replace(/<!--[\s\S]*?-->/g, '');
+    clean = clean.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+    clean = clean.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
+    // Überschriften und Fettdruck extrahieren (oft die wichtigsten Keywords)
+    const boldMatches = [...clean.matchAll(/<(?:strong|b|h[1-4])\b[^>]*>([\s\S]*?)<\/(?:strong|b|h[1-4])>/gi)];
+    const boldTexts = boldMatches
+        .map(m => m[1].replace(/<[^>]*>/g, '').trim())
+        .filter(t => t.length > 3 && t.length < 120);
+
+    // Alle sichtbaren Texte (plain)
+    const allText = clean.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // CTA-Buttons / Links mit kurzem Text (oft Aktionsversprechen)
+    const ctaMatches = [...clean.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)];
+    const ctaTexts = ctaMatches
+        .map(m => m[1].replace(/<[^>]*>/g, '').trim())
+        .filter(t => t.length > 3 && t.length < 60 && !/http|www|@/i.test(t));
+
+    // Zahlen + Einheiten erkennen (Rabatt, Prozent, Euro, Gratis etc.)
+    const numbers = allText.match(/\d+\s*(?:%|€|Euro|Monate?|Tage?|Jahre?|Wochen?|Stunden?|x\b)/gi) || [];
+    const gratis = /gratis|kostenlos|frei|umsonst|geschenk|bonus/i.test(allText);
+    const urgency = /nur.*kurze.*zeit|jetzt|sofort|begrenzt|letzte.*chance|exklusiv|aktion|angebot/i.test(allText);
+    const savings = numbers.filter(n => /€|Euro|%/i.test(n));
+
+    return {
+        boldTexts,
+        ctaTexts,
+        allText,
+        numbers,
+        savings,
+        gratis,
+        urgency,
+        wordCount: allText.split(/\s+/).length
+    };
+}
+
+function generateTextSuggestions(html) {
+    const kw = extractTemplateKeywords(html);
+
+    // Hilfsfunktion: ersten brauchbaren Fetttext holen
+    const firstBold = (minLen = 5) => kw.boldTexts.find(t => t.length >= minLen) || '';
+    const secondBold = (minLen = 5) => kw.boldTexts.filter(t => t.length >= minLen)[1] || '';
+    const firstCta = kw.ctaTexts[0] || '';
+    const firstSaving = kw.savings[0] || '';
+    const firstNumber = kw.numbers[0] || '';
+
+    // Kürze-Helfer
+    const shorten = (text, max = 60) => text.length > max ? text.substring(0, max).replace(/\s\S+$/, '') + '…' : text;
+    const cap = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+
+    // ─── BETREFFZEILEN (5 Stück) ───────────────────────────────────────
+    const subjects = [];
+
+    // Variante 1: Direkt aus erstem Fetttext
+    if (firstBold()) {
+        subjects.push(shorten(cap(firstBold()), 70));
+    }
+
+    // Variante 2: Mit Sparversprechen wenn vorhanden
+    if (firstSaving && firstBold()) {
+        subjects.push(shorten(cap(firstBold()) + ' – ' + firstSaving + ' sparen', 70));
+    } else if (firstSaving) {
+        subjects.push('Jetzt ' + firstSaving + ' sparen – nur für kurze Zeit');
+    }
+
+    // Variante 3: Mit Gratis/Bonus-Element
+    if (kw.gratis && firstBold()) {
+        subjects.push(shorten(cap(firstBold()) + ' – jetzt gratis testen', 70));
+    } else if (kw.gratis) {
+        subjects.push('Ihr kostenloses Angebot wartet auf Sie');
+    }
+
+    // Variante 4: Dringlichkeit / Zeitdruck
+    if (kw.urgency && firstBold()) {
+        subjects.push('Nur jetzt: ' + shorten(firstBold(), 55));
+    } else if (firstBold(10)) {
+        subjects.push('Ihr persönliches Angebot: ' + shorten(firstBold(10), 45));
+    }
+
+    // Variante 5: Zweiter Fetttext oder CTA
+    if (secondBold()) {
+        subjects.push(shorten(cap(secondBold()), 70));
+    } else if (firstCta) {
+        subjects.push(shorten(cap(firstCta), 70));
+    } else if (firstBold()) {
+        subjects.push('Jetzt entdecken: ' + shorten(firstBold(), 50));
+    }
+
+    // Lücken auffüllen falls zu wenig extrahiert
+    const subjectFallbacks = [
+        'Ihr exklusives Angebot – jetzt ansehen',
+        'Nur für Sie: Ein besonderes Angebot',
+        'Jetzt informieren und profitieren',
+        'Das sollten Sie nicht verpassen',
+        'Ihr persönliches Vorteilsangebot'
+    ];
+    while (subjects.length < 5) {
+        subjects.push(subjectFallbacks[subjects.length]);
+    }
+
+    // ─── PRE-HEADER (5 Stück) ──────────────────────────────────────────
+    const preheaders = [];
+
+    // Variante 1: CTA-Text als Einladung
+    if (firstCta) {
+        preheaders.push(shorten(cap(firstCta) + ' – jetzt informieren', 90));
+    } else if (firstBold()) {
+        preheaders.push(shorten(cap(firstBold()) + ' – alle Details hier', 90));
+    }
+
+    // Variante 2: Sparversprechen konkret
+    if (firstSaving) {
+        preheaders.push('Sichern Sie sich jetzt ' + firstSaving + ' – Angebot gilt nur für kurze Zeit.');
+    } else if (firstNumber) {
+        preheaders.push('Entdecken Sie unser Angebot: ' + firstNumber + ' – jetzt mehr erfahren.');
+    }
+
+    // Variante 3: Gratis-Element betonen
+    if (kw.gratis) {
+        preheaders.push('Kostenlos ausprobieren – ohne Risiko, jederzeit kündbar.');
+    } else if (secondBold()) {
+        preheaders.push(shorten(cap(secondBold()) + ' – einfach, schnell und sicher.', 90));
+    }
+
+    // Variante 4: Neugier wecken
+    if (firstBold(8)) {
+        preheaders.push('Wussten Sie schon? ' + shorten(firstBold(8), 65));
+    } else {
+        preheaders.push('Exklusiv für Sie – schauen Sie jetzt rein.');
+    }
+
+    // Variante 5: Handlungsaufforderung
+    if (firstCta && firstSaving) {
+        preheaders.push(shorten(cap(firstCta), 40) + ' und ' + firstSaving + ' sparen – direkt hier.');
+    } else if (firstBold()) {
+        preheaders.push('Jetzt ' + shorten(firstBold().toLowerCase(), 50) + ' – schnell und unkompliziert.');
+    } else {
+        preheaders.push('Ihr Vorteil wartet – jetzt ansehen und profitieren.');
+    }
+
+    const preheaderFallbacks = [
+        'Ihr persönliches Angebot – jetzt mehr erfahren.',
+        'Nur für kurze Zeit – jetzt zugreifen.',
+        'Alles Wichtige auf einen Blick – hier klicken.',
+        'Entdecken Sie, was wir für Sie bereithalten.',
+        'Einfach, schnell und unkompliziert – jetzt starten.'
+    ];
+    while (preheaders.length < 5) {
+        preheaders.push(preheaderFallbacks[preheaders.length]);
+    }
+
+    // ─── ABSENDER (5 Stück) ────────────────────────────────────────────
+    // Kein Listen- oder Produktname – nur generische, professionelle Absender
+    const senders = [
+        'Ihr Kundenservice',
+        'Ihr persönlicher Ansprechpartner',
+        'Ihr Vorteilsservice',
+        'Unser Angebotsteam',
+        'Ihr exklusiver Service'
+    ];
+
+    return {
+        subjects: subjects.slice(0, 5),
+        preheaders: preheaders.slice(0, 5),
+        senders: senders
+    };
+}
+
+function renderSuggestModal(suggestions) {
+    const body = document.getElementById('suggestModalBody');
+    if (!body) return;
+
+    const sections = [
+        { title: '📧 Betreffzeilen', items: suggestions.subjects },
+        { title: '👁 Pre-Header Texte', items: suggestions.preheaders },
+        { title: '✉️ Absender', items: suggestions.senders }
+    ];
+
+    body.innerHTML = sections.map((section, sIdx) => `
+        <div class="suggest-section">
+            <div class="suggest-section-title">
+                ${section.title}
+                <button class="suggest-copy-all-btn" onclick="copyAllSuggestions(this, ${sIdx})">Alle kopieren</button>
+            </div>
+            ${section.items.map((text) => `
+                <div class="suggest-item">
+                    <span class="suggest-item-text">${escapeHtml(text)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+
+    // Vorschläge global speichern damit copyAllSuggestions darauf zugreifen kann
+    body._suggestions = sections;
+}
+
+function copyAllSuggestions(btn, sectionIdx) {
+    const body = document.getElementById('suggestModalBody');
+    if (!body || !body._suggestions) return;
+    const items = body._suggestions[sectionIdx].items;
+    const text = items.join('\n');
+    const doFeedback = () => {
+        btn.textContent = '✓ Alle kopiert';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Alle kopieren'; btn.classList.remove('copied'); }, 2000);
+    };
+    navigator.clipboard.writeText(text).then(doFeedback).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        doFeedback();
+    });
+}
+
 // UI-Logik
-const APP_VERSION = 'v3.9.10-2026-03-05';
+const APP_VERSION = 'v3.9.15-2026-03-06';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -4533,6 +4881,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
     const showAssetReviewBtn = document.getElementById('showAssetReviewBtn');  // FIX: TDZ - früh deklarieren
     const showInspectorBtn = document.getElementById('showInspectorBtn');  // FIX: TDZ - früh deklarieren
+    const suggestTextsBtn = document.getElementById('suggestTextsBtn');
     
     // FIX: Alle weiteren DOM-Elemente früh deklarieren (TDZ-Vermeidung)
     const uploadBtn = document.getElementById('uploadBtn');
@@ -5139,6 +5488,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (downloadOptimized) {
                 downloadOptimized.disabled = false;
                 downloadOptimized.title = 'Optimiertes Template herunterladen';
+            }
+
+            // Texte-vorschlagen Button aktivieren
+            if (suggestTextsBtn) {
+                suggestTextsBtn.disabled = false;
             }
 
             // Scroll zu Ergebnissen
@@ -5892,6 +6246,32 @@ document.addEventListener('DOMContentLoaded', () => {
             diffModal.style.display = 'none';
         }
     });
+
+    // ── Textvorschläge Modal ──────────────────────────────────────────
+    const suggestModal = document.getElementById('suggestModal');
+    const closeSuggestModal = document.getElementById('closeSuggestModal');
+
+    if (suggestTextsBtn) {
+        suggestTextsBtn.addEventListener('click', () => {
+            const html = currentWorkingHtml || (processingResult && processingResult.optimizedHtml);
+            if (!html) return;
+            const suggestions = generateTextSuggestions(html);
+            renderSuggestModal(suggestions);
+            if (suggestModal) suggestModal.style.display = 'block';
+        });
+    }
+
+    if (closeSuggestModal) {
+        closeSuggestModal.addEventListener('click', () => {
+            if (suggestModal) suggestModal.style.display = 'none';
+        });
+    }
+
+    if (suggestModal) {
+        suggestModal.addEventListener('click', (e) => {
+            if (e.target === suggestModal) suggestModal.style.display = 'none';
+        });
+    }
 
     // Einfache Diff-Funktion (Line-by-Line)
     function generateLineDiff(originalLines, optimizedLines) {
@@ -7233,6 +7613,37 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // --- W02: HTTP-URLs (Tracking-Pixel + Content-Bilder) neu prüfen ---
+        const htmlForW02 = newHtml.replace(/<!--(?!\[if\s)[\s\S]*?-->/gi, '');
+        const httpImgRegex = /<img[^>]*src\s*=\s*["']http:\/\/[^"']+["'][^>]*>/gi;
+        const httpImgMatches = htmlForW02.match(httpImgRegex) || [];
+        let newTrackingPixels = 0;
+        let newContentImages = 0;
+        for (const img of httpImgMatches) {
+            const w = (img.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
+            const h = (img.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
+            if ((w === '1' || w === '0' || w === '2') && (h === '1' || h === '0' || h === '2')) {
+                newTrackingPixels++;
+            } else {
+                newContentImages++;
+            }
+        }
+        const oldW02Idx = processingResult.attentionItems.findIndex(item =>
+            /Tracking-Pixel.*HTTP|HTTP.*Tracking-Pixel|Bild.*HTTP|HTTP.*Bild/i.test(item)
+        );
+        if (oldW02Idx !== -1) {
+            if (newTrackingPixels === 0 && newContentImages === 0) {
+                confidenceDelta += 5;
+                changes.push('🔒 HTTP-URLs: alle auf HTTPS ✓');
+                processingResult.attentionItems[oldW02Idx] = '✅ Alle Bild-URLs nutzen HTTPS';
+            } else {
+                let newW02Msg = '';
+                if (newContentImages > 0) newW02Msg += newContentImages + ' Bild(er) nutzen HTTP statt HTTPS';
+                if (newTrackingPixels > 0) newW02Msg += (newW02Msg ? '. Zusätzlich: ' : '') + newTrackingPixels + ' Tracking-Pixel mit HTTP';
+                processingResult.attentionItems[oldW02Idx] = '⚠️ ' + newW02Msg;
+            }
+        }
+
         // --- Confidence Score aktualisieren ---
         processingResult.confidence = Math.max(0, Math.min(100, processingResult.confidence + confidenceDelta));
         if (processingResult.confidence >= 80) {
@@ -8005,6 +8416,12 @@ document.addEventListener('DOMContentLoaded', () => {
             hint: '⚠️ GMX Mobile: <style>-Blöcke entfernt + Mobilansicht (375px). Annäherung.',
             mobile: true,
             transforms: ['strip-style-blocks', 'strip-link-stylesheets', 'strip-class-attributes']
+        },
+        'outlook-mobile': {
+            label: 'Outlook Mobile',
+            hint: '⚠️ Outlook Mobile (iOS/Android): Nutzt WebKit-Engine – CSS wird weitgehend unterstützt. Annäherung.',
+            mobile: true,
+            transforms: []
         }
     };
     
