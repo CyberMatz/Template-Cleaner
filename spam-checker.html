@@ -609,6 +609,7 @@ function showPhase2() {
     // Seed-Adressen anzeigen
     if (seedAddresses.length > 0) {
         seedListEl.textContent = seedAddresses.join('\n');
+        seedListEl.style.whiteSpace = 'pre';
     } else {
         seedListEl.textContent = 'Keine Seed-Adressen verfügbar – bitte EOA-Account prüfen.';
     }
@@ -622,7 +623,7 @@ function showPhase2() {
 
 // ── Seed-Adressen kopieren ────────────────────────────────────────
 copySeedBtn.addEventListener('click', () => {
-    const text = seedAddresses.join(', ');
+    const text = seedAddresses.join('\n');
     navigator.clipboard.writeText(text).then(() => {
         copySeedBtn.textContent = '✓ Kopiert';
         copySeedBtn.classList.add('copied');
