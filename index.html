@@ -38,8 +38,7 @@
 
         .dashboard-logo-box {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
             margin-bottom: 20px;
         }
 
@@ -52,6 +51,18 @@
         .dashboard-header-text {
             border-top: 2px solid #f2a93b;
             padding-top: 16px;
+            text-align: center;
+        }
+
+        .dashboard-header-top {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .dashboard-header-top .dashboard-title {
+            flex: 1;
+            text-align: center;
         }
 
         .dashboard-title {
@@ -245,13 +256,12 @@
 
     <!-- Logo & Titel -->
     <div class="dashboard-header">
-        <div class="dashboard-logo-box">
+        <div class="dashboard-header-top">
             <img src="pwlogofull_transparent.png" alt="performancewerk Logo" class="dashboard-logo">
             <h1 class="dashboard-title"><span style="font-weight:700;">werk</span><span style="color:#44403c;font-weight:300;">bank</span></h1>
+            <div style="width:180px;"></div>
         </div>
-        <div class="dashboard-header-text">
-            <p class="dashboard-subtitle">Interne Werkzeuge für das Template-Team</p>
-        </div>
+        <div class="dashboard-header-text"></div>
     </div>
 
     <!-- Kacheln -->
