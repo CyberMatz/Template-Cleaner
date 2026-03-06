@@ -118,6 +118,9 @@
         <div class="sc-summary" id="eoaSummary" style="display:none;"></div>
         <div class="sc-results-grid" id="eoaResults"></div>
         <div id="eoaHints" style="margin-top:16px;"></div>
+        <div style="margin-top:16px;">
+            <button class="sc-btn secondary" id="refreshEoaBtn" style="display:none; font-size:13px; padding:8px 16px;">🔄 Ergebnisse aktualisieren</button>
+        </div>
     </div>
 
     <!-- Tab Versand-Reputation -->
@@ -226,6 +229,7 @@ async function loadEoaResults() {
 
 function renderEoa(results) {
     $('eoaLoading').classList.remove('visible');
+    $('refreshEoaBtn').style.display = 'inline-flex';
     const items = Array.isArray(results) ? results : Object.values(results||{});
     if(!items.length) { $('eoaResults').innerHTML='<p style="color:#888;font-size:13px;">⏳ Noch keine Ergebnisse – bitte kurz warten.</p>'; return; }
     let pass=0,fail=0,pend=0;
@@ -314,6 +318,17 @@ document.querySelectorAll('.sc-tab').forEach(tab => {
         tab.classList.add('active');
         $('tab'+tab.dataset.tab).classList.add('active');
     });
+});
+
+document.addEventListener('click', e => {
+    if(e.target && e.target.id === 'refreshEoaBtn') {
+        $('refreshEoaBtn').disabled = true;
+        $('eoaLoading').classList.add('visible');
+        $('eoaResults').innerHTML = '';
+        $('eoaHints').innerHTML = '';
+        $('eoaSummary').style.display = 'none';
+        setTimeout(() => loadEoaResults().then(() => { $('refreshEoaBtn').disabled = false; }), 500);
+    }
 });
 
 $('openCheckerBtn').addEventListener('click', () => {
