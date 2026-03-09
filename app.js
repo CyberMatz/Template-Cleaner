@@ -4978,7 +4978,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.24-2026-03-09';
+const APP_VERSION = 'v3.9.25-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6358,6 +6358,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mimeType === 'text/html') {
             finalContent = stripCmsArtifacts(content);
             
+            // DIAGNOSE v3.9.25: Nach stripCmsArtifacts prüfen
+            const _td1 = (finalContent.match(/<td[\s>]/gi) || []).length;
+            const _td1c = (finalContent.match(/<\/td>/gi) || []).length;
+            console.log('[DIAG-STRIP] td open=' + _td1 + ' close=' + _td1c);
+            const _w1 = finalContent.indexOf('height="100%"');
+            if (_w1 > 0) console.log('[DIAG-STRIP] Wrapper:', JSON.stringify(finalContent.substring(_w1-5, _w1+60)));
+            
             // Sicherheitsnetz: CC-Blöcke INNERHALB von style-Attributen reparieren
             // Bug: Manchmal landen <!--[if !mso]><!--> oder <!--<![endif]--> 
             // versehentlich innerhalb von style="..." und spalten CSS-Properties.
@@ -6387,6 +6394,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (ccRepairCount > 0) {
                 console.warn('[DOWNLOAD] ' + ccRepairCount + ' style-Attribute mit CC-Blöcken repariert');
             }
+            
+            // DIAGNOSE v3.9.25: Nach CC-Repair prüfen
+            const _td2 = (finalContent.match(/<td[\s>]/gi) || []).length;
+            const _td2c = (finalContent.match(/<\/td>/gi) || []).length;
+            console.log('[DIAG-CCREPAIR] td open=' + _td2 + ' close=' + _td2c);
+            const _w2 = finalContent.indexOf('height="100%"');
+            if (_w2 > 0) console.log('[DIAG-CCREPAIR] Wrapper:', JSON.stringify(finalContent.substring(_w2-5, _w2+60)));
         }
         const blob = new Blob([finalContent], { type: mimeType });
         const url = URL.createObjectURL(blob);
