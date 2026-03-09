@@ -4978,7 +4978,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.23-2026-03-09';
+const APP_VERSION = 'v3.9.24-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5889,6 +5889,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const templateWidth = detectTemplateWidth(currentWorkingHtml);
             const widthSuffix = templateWidth ? `_${templateWidth}` : '';
             const newName = `${baseName}_final_optimized${widthSuffix}.${extension}`;
+            
+            // DIAGNOSE v3.9.24: currentWorkingHtml vor Download prüfen
+            const _tdOpenCount = (currentWorkingHtml.match(/<td[\s>]/gi) || []).length;
+            const _tdCloseCount = (currentWorkingHtml.match(/<\/td>/gi) || []).length;
+            const _trOpenCount = (currentWorkingHtml.match(/<tr[\s>]/gi) || []).length;
+            const _trCloseCount = (currentWorkingHtml.match(/<\/tr>/gi) || []).length;
+            console.log('[DOWNLOAD-DIAG] td open=' + _tdOpenCount + ' close=' + _tdCloseCount + ' | tr open=' + _trOpenCount + ' close=' + _trCloseCount);
+            const _wrapperIdx = currentWorkingHtml.indexOf('height="100%"');
+            if (_wrapperIdx > 0) {
+                console.log('[DOWNLOAD-DIAG] Wrapper-TD snippet:', JSON.stringify(currentWorkingHtml.substring(_wrapperIdx - 5, _wrapperIdx + 80)));
+            }
             
             downloadFile(currentWorkingHtml, newName, 'text/html');
             
