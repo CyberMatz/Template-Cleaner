@@ -1765,6 +1765,21 @@ class TemplateProcessor {
                 continue;
             }
             
+            // SICHERHEITSCHECK 2: </table> darf nie NACH </td> verschoben werden.
+            // Eine innere Tabelle muss immer VOR dem sie umschließenden </td> schließen.
+            // Wenn der Block </table> enthält UND </td> enthält, und </table> aktuell VOR </td> steht,
+            // dann ist das korrekt – keine Änderung erlaubt.
+            if (partTags.includes('table') && partTags.includes('td')) {
+                const tableIdx = partTags.indexOf('table');
+                const tdIdx = partTags.indexOf('td');
+                if (tableIdx < tdIdx) {
+                    // </table> kommt vor </td> – das ist korrekt, nicht anfassen
+                    console.log('[TAG-NESTING] Block ' + (bi + 1) + ' übersprungen (</table> korrekt vor </td>): ' + partTags.join(', '));
+                    skippedMixed++;
+                    continue;
+                }
+            }
+            
             // Stack aufbauen: Was ist VOR diesem Block alles offen?
             // (Kommentare entfernen für saubere Analyse)
             const beforeClean = this._stripHtmlComments(html.substring(0, block.start));
@@ -2048,14 +2063,68 @@ class TemplateProcessor {
         // SAFETY: Einfügeposition darf nicht innerhalb einer display:inline-block Struktur liegen.
         // Solche Strukturen werden für Zwei-Spalten-Layouts verwendet. Ein Tag das dort eingefügt
         // wird, zerstört die nebeneinander Anordnung der Spalten.
+        //
+        // ERWEITERUNG: Auch das <td> das inline-block Divs enthält ist geschützt.
+        // Muster: <td style="font-size:0;">  ← enthält gleich danach display:inline-block Divs
+        // Das Tool erkennt dieses <td> als ungeschlossen und fügt </td> direkt nach dem Öffner
+        // ein – noch vor dem ersten Div. Das zerstört die gesamte Zwei-Spalten-Struktur.
         if (bestPos !== -1) {
+            // Schritt 1: Alle inline-block Divs finden und ihre Position merken
+            const inlineBlockPositions = [];
+            const ibScanRegex = /<div[^>]+display\s*:\s*inline-block[^>]*>/gi;
+            let ibScan;
+            while ((ibScan = ibScanRegex.exec(this.html)) !== null) {
+                inlineBlockPositions.push(ibScan.index);
+            }
+
+            // Schritt 2: Für jeden inline-block Div: schützenden Bereich bestimmen
+            // (von dem <td> das den Div enthält bis zum letzten </div> der Gruppe)
+            for (const ibPos of inlineBlockPositions) {
+                if (ibPos <= bestPos) continue; // Nur Blöcke die NACH der Einfügeposition beginnen
+
+                // Suche rückwärts das <td> das diesen Div enthält
+                const beforeIb = this.html.substring(0, ibPos);
+                const lastTdOpen = beforeIb.lastIndexOf('<td');
+                const lastTdClose = beforeIb.lastIndexOf('</td>');
+
+                // Wenn das letzte <td> VOR dem letzten </td> liegt → das <td> ist noch offen
+                if (lastTdOpen > lastTdClose && lastTdOpen < bestPos) {
+                    // Einfügeposition liegt zwischen <td> und dem inline-block Div → verschieben
+                    console.log('[TAG-BALANCE] Einfügeposition liegt zwischen <td> und inline-block Div – verschiebe hinter alle inline-block Blöcke');
+                    
+                    // Finde das Ende des letzten inline-block Divs in dieser Gruppe
+                    let groupEnd = ibPos;
+                    const ibGroupRegex = /<div[^>]+display\s*:\s*inline-block[^>]*>/gi;
+                    ibGroupRegex.lastIndex = ibPos;
+                    let groupMatch;
+                    while ((groupMatch = ibGroupRegex.exec(this.html)) !== null) {
+                        // Finde das schließende </div> dieses Blocks
+                        let depth = 1;
+                        let sPos = groupMatch.index + groupMatch[0].length;
+                        while (sPos < this.html.length && depth > 0) {
+                            const nextOpen = this.html.toLowerCase().indexOf('<div', sPos);
+                            const nextClose = this.html.toLowerCase().indexOf('</div>', sPos);
+                            if (nextClose === -1) break;
+                            if (nextOpen !== -1 && nextOpen < nextClose) { depth++; sPos = nextOpen + 4; }
+                            else { depth--; if (depth === 0) groupEnd = nextClose + 6; sPos = nextClose + 6; }
+                        }
+                        // Prüfe ob der nächste Div noch zur Gruppe gehört (max 500 Zeichen Abstand)
+                        const nextIbMatch = this.html.substring(groupEnd, groupEnd + 500).match(/<div[^>]+display\s*:\s*inline-block/i);
+                        if (!nextIbMatch) break;
+                        ibGroupRegex.lastIndex = groupEnd;
+                    }
+                    bestPos = groupEnd;
+                    break;
+                }
+            }
+
+            // Schritt 3: Originalprüfung – Einfügeposition INNERHALB eines inline-block Divs
             const inlineBlockOpenRegex = /<div[^>]+display\s*:\s*inline-block[^>]*>/gi;
             let ibMatch;
             while ((ibMatch = inlineBlockOpenRegex.exec(this.html)) !== null) {
                 const ibStart = ibMatch.index;
-                if (ibStart >= bestPos) break; // Nur Blöcke die VOR der Einfügeposition beginnen
+                if (ibStart >= bestPos) break;
 
-                // Finde das schließende </div> dieses inline-block per Depth-Zählung
                 let depth = 1;
                 let sPos = ibStart + ibMatch[0].length;
                 let ibEnd = -1;
@@ -2063,17 +2132,10 @@ class TemplateProcessor {
                     const nextOpen = this.html.toLowerCase().indexOf('<div', sPos);
                     const nextClose = this.html.toLowerCase().indexOf('</div>', sPos);
                     if (nextClose === -1) break;
-                    if (nextOpen !== -1 && nextOpen < nextClose) {
-                        depth++;
-                        sPos = nextOpen + 4;
-                    } else {
-                        depth--;
-                        if (depth === 0) ibEnd = nextClose + 6;
-                        sPos = nextClose + 6;
-                    }
+                    if (nextOpen !== -1 && nextOpen < nextClose) { depth++; sPos = nextOpen + 4; }
+                    else { depth--; if (depth === 0) ibEnd = nextClose + 6; sPos = nextClose + 6; }
                 }
 
-                // Wenn die Einfügeposition INNERHALB dieses inline-block liegt: hinter Block verschieben
                 if (ibEnd !== -1 && bestPos > ibStart && bestPos < ibEnd) {
                     console.log('[TAG-BALANCE] Einfügeposition liegt innerhalb display:inline-block – verschiebe hinter Block-Ende:', ibEnd);
                     bestPos = ibEnd;
@@ -4897,7 +4959,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.18-2026-03-09';
+const APP_VERSION = 'v3.9.20-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
