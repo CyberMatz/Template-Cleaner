@@ -1572,7 +1572,7 @@ class TemplateProcessor {
         // - 'table': landet meist am Dateiende, sehr sicher
         // - 'td': sicher seit inline-block-Schutz in _findSmartInsertPosition (seit v3.9.17)
         //         verhindert dass </td> innerhalb von Zwei-Spalten-Layouts eingefügt wird
-        const safeToAutoFix = ['table', 'td'];
+        const safeToAutoFix = ['table']; // td bewusst entfernt: mso-wrapper-tds erscheinen nach comment-strip faelschlich als offen
         
         // Auto-Fixes Array initialisieren
         if (!this.autoFixes) {
@@ -4962,7 +4962,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.21-2026-03-09';
+const APP_VERSION = 'v3.9.22-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
