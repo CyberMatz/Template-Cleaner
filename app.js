@@ -3501,9 +3501,10 @@ class TemplateProcessor {
                 tOnlineFixed++;
                 // Vorhandene font/span-Tags aus innerText entfernen (von früheren Fix-Versuchen)
                 const cleanText = innerText.replace(/<\/?(font|span)[^>]*>/gi, '').trim();
-                // color !important im <a>-style schlägt jede externe CSS-Regel von T-Online/GMX/Web.de
-                // <font color> als zusätzliche Absicherung für ältere Rendering-Engines
-                return `<!--[if !mso]><!-->\n<table border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td bgcolor="${bgColor}" align="center" style="border-radius:0px;"><a href="${href}"${target} class="${className}" style="display:inline-block; padding:14px 24px; text-decoration:none; font-family:Arial,sans-serif; font-size:24px; font-weight:bold; color:${textColor} !important;"><font color="${textColor}">${cleanText}</font></a></td></tr></table>\n<!--<![endif]-->`;
+                // T-Online setzt eigene !important-Regel auf <a>-Tags die alles überschreibt.
+                // Lösung: Text in eigene <td> mit expliziter Farbe — <td> color wird nicht überschrieben.
+                // <a> umschließt die gesamte innere Tabelle (klickbar), enthält aber keinen direkt sichtbaren Text.
+                return `<!--[if !mso]><!-->\n<table border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td bgcolor="${bgColor}" align="center" style="border-radius:0px;"><a href="${href}"${target} style="text-decoration:none; display:block;"><table border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center" style="padding:14px 24px; font-family:Arial,sans-serif; font-size:24px; font-weight:bold; color:${textColor}; text-decoration:none;"><font color="${textColor}"><span style="color:${textColor} !important;">${cleanText}</span></font></td></tr></table></a></td></tr></table>\n<!--<![endif]-->`;
             }
         );
         if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Button(s) für T-Online mit Tabellen-Wrapper gesichert`);
@@ -5073,7 +5074,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.33-2026-03-09';
+const APP_VERSION = 'v3.9.34-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
