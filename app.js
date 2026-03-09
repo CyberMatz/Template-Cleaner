@@ -4978,7 +4978,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.25-2026-03-09';
+const APP_VERSION = 'v3.9.26-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11454,6 +11454,8 @@ td[width] { width: auto !important; }
     }
     
     // Handle Image Src Replace (Phase 7B)
+    // FIX v3.9.26: Kein DOMParser mehr – direktes Regex-Ersetzen im String
+    // DOMParser zerstört MSO-Wrapper-TDs (<!--[if mso]>...<![endif]-->) auch mit protectMsoStyles
     function handleImageSrcReplace(imgId, newSrc) {
         console.log('[INSPECTOR] Replacing image src:', imgId, 'with:', newSrc);
         
@@ -11463,21 +11465,24 @@ td[width] { width: auto !important; }
         // Finde Image via imgId (I001 -> 1. Image, I002 -> 2. Image, etc.)
         const imgIndex = parseInt(imgId.substring(1)) - 1;
         
-        // Parse HTML
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(protectMsoStyles(imagesTabHtml), 'text/html');
-        const images = doc.querySelectorAll('img');
+        // Alle <img>-Tags per Regex finden (kein DOMParser!)
+        const imgMatches = [...imagesTabHtml.matchAll(/<img\b[^>]*\/?>/gi)];
         
-        if (imgIndex >= 0 && imgIndex < images.length) {
-            const img = images[imgIndex];
-            const oldSrc = img.getAttribute('src');
+        if (imgIndex >= 0 && imgIndex < imgMatches.length) {
+            const m = imgMatches[imgIndex];
+            const oldTag = m[0];
+            const oldSrc = (oldTag.match(/src\s*=\s*"([^"]*)"/i) || [])[1] || '';
             
-            // Ersetze src
-            img.setAttribute('src', newSrc);
+            let newTag;
+            if (/src\s*=\s*"[^"]*"/i.test(oldTag)) {
+                // src-Attribut ersetzen
+                newTag = oldTag.replace(/src\s*=\s*"[^"]*"/i, 'src="' + newSrc + '"');
+            } else {
+                // Kein src vorhanden → einfügen
+                newTag = oldTag.replace(/^<img\b/i, '<img src="' + newSrc + '"');
+            }
             
-            // Serialisiere zurück
-            // BUG #4 FIX: outerHTML statt XMLSerializer
-            imagesTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
+            imagesTabHtml = imagesTabHtml.substring(0, m.index) + newTag + imagesTabHtml.substring(m.index + oldTag.length);
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -11486,16 +11491,17 @@ td[width] { width: auto !important; }
             updateInspectorPreview();
             
             // Re-render Images Tab
-            // imagesContent bereits oben deklariert
             showImagesTab(imagesContent);
             
-            console.log('[INSPECTOR] Image src replaced:', oldSrc, '->', newSrc);
+            console.log('[INSPECTOR] Image src replaced (regex):', oldSrc, '->', newSrc);
         } else {
             console.error('[INSPECTOR] Image not found:', imgId);
+            imagesHistory.pop();
         }
     }
     
     // Handle Image Remove (Phase 7B)
+    // FIX v3.9.26: Kein DOMParser mehr – direktes Regex-Ersetzen im String
     function handleImageRemove(imgId) {
         console.log('[INSPECTOR] Removing image:', imgId);
         
@@ -11505,20 +11511,15 @@ td[width] { width: auto !important; }
         // Finde Image via imgId
         const imgIndex = parseInt(imgId.substring(1)) - 1;
         
-        // Parse HTML
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(protectMsoStyles(imagesTabHtml), 'text/html');
-        const images = doc.querySelectorAll('img');
+        // Alle <img>-Tags per Regex finden (kein DOMParser!)
+        const imgMatches = [...imagesTabHtml.matchAll(/<img\b[^>]*\/?>/gi)];
         
-        if (imgIndex >= 0 && imgIndex < images.length) {
-            const img = images[imgIndex];
+        if (imgIndex >= 0 && imgIndex < imgMatches.length) {
+            const m = imgMatches[imgIndex];
+            const oldTag = m[0];
             
-            // Entferne <img> Tag
-            img.remove();
-            
-            // Serialisiere zurück
-            // BUG #4 FIX: outerHTML statt XMLSerializer
-            imagesTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
+            // Tag direkt aus String entfernen
+            imagesTabHtml = imagesTabHtml.substring(0, m.index) + imagesTabHtml.substring(m.index + oldTag.length);
             
             // Check Pending (Phase 10)
             checkImagesPending();
@@ -11527,16 +11528,17 @@ td[width] { width: auto !important; }
             updateInspectorPreview();
             
             // Re-render Images Tab
-            // imagesContent bereits oben deklariert
             showImagesTab(imagesContent);
             
-            console.log('[INSPECTOR] Image removed:', imgId);
+            console.log('[INSPECTOR] Image removed (regex):', imgId);
         } else {
             console.error('[INSPECTOR] Image not found:', imgId);
+            imagesHistory.pop();
         }
     }
     
     // Handle Image Alt-Text Change
+    // FIX v3.9.26: Kein DOMParser mehr – direktes Regex-Ersetzen im String
     function handleImageAltChange(imgId, newAlt) {
         console.log('[INSPECTOR] Changing image alt:', imgId, 'to:', newAlt);
         
@@ -11546,19 +11548,28 @@ td[width] { width: auto !important; }
         // Finde Image via imgId
         const imgIndex = parseInt(imgId.substring(1)) - 1;
         
-        // Parse HTML
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(protectMsoStyles(imagesTabHtml), 'text/html');
-        const images = doc.querySelectorAll('img');
+        // Alle <img>-Tags per Regex finden (kein DOMParser!)
+        const imgMatches = [...imagesTabHtml.matchAll(/<img\b[^>]*\/?>/gi)];
         
-        if (imgIndex >= 0 && imgIndex < images.length) {
-            const img = images[imgIndex];
+        if (imgIndex >= 0 && imgIndex < imgMatches.length) {
+            const m = imgMatches[imgIndex];
+            const oldTag = m[0];
             
-            // Setze alt-Attribut
-            img.setAttribute('alt', newAlt);
+            let newTag;
+            // Escape Anführungszeichen im alt-Text
+            const safeAlt = newAlt.replace(/"/g, '&quot;');
+            if (/alt\s*=\s*"[^"]*"/i.test(oldTag)) {
+                // alt-Attribut ersetzen
+                newTag = oldTag.replace(/alt\s*=\s*"[^"]*"/i, 'alt="' + safeAlt + '"');
+            } else {
+                // Kein alt vorhanden → einfügen (nach src wenn vorhanden)
+                newTag = oldTag.replace(/(src\s*=\s*"[^"]*")/i, '$1 alt="' + safeAlt + '"');
+                if (newTag === oldTag) {
+                    newTag = oldTag.replace(/^<img\b/i, '<img alt="' + safeAlt + '"');
+                }
+            }
             
-            // Serialisiere zurück
-            imagesTabHtml = XHTML_DOCTYPE + '\n' + safeDomSerialize(doc);
+            imagesTabHtml = imagesTabHtml.substring(0, m.index) + newTag + imagesTabHtml.substring(m.index + oldTag.length);
             
             // Check Pending
             checkImagesPending();
@@ -11573,7 +11584,7 @@ td[width] { width: auto !important; }
             recalculatePostCommitMetrics(imagesTabHtml);
             
             showInspectorToast('✅ Alt-Text für ' + imgId + ' geändert');
-            console.log('[INSPECTOR] Image alt changed:', imgId);
+            console.log('[INSPECTOR] Image alt changed (regex):', imgId);
         } else {
             console.error('[INSPECTOR] Image not found:', imgId);
             imagesHistory.pop();
