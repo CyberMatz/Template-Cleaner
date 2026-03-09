@@ -1568,9 +1568,11 @@ class TemplateProcessor {
         const tags = ['table', 'tr', 'td', 'a', 'div'];
         let fixed = false;
         
-        // Nur </table> mit hoher Sicherheit auto-einfügen (landen am Dateiende, sehr sicher)
-        // Alles andere: nur als Vorschlag melden
-        const safeToAutoFix = ['table'];
+        // Tags die mit hoher Sicherheit automatisch eingefügt werden dürfen:
+        // - 'table': landet meist am Dateiende, sehr sicher
+        // - 'td': sicher seit inline-block-Schutz in _findSmartInsertPosition (seit v3.9.17)
+        //         verhindert dass </td> innerhalb von Zwei-Spalten-Layouts eingefügt wird
+        const safeToAutoFix = ['table', 'td'];
         
         // Auto-Fixes Array initialisieren
         if (!this.autoFixes) {
@@ -4895,7 +4897,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.17-2026-03-09';
+const APP_VERSION = 'v3.9.18-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
