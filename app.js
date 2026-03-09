@@ -2040,6 +2040,42 @@ class TemplateProcessor {
             }
         }
         
+        // SAFETY: Einfügeposition darf nicht innerhalb einer display:inline-block Struktur liegen.
+        // Solche Strukturen werden für Zwei-Spalten-Layouts verwendet. Ein Tag das dort eingefügt
+        // wird, zerstört die nebeneinander Anordnung der Spalten.
+        if (bestPos !== -1) {
+            const inlineBlockOpenRegex = /<div[^>]+display\s*:\s*inline-block[^>]*>/gi;
+            let ibMatch;
+            while ((ibMatch = inlineBlockOpenRegex.exec(this.html)) !== null) {
+                const ibStart = ibMatch.index;
+                if (ibStart >= bestPos) break; // Nur Blöcke die VOR der Einfügeposition beginnen
+
+                // Finde das schließende </div> dieses inline-block per Depth-Zählung
+                let depth = 1;
+                let sPos = ibStart + ibMatch[0].length;
+                let ibEnd = -1;
+                while (sPos < this.html.length && depth > 0) {
+                    const nextOpen = this.html.toLowerCase().indexOf('<div', sPos);
+                    const nextClose = this.html.toLowerCase().indexOf('</div>', sPos);
+                    if (nextClose === -1) break;
+                    if (nextOpen !== -1 && nextOpen < nextClose) {
+                        depth++;
+                        sPos = nextOpen + 4;
+                    } else {
+                        depth--;
+                        if (depth === 0) ibEnd = nextClose + 6;
+                        sPos = nextClose + 6;
+                    }
+                }
+
+                // Wenn die Einfügeposition INNERHALB dieses inline-block liegt: hinter Block verschieben
+                if (ibEnd !== -1 && bestPos > ibStart && bestPos < ibEnd) {
+                    console.log('[TAG-BALANCE] Einfügeposition liegt innerhalb display:inline-block – verschiebe hinter Block-Ende:', ibEnd);
+                    bestPos = ibEnd;
+                }
+            }
+        }
+
         // Konfidenz-Bewertung
         let confidence = 'high';
         
