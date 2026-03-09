@@ -3432,23 +3432,34 @@ class TemplateProcessor {
         if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
         if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
 
-        // T-ONLINE FIX: CTA-Button-Text in <font color="..."> wickeln
-        // T-Online überschreibt color auf <a>- und <span>-Tags mit eigenem Link-Style.
-        // <font color="..."> wird von T-Online NICHT überschrieben (alter HTML-Standard).
+        // T-ONLINE FIX: <a>-Button in Mini-Tabelle mit bgcolor-Attribut wickeln
+        // T-Online entfernt background-color + color aus style-Attributen von <a>-Tags.
+        // bgcolor als HTML-Attribut auf <td> wird NICHT entfernt → zuverlässiger Hintergrund.
+        // Gleichzeitig: <font color="..."> für die Textfarbe (auch Attribut, nicht CSS).
         let tOnlineFixed = 0;
         this.html = this.html.replace(
-            /(<a\b[^>]*class="[^"]*clickbutton[^"]*"[^>]*style\s*=\s*"([^"]*)"[^>]*>)([\s\S]*?)(<\/a>)/gi,
-            (match, openTag, styleContent, innerText, closeTag) => {
-                // Schon ein <font> drin? → nicht nochmal einwickeln
-                if (/<font/i.test(innerText)) return match;
-                // Textfarbe aus style extrahieren
-                const colorMatch = styleContent.match(/(?:^|;)\s*color\s*:\s*(#?[a-zA-Z0-9]+)/i);
+            /<!--\[if !mso\]><!-->\s*\n?(<a\b([^>]*)class="([^"]*clickbutton[^"]*)"([^>]*)style\s*=\s*"([^"]*)"([^>]*)>([\s\S]*?)<\/a>)\s*\n?<!--<!\[endif\]-->/gi,
+            (match, fullA, before, className, after, styleContent, after2, innerText) => {
+                // Schon eine Tabelle drum? → nicht nochmal
+                if (/<table/i.test(match)) return match;
+                // Farben extrahieren
+                const bgMatch = styleContent.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+                const colorMatch = styleContent.match(/(?:^|;)\s*color\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+                const bgColor = bgMatch ? bgMatch[1] : '#000000';
                 const textColor = colorMatch ? colorMatch[1] : '#ffffff';
+                // Href extrahieren
+                const hrefMatch = (before + after + after2).match(/href\s*=\s*"([^"]*)"/i);
+                const href = hrefMatch ? hrefMatch[1] : '#';
+                const targetMatch = (before + after + after2).match(/target\s*=\s*"([^"]*)"/i);
+                const target = targetMatch ? ` target="${targetMatch[1]}"` : '';
+                // Padding aus style extrahieren (falls vorhanden)
+                const paddingMatch = styleContent.match(/padding\s*:\s*([^;]+)/i);
+                const padding = paddingMatch ? paddingMatch[1].trim() : '14px 24px';
                 tOnlineFixed++;
-                return openTag + '<font color="' + textColor + '">' + innerText.trim() + '</font>' + closeTag;
+                return `<!--[if !mso]><!-->\n<table border="0" cellpadding="0" cellspacing="0"><tr><td bgcolor="${bgColor}" align="center" style="border-radius:0px;"><a href="${href}"${target} class="${className}" style="display:inline-block; padding:${padding}; text-decoration:none; font-family:Arial,sans-serif; font-size:24px; font-weight:bold;"><font color="${textColor}">${innerText.trim()}</font></a></td></tr></table>\n<!--<![endif]-->`;
             }
         );
-        if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Text(e) für T-Online mit font-Tag gesichert`);
+        if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Button(s) für T-Online mit Tabellen-Wrapper gesichert`);
 
         // T-ONLINE FIX 2: Container-TD des CTA-Buttons bekommt bgcolor-Attribut
         // T-Online ignoriert background-color im style der <a>-Tags.
@@ -5015,7 +5026,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.30-2026-03-09';
+const APP_VERSION = 'v3.9.31-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
