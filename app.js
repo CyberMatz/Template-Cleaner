@@ -3432,23 +3432,23 @@ class TemplateProcessor {
         if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
         if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
 
-        // T-ONLINE FIX: CTA-Button-Text in <span> mit expliziter Textfarbe wickeln
-        // T-Online entfernt color aus <a>-Tags → Text wird unsichtbar (weiß auf weißem Hintergrund)
-        // Lösung: Text in <span style="color:..."> einwickeln – das respektiert T-Online
+        // T-ONLINE FIX: CTA-Button-Text in <font color="..."> wickeln
+        // T-Online überschreibt color auf <a>- und <span>-Tags mit eigenem Link-Style.
+        // <font color="..."> wird von T-Online NICHT überschrieben (alter HTML-Standard).
         let tOnlineFixed = 0;
         this.html = this.html.replace(
             /(<a\b[^>]*class="[^"]*clickbutton[^"]*"[^>]*style\s*=\s*"([^"]*)"[^>]*>)([\s\S]*?)(<\/a>)/gi,
             (match, openTag, styleContent, innerText, closeTag) => {
-                // Schon ein <span> drin? → nicht nochmal einwickeln
-                if (/<span/i.test(innerText)) return match;
+                // Schon ein <font> drin? → nicht nochmal einwickeln
+                if (/<font/i.test(innerText)) return match;
                 // Textfarbe aus style extrahieren
                 const colorMatch = styleContent.match(/(?:^|;)\s*color\s*:\s*(#?[a-zA-Z0-9]+)/i);
                 const textColor = colorMatch ? colorMatch[1] : '#ffffff';
                 tOnlineFixed++;
-                return openTag + '<span style="color:' + textColor + '; text-decoration:none;">' + innerText.trim() + '</span>' + closeTag;
+                return openTag + '<font color="' + textColor + '">' + innerText.trim() + '</font>' + closeTag;
             }
         );
-        if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Text(e) für T-Online mit span-Farbe gesichert`);
+        if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Text(e) für T-Online mit font-Tag gesichert`);
 
         // T-ONLINE FIX 2: Container-TD des CTA-Buttons bekommt bgcolor-Attribut
         // T-Online ignoriert background-color im style der <a>-Tags.
@@ -5015,7 +5015,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.29-2026-03-09';
+const APP_VERSION = 'v3.9.30-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
