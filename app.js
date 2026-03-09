@@ -1767,14 +1767,17 @@ class TemplateProcessor {
             
             // SICHERHEITSCHECK 2: </table> darf nie NACH </td> verschoben werden.
             // Eine innere Tabelle muss immer VOR dem sie umschließenden </td> schließen.
-            // Wenn der Block </table> enthält UND </td> enthält, und </table> aktuell VOR </td> steht,
-            // dann ist das korrekt – keine Änderung erlaubt.
+            // Geschützte Muster:
+            // - </table>...</td>  → table vor td: korrekt, nicht anfassen
+            // - </td>...</table>...</td> → table zwischen tds: korrekt, nicht anfassen
+            //   (innere Zeile schließt, dann innere Tabelle, dann äußeres td)
             if (partTags.includes('table') && partTags.includes('td')) {
                 const tableIdx = partTags.indexOf('table');
-                const tdIdx = partTags.indexOf('td');
-                if (tableIdx < tdIdx) {
-                    // </table> kommt vor </td> – das ist korrekt, nicht anfassen
-                    console.log('[TAG-NESTING] Block ' + (bi + 1) + ' übersprungen (</table> korrekt vor </td>): ' + partTags.join(', '));
+                // Gibt es ein </td> das NACH </table> kommt?
+                const tdAfterTable = partTags.slice(tableIdx + 1).includes('td');
+                if (tdAfterTable) {
+                    // </td> nach </table> → das ist das äußere Container-td, korrekte Struktur
+                    console.log('[TAG-NESTING] Block ' + (bi + 1) + ' übersprungen (</td> nach </table>, korrekte Verschachtelung): ' + partTags.join(', '));
                     skippedMixed++;
                     continue;
                 }
@@ -4959,7 +4962,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.20-2026-03-09';
+const APP_VERSION = 'v3.9.21-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
