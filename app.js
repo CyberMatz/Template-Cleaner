@@ -1727,8 +1727,24 @@ class TemplateProcessor {
         // Alle Blöcke sammeln (rückwärts verarbeiten damit Positionen stimmen)
         const blocks = [];
         let bm;
+        
+        // Kommentar-Bereiche vorberechnen – Blöcke INNERHALB von Kommentaren werden übersprungen
+        // Betrifft vor allem: <!--[if (gte mso 9)|(IE)]></td></tr></table><![endif]-->
+        // Diese enthalten korrekte </td></tr></table>-Sequenzen die NICHT umsortiert werden dürfen
+        const commentRanges = [];
+        const commentScanRegex = /<!--[\s\S]*?-->/g;
+        let cMatch;
+        while ((cMatch = commentScanRegex.exec(originalHtml)) !== null) {
+            commentRanges.push([cMatch.index, cMatch.index + cMatch[0].length]);
+        }
+        
         while ((bm = blockPattern.exec(originalHtml)) !== null) {
-            blocks.push({ start: bm.index, end: bm.index + bm[0].length, text: bm[0] });
+            // Block überspringen wenn er sich innerhalb eines Kommentars befindet
+            const blockStart = bm.index;
+            const inComment = commentRanges.some(([cs, ce]) => blockStart >= cs && blockStart < ce);
+            if (!inComment) {
+                blocks.push({ start: bm.index, end: bm.index + bm[0].length, text: bm[0] });
+            }
         }
         
         // Rückwärts verarbeiten (damit Positionen nicht verrutschen)
@@ -4962,7 +4978,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.22-2026-03-09';
+const APP_VERSION = 'v3.9.23-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
