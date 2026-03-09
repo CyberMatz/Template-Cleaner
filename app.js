@@ -4625,26 +4625,44 @@ function extractTemplateKeywords(html) {
     clean = clean.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
     clean = clean.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
 
-    // Überschriften und Fettdruck extrahieren (oft die wichtigsten Keywords)
+    // Stoppwörter die alleine keinen sinnvollen Betreff ergeben
+    const STOPWORDS = /^(jetzt|hier|weiter|mehr|klicken|ansehen|entdecken|kaufen|bestellen|jeden\s+monat|pro\s+monat|monatlich|täglich|wöchentlich|ja|nein|und|oder|mit|für|von|zu|in|auf|an|ihr|sie|wir|ich|das|die|der|ein|eine|alle|mehr\s+erfahren|zum\s+angebot|jetzt\s+kaufen|jetzt\s+bestellen|hier\s+klicken|weiterlesen)$/i;
+
+    // Überschriften und Fettdruck extrahieren – mit Qualitätsfilter
     const boldMatches = [...clean.matchAll(/<(?:strong|b|h[1-4])\b[^>]*>([\s\S]*?)<\/(?:strong|b|h[1-4])>/gi)];
     const boldTexts = boldMatches
-        .map(m => m[1].replace(/<[^>]*>/g, '').trim())
-        .filter(t => t.length > 3 && t.length < 120);
+        .map(m => m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim())
+        .filter(t => {
+            if (t.length < 8 || t.length > 120) return false;    // Zu kurz oder zu lang
+            if (STOPWORDS.test(t.trim())) return false;           // Generisches Stoppwort
+            if (/^\d/.test(t) && !/[a-zA-ZäöüÄÖÜ]{3}/.test(t)) return false; // Nur Zahl ohne Text
+            const words = t.split(/\s+/).filter(w => w.length > 2);
+            return words.length >= 2;                             // Mindestens 2 sinnvolle Wörter
+        });
 
     // Alle sichtbaren Texte (plain)
     const allText = clean.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // CTA-Buttons / Links mit kurzem Text (oft Aktionsversprechen)
+    // CTA-Buttons / Links – mit Qualitätsfilter (kein reines "Hier klicken" etc.)
     const ctaMatches = [...clean.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)];
     const ctaTexts = ctaMatches
-        .map(m => m[1].replace(/<[^>]*>/g, '').trim())
-        .filter(t => t.length > 3 && t.length < 60 && !/http|www|@/i.test(t));
+        .map(m => m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim())
+        .filter(t => {
+            if (t.length < 8 || t.length > 60) return false;
+            if (/http|www|@/i.test(t)) return false;
+            if (STOPWORDS.test(t.trim())) return false;
+            return true;
+        });
 
-    // Zahlen + Einheiten erkennen (Rabatt, Prozent, Euro, Gratis etc.)
-    const numbers = allText.match(/\d+\s*(?:%|€|Euro|Monate?|Tage?|Jahre?|Wochen?|Stunden?|x\b)/gi) || [];
+    // Zahlen + Einheiten – korrekt für deutsche Zahlenformatierung (12.000 Euro, 5 %, etc.)
+    // Wichtig: [\d.,]+ statt \d+ damit "12.000" als eine Zahl erkannt wird
+    const numbers = allText.match(/[\d.,]+\s*(?:%|€|Euro)/gi) || [];
+
+    // Nochmals filtern: Muss tatsächlich eine sinnvolle Zahl sein (nicht "." oder ",")
+    const savings = numbers.filter(n => /\d/.test(n) && /€|Euro|%/i.test(n));
+
     const gratis = /gratis|kostenlos|frei|umsonst|geschenk|bonus/i.test(allText);
-    const urgency = /nur.*kurze.*zeit|jetzt|sofort|begrenzt|letzte.*chance|exklusiv|aktion|angebot/i.test(allText);
-    const savings = numbers.filter(n => /€|Euro|%/i.test(n));
+    const urgency = /nur.*kurze.*zeit|begrenzt|letzte.*chance|exklusiv|befristet|zeitlich/i.test(allText);
 
     return {
         boldTexts,
@@ -4661,120 +4679,118 @@ function extractTemplateKeywords(html) {
 function generateTextSuggestions(html) {
     const kw = extractTemplateKeywords(html);
 
-    // Hilfsfunktion: ersten brauchbaren Fetttext holen
-    const firstBold = (minLen = 5) => kw.boldTexts.find(t => t.length >= minLen) || '';
-    const secondBold = (minLen = 5) => kw.boldTexts.filter(t => t.length >= minLen)[1] || '';
+    // Hilfsfunktionen
+    const firstBold = (minLen = 8) => kw.boldTexts.find(t => t.length >= minLen) || '';
+    const secondBold = (minLen = 8) => kw.boldTexts.filter(t => t.length >= minLen)[1] || '';
     const firstCta = kw.ctaTexts[0] || '';
     const firstSaving = kw.savings[0] || '';
-    const firstNumber = kw.numbers[0] || '';
 
-    // Kürze-Helfer
-    const shorten = (text, max = 60) => text.length > max ? text.substring(0, max).replace(/\s\S+$/, '') + '…' : text;
+    const shorten = (text, max = 70) => text.length > max ? text.substring(0, max).replace(/\s\S+$/, '') + '…' : text;
     const cap = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+
+    // Prüft ob ein extrahierter Text wirklich als Satz-Baustein taugt
+    const isUsable = t => t && t.length >= 8 && t.split(/\s+/).length >= 2;
 
     // ─── BETREFFZEILEN (5 Stück) ───────────────────────────────────────
     const subjects = [];
 
-    // Variante 1: Direkt aus erstem Fetttext
-    if (firstBold()) {
-        subjects.push(shorten(cap(firstBold()), 70));
+    // Variante 1: Direkt aus erstem Fetttext (wenn sinnvoll)
+    if (isUsable(firstBold())) {
+        subjects.push(shorten(cap(firstBold())));
     }
 
-    // Variante 2: Mit Sparversprechen wenn vorhanden
-    if (firstSaving && firstBold()) {
-        subjects.push(shorten(cap(firstBold()) + ' – ' + firstSaving + ' sparen', 70));
+    // Variante 2: Mit konkretem Sparversprechen
+    if (firstSaving && isUsable(firstBold())) {
+        subjects.push(shorten(cap(firstBold()) + ' – jetzt ' + firstSaving + ' sparen'));
     } else if (firstSaving) {
         subjects.push('Jetzt ' + firstSaving + ' sparen – nur für kurze Zeit');
     }
 
-    // Variante 3: Mit Gratis/Bonus-Element
-    if (kw.gratis && firstBold()) {
-        subjects.push(shorten(cap(firstBold()) + ' – jetzt gratis testen', 70));
+    // Variante 3: Gratis/Bonus-Element
+    if (kw.gratis && isUsable(firstBold())) {
+        subjects.push(shorten(cap(firstBold()) + ' – jetzt kostenlos testen'));
     } else if (kw.gratis) {
         subjects.push('Ihr kostenloses Angebot wartet auf Sie');
     }
 
-    // Variante 4: Dringlichkeit / Zeitdruck
-    if (kw.urgency && firstBold()) {
-        subjects.push('Nur jetzt: ' + shorten(firstBold(), 55));
-    } else if (firstBold(10)) {
-        subjects.push('Ihr persönliches Angebot: ' + shorten(firstBold(10), 45));
+    // Variante 4: Zweiter Fetttext oder CTA als Abwechslung
+    if (isUsable(secondBold())) {
+        subjects.push(shorten(cap(secondBold())));
+    } else if (isUsable(firstCta)) {
+        subjects.push(shorten(cap(firstCta)));
     }
 
-    // Variante 5: Zweiter Fetttext oder CTA
-    if (secondBold()) {
-        subjects.push(shorten(cap(secondBold()), 70));
-    } else if (firstCta) {
-        subjects.push(shorten(cap(firstCta), 70));
-    } else if (firstBold()) {
-        subjects.push('Jetzt entdecken: ' + shorten(firstBold(), 50));
+    // Variante 5: Kombination mit Dringlichkeit
+    if (kw.urgency && isUsable(firstBold())) {
+        subjects.push('Nur noch kurze Zeit: ' + shorten(firstBold(), 50));
+    } else if (isUsable(firstBold()) && subjects.length < 5) {
+        subjects.push('Ihr persönliches Angebot: ' + shorten(firstBold(), 45));
     }
 
-    // Lücken auffüllen falls zu wenig extrahiert
+    // Lücken mit sinnvollen Fallbacks auffüllen
     const subjectFallbacks = [
         'Ihr exklusives Angebot – jetzt ansehen',
-        'Nur für Sie: Ein besonderes Angebot',
-        'Jetzt informieren und profitieren',
+        'Nur für Sie: Ein besonderes Angebot wartet',
         'Das sollten Sie nicht verpassen',
-        'Ihr persönliches Vorteilsangebot'
+        'Jetzt informieren und von Ihrem Vorteil profitieren',
+        'Ihr persönliches Vorteilsangebot ist bereit'
     ];
     while (subjects.length < 5) {
-        subjects.push(subjectFallbacks[subjects.length]);
+        subjects.push(subjectFallbacks[subjects.length % subjectFallbacks.length]);
     }
 
     // ─── PRE-HEADER (5 Stück) ──────────────────────────────────────────
     const preheaders = [];
 
-    // Variante 1: CTA-Text als Einladung
-    if (firstCta) {
-        preheaders.push(shorten(cap(firstCta) + ' – jetzt informieren', 90));
-    } else if (firstBold()) {
-        preheaders.push(shorten(cap(firstBold()) + ' – alle Details hier', 90));
+    // Variante 1: CTA als Einladung
+    if (isUsable(firstCta)) {
+        preheaders.push(shorten(cap(firstCta) + ' – alle Details auf einen Blick.', 90));
+    } else if (isUsable(firstBold())) {
+        preheaders.push(shorten(cap(firstBold()) + ' – jetzt mehr erfahren.', 90));
     }
 
-    // Variante 2: Sparversprechen konkret
+    // Variante 2: Konkretes Sparversprechen
     if (firstSaving) {
-        preheaders.push('Sichern Sie sich jetzt ' + firstSaving + ' – Angebot gilt nur für kurze Zeit.');
-    } else if (firstNumber) {
-        preheaders.push('Entdecken Sie unser Angebot: ' + firstNumber + ' – jetzt mehr erfahren.');
+        preheaders.push('Sichern Sie sich jetzt ' + firstSaving + ' – das Angebot gilt nur für kurze Zeit.');
+    } else if (isUsable(firstBold())) {
+        preheaders.push(shorten('Entdecken Sie: ' + firstBold() + ' – einfach und unkompliziert.', 90));
     }
 
-    // Variante 3: Gratis-Element betonen
+    // Variante 3: Gratis-Element oder zweiter Fetttext
     if (kw.gratis) {
         preheaders.push('Kostenlos ausprobieren – ohne Risiko, jederzeit kündbar.');
-    } else if (secondBold()) {
+    } else if (isUsable(secondBold())) {
         preheaders.push(shorten(cap(secondBold()) + ' – einfach, schnell und sicher.', 90));
     }
 
     // Variante 4: Neugier wecken
-    if (firstBold(8)) {
-        preheaders.push('Wussten Sie schon? ' + shorten(firstBold(8), 65));
+    if (isUsable(firstBold())) {
+        preheaders.push(shorten('Das erwartet Sie: ' + firstBold(), 90));
     } else {
         preheaders.push('Exklusiv für Sie – schauen Sie jetzt rein.');
     }
 
     // Variante 5: Handlungsaufforderung
-    if (firstCta && firstSaving) {
-        preheaders.push(shorten(cap(firstCta), 40) + ' und ' + firstSaving + ' sparen – direkt hier.');
-    } else if (firstBold()) {
-        preheaders.push('Jetzt ' + shorten(firstBold().toLowerCase(), 50) + ' – schnell und unkompliziert.');
+    if (isUsable(firstCta) && firstSaving) {
+        preheaders.push(shorten(cap(firstCta), 40) + ' und dabei ' + firstSaving + ' sparen – direkt hier.');
+    } else if (isUsable(firstBold())) {
+        preheaders.push(shorten('Jetzt entdecken: ' + firstBold() + ' – schnell und unkompliziert.', 90));
     } else {
-        preheaders.push('Ihr Vorteil wartet – jetzt ansehen und profitieren.');
+        preheaders.push('Ihr Vorteil wartet bereits – jetzt ansehen und profitieren.');
     }
 
     const preheaderFallbacks = [
         'Ihr persönliches Angebot – jetzt mehr erfahren.',
-        'Nur für kurze Zeit – jetzt zugreifen.',
+        'Nur für kurze Zeit – sichern Sie sich Ihren Vorteil.',
         'Alles Wichtige auf einen Blick – hier klicken.',
         'Entdecken Sie, was wir für Sie bereithalten.',
         'Einfach, schnell und unkompliziert – jetzt starten.'
     ];
     while (preheaders.length < 5) {
-        preheaders.push(preheaderFallbacks[preheaders.length]);
+        preheaders.push(preheaderFallbacks[preheaders.length % preheaderFallbacks.length]);
     }
 
     // ─── ABSENDER (5 Stück) ────────────────────────────────────────────
-    // Kein Listen- oder Produktname – nur generische, professionelle Absender
     const senders = [
         'Ihr Kundenservice',
         'Ihr persönlicher Ansprechpartner',
