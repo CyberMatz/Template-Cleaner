@@ -1748,8 +1748,11 @@ class TemplateProcessor {
             // Template-Ersteller verschachteln absichtlich <div> innerhalb von <table> auf
             // eine Weise die technisch "falsch" aber für Mobile-Rendering nötig ist.
             // Umsortierung würde die DOM-Struktur und damit CSS-Regeln verändern.
+            // <center> wird ebenfalls als block-ähnlich behandelt, da es häufig als Wrapper
+            // innerhalb von <td> vorkommt (z.B. <td><center><table>...</table></center></td>)
+            // und eine Umsortierung die gesamte Seitenstruktur zerstören würde.
             const tableTags = new Set(['table', 'tr', 'td', 'th', 'thead', 'tbody', 'tfoot']);
-            const blockTags = new Set(['div', 'span', 'section', 'article', 'nav', 'aside']);
+            const blockTags = new Set(['div', 'span', 'section', 'article', 'nav', 'aside', 'center']);
             const partTags = parts.map(p => p.tag);
             const hasTableTags = partTags.some(t => tableTags.has(t));
             const hasBlockTags = partTags.some(t => blockTags.has(t));
@@ -4892,7 +4895,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.16-2026-03-06';
+const APP_VERSION = 'v3.9.17-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
