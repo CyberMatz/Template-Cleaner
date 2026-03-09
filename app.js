@@ -3449,8 +3449,27 @@ class TemplateProcessor {
             }
         );
         if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Text(e) für T-Online mit span-Farbe gesichert`);
+
+        // T-ONLINE FIX 2: Container-TD des CTA-Buttons bekommt bgcolor-Attribut
+        // T-Online ignoriert background-color im style der <a>-Tags.
+        // Die umschließende TD braucht ein bgcolor-Attribut damit der Hintergrund sichtbar ist.
+        // Erkennungsmuster: <td ... style="color:#ffffff;"> direkt vor einem <!--[if mso]> VML-Button
+        let tOnlineTdFixed = 0;
+        this.html = this.html.replace(
+            /(<td\b([^>]*)style\s*=\s*"([^"]*)"([^>]*)>)(<!--\[if mso\]>[\s\S]*?fillcolor="(#[a-fA-F0-9]{3,6})"[\s\S]*?<a[^>]*clickbutton)/gi,
+            (match, tdTag, before, styleContent, after, rest, fillColor) => {
+                // Schon ein bgcolor? → nicht nochmal
+                if (/bgcolor\s*=/i.test(tdTag)) return match;
+                // Nur wenn style "color:#fff" enthält (CTA-Container-Indikator)
+                if (!/color\s*:\s*#?(?:fff(?:fff)?|ffffff)/i.test(styleContent)) return match;
+                tOnlineTdFixed++;
+                const fixedTd = '<td' + before + 'bgcolor="' + fillColor + '" style="' + styleContent + '"' + after + '>';
+                return fixedTd + rest;
+            }
+        );
+        if (tOnlineTdFixed > 0) parts.push(`${tOnlineTdFixed} CTA-Container-TD(s) bgcolor für T-Online ergänzt`);
         
-        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0 || tOnlineFixed > 0) {
+        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0 || tOnlineFixed > 0 || tOnlineTdFixed > 0) {
             this.addCheck(id, 'FIXED', parts.join(', ') + ` (${totalCtas} CTAs gesamt)`);
         } else {
             this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) Outlook-kompatibel` + (ctasSkippedTable > 0 ? ` (${ctasSkippedTable} Tabellen-Button(s) nativ kompatibel)` : ''));
@@ -4996,7 +5015,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.28-2026-03-09';
+const APP_VERSION = 'v3.9.29-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
