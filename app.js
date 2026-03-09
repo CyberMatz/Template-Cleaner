@@ -15170,6 +15170,7 @@ td[width] { width: auto !important; }
         updateInspectorPreview();
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
+        updateTagReviewSummary();
         showInspectorToast('↶ ' + fix.id + ' rückgängig gemacht');
     }
     
@@ -15239,6 +15240,8 @@ td[width] { width: auto !important; }
         // Andere Tabs synchronisieren (damit sie die Tag-Änderung nicht überschreiben)
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
+        recalculatePostCommitMetrics(currentWorkingHtml);
+        updateTagReviewSummary();
         showInspectorToast('🗑️ Überzähliges </' + tag + '> entfernt (direkt übernommen – kein Commit nötig)');
     }
     
@@ -15318,6 +15321,8 @@ td[width] { width: auto !important; }
         updateInspectorPreview();
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
+        recalculatePostCommitMetrics(currentWorkingHtml);
+        updateTagReviewSummary();
         showInspectorToast('✓ <' + tag + '> manuell geschlossen (direkt übernommen – kein Commit nötig)' + (bestBoundary ? ' (vor ' + bestBoundary + ')' : ''));
     }
     
@@ -15338,8 +15343,39 @@ td[width] { width: auto !important; }
         element.querySelector('.tagreview-problem-header').appendChild(label);
         
         showInspectorToast('– ' + problemId + ' ignoriert');
+        updateTagReviewSummary();
     }
     
+    // Zusammenfassung im Tag-Review nach jeder Aktion neu berechnen
+    function updateTagReviewSummary() {
+        const summaryEl = document.querySelector('.tagreview-summary');
+        if (!summaryEl) return;
+
+        // Zähle alle Problem-Items und wie viele noch offen sind
+        const allProblems = document.querySelectorAll('.tagreview-problem-item');
+        const resolvedOrIgnored = document.querySelectorAll('.tagreview-problem-item.resolved, .tagreview-problem-item.ignored');
+        const openCount = allProblems.length - resolvedOrIgnored.length;
+
+        // Zähle alle Vorschlags-Fixes und wie viele noch offen sind
+        const allSuggested = document.querySelectorAll('.autofix-suggested');
+        const resolvedSuggested = document.querySelectorAll('.autofix-suggested.applied, .autofix-suggested.ignored-fix');
+        const openSuggested = allSuggested.length - resolvedSuggested.length;
+
+        const titleEl = summaryEl.querySelector('.tagreview-summary-title');
+        if (!titleEl) return;
+
+        if (openCount === 0 && openSuggested === 0) {
+            summaryEl.className = 'tagreview-summary summary-ok';
+            titleEl.textContent = '✅ Tag-Balancing: Alles erledigt';
+        } else {
+            summaryEl.className = 'tagreview-summary summary-warn';
+            const parts = [];
+            if (openSuggested > 0) parts.push(openSuggested + ' Vorschlag' + (openSuggested > 1 ? 'e' : '') + ' offen');
+            if (openCount > 0) parts.push(openCount + ' Problem' + (openCount > 1 ? 'e' : '') + ' offen');
+            titleEl.textContent = '⚙️ Tag-Balancing: ' + parts.join(', ');
+        }
+    }
+
     // ============================================
     // PHASE 6: EDITOR TAB IMPLEMENTATION
     // ============================================
