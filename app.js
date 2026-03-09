@@ -3348,6 +3348,32 @@ class TemplateProcessor {
                     ctasMismatched++;
                 }
                 
+                // VML-BREITEN-FIX: Prüfe ob VML-Button die volle Template-Breite (≥500px) hat
+                // aber der <a>-Button kein explizites width hat (= eigentlich schmaler Button).
+                // Typisch wenn Template-Ersteller width:600px im VML setzen statt Button-Breite.
+                // Fix: VML-Breite auf sinnvollen Button-Wert (250px) reduzieren.
+                const vmlWidthMatch = vmlBlock.fullMatch.match(/width\s*:\s*(\d+)px/i);
+                const ctaWidthMatch = cta.fullMatch ? cta.fullMatch.match(/width\s*:\s*(\d+)px/i) : null;
+                if (vmlWidthMatch) {
+                    const vmlWidth = parseInt(vmlWidthMatch[1]);
+                    const ctaWidth = ctaWidthMatch ? parseInt(ctaWidthMatch[1]) : 0;
+                    // VML ist viel breiter als der eigentliche Button → korrigieren
+                    if (vmlWidth >= 500 && ctaWidth < 400) {
+                        const targetWidth = ctaWidth > 0 ? ctaWidth : 250;
+                        const currentVml = this.html.substring(vmlBlock.index, vmlBlock.endIndex);
+                        const fixedVml2 = currentVml.replace(
+                            /width\s*:\s*\d+px/i,
+                            'width:' + targetWidth + 'px'
+                        );
+                        if (fixedVml2 !== currentVml) {
+                            this.html = this.html.substring(0, vmlBlock.index) +
+                                        fixedVml2 +
+                                        this.html.substring(vmlBlock.endIndex);
+                            ctasMismatched++;
+                        }
+                    }
+                }
+                
                 // Prüfe ob der HTML-Button bereits in <!--[if !mso]> gewrapped ist
                 // Varianten: <!--[if !mso]><!--> und <!--[if !mso]><!-- --> (mit Leerzeichen)
                 // WICHTIG: Lookback muss groß genug sein, da der !mso Wrapper vor dem
@@ -3432,6 +3458,23 @@ class TemplateProcessor {
         if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
         if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
 
+        // VML-BREITEN-FIX: Bestehende VML-Buttons mit voller Template-Breite (≥500px) korrigieren
+        // Typischer Fehler: Template-Ersteller setzen width:600px im VML statt der echten Button-Breite.
+        // Fix: Auf 250px reduzieren (Standard-Button-Breite).
+        let vmlWidthFixed = 0;
+        this.html = this.html.replace(
+            /<!--\[if mso\]>[\s\S]*?<v:roundrect\b[\s\S]*?<!\[endif\]-->/gi,
+            (vmlBlock) => {
+                const widthM = vmlBlock.match(/width\s*:\s*(\d+)px/i);
+                if (!widthM) return vmlBlock;
+                const w = parseInt(widthM[1]);
+                if (w < 500) return vmlBlock;
+                vmlWidthFixed++;
+                return vmlBlock.replace(/width\s*:\s*\d+px/i, 'width:250px');
+            }
+        );
+        if (vmlWidthFixed > 0) parts.push(`${vmlWidthFixed} VML-Button(s) Breite korrigiert (${'>'}500px → 250px)`);
+
         // T-ONLINE FIX: <a>-Button in Mini-Tabelle mit bgcolor-Attribut wickeln
         // T-Online entfernt background-color + color aus style-Attributen von <a>-Tags.
         // bgcolor als HTML-Attribut auf <td> wird NICHT entfernt → zuverlässiger Hintergrund.
@@ -3456,7 +3499,9 @@ class TemplateProcessor {
                 const paddingMatch = styleContent.match(/padding\s*:\s*([^;]+)/i);
                 const padding = paddingMatch ? paddingMatch[1].trim() : '14px 24px';
                 tOnlineFixed++;
-                return `<!--[if !mso]><!-->\n<table border="0" cellpadding="0" cellspacing="0"><tr><td bgcolor="${bgColor}" align="center" style="border-radius:0px;"><a href="${href}"${target} class="${className}" style="display:inline-block; padding:${padding}; text-decoration:none; font-family:Arial,sans-serif; font-size:24px; font-weight:bold;"><font color="${textColor}">${innerText.trim()}</font></a></td></tr></table>\n<!--<![endif]-->`;
+                // Vorhandene font/span-Tags aus innerText entfernen (von früheren Fix-Versuchen)
+                const cleanText = innerText.replace(/<\/?(font|span)[^>]*>/gi, '').trim();
+                return `<!--[if !mso]><!-->\n<table border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td bgcolor="${bgColor}" align="center" style="border-radius:0px;"><a href="${href}"${target} class="${className}" style="display:inline-block; padding:14px 24px; text-decoration:none; font-family:Arial,sans-serif; font-size:24px; font-weight:bold;"><font color="${textColor}">${cleanText}</font></a></td></tr></table>\n<!--<![endif]-->`;
             }
         );
         if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Button(s) für T-Online mit Tabellen-Wrapper gesichert`);
@@ -3480,7 +3525,7 @@ class TemplateProcessor {
         );
         if (tOnlineTdFixed > 0) parts.push(`${tOnlineTdFixed} CTA-Container-TD(s) bgcolor für T-Online ergänzt`);
         
-        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0 || tOnlineFixed > 0 || tOnlineTdFixed > 0) {
+        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0 || tOnlineFixed > 0 || tOnlineTdFixed > 0 || vmlWidthFixed > 0) {
             this.addCheck(id, 'FIXED', parts.join(', ') + ` (${totalCtas} CTAs gesamt)`);
         } else {
             this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) Outlook-kompatibel` + (ctasSkippedTable > 0 ? ` (${ctasSkippedTable} Tabellen-Button(s) nativ kompatibel)` : ''));
@@ -5026,7 +5071,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.31-2026-03-09';
+const APP_VERSION = 'v3.9.32-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
