@@ -3418,6 +3418,20 @@ class TemplateProcessor {
             }
         }
         
+        const totalCtas = allCtaPositions.length;
+
+        if (totalCtas === 0) {
+            this.addCheck(id, 'PASS', 'Keine CTA-Buttons gefunden');
+            return;
+        }
+
+        // Report-Meldung zusammenbauen
+        const parts = [];
+        if (ctasFixed > 0) parts.push(`${ctasFixed} VML-Button(s) für Outlook generiert`);
+        if (ctasBgcolorFixed > 0) parts.push(`${ctasBgcolorFixed} Button(s) bgcolor-Attribut ergänzt (Outlook CSS-Stripping)`);
+        if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
+        if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
+
         // T-ONLINE FIX: CTA-Button-Text in <span> mit expliziter Textfarbe wickeln
         // T-Online entfernt color aus <a>-Tags → Text wird unsichtbar (weiß auf weißem Hintergrund)
         // Lösung: Text in <span style="color:..."> einwickeln – das respektiert T-Online
@@ -3435,22 +3449,8 @@ class TemplateProcessor {
             }
         );
         if (tOnlineFixed > 0) parts.push(`${tOnlineFixed} CTA-Text(e) für T-Online mit span-Farbe gesichert`);
-
-        const totalCtas = allCtaPositions.length;
         
-        if (totalCtas === 0) {
-            this.addCheck(id, 'PASS', 'Keine CTA-Buttons gefunden');
-            return;
-        }
-        
-        // Report-Meldung zusammenbauen
-        const parts = [];
-        if (ctasFixed > 0) parts.push(`${ctasFixed} VML-Button(s) für Outlook generiert`);
-        if (ctasBgcolorFixed > 0) parts.push(`${ctasBgcolorFixed} Button(s) bgcolor-Attribut ergänzt (Outlook CSS-Stripping)`);
-        if (ctasMismatched > 0) parts.push(`${ctasMismatched} VML-Link(s) synchronisiert`);
-        if (ctasSkippedTable > 0) parts.push(`${ctasSkippedTable} Tabellen-Button(s) unverändert (Outlook-kompatibel)`);
-        
-        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0) {
+        if (ctasFixed > 0 || ctasMismatched > 0 || ctasBgcolorFixed > 0 || tOnlineFixed > 0) {
             this.addCheck(id, 'FIXED', parts.join(', ') + ` (${totalCtas} CTAs gesamt)`);
         } else {
             this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) Outlook-kompatibel` + (ctasSkippedTable > 0 ? ` (${ctasSkippedTable} Tabellen-Button(s) nativ kompatibel)` : ''));
@@ -4996,7 +4996,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.27-2026-03-09';
+const APP_VERSION = 'v3.9.28-2026-03-09';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
