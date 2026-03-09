@@ -4607,6 +4607,15 @@ class TemplateProcessor {
 }
 
 // =====================================================================
+// GLOBAL UTILITY: escapeHtml (wird von renderSuggestModal benötigt)
+// =====================================================================
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// =====================================================================
 // TEXTVORSCHLÄGE: Regelbasierte Generierung aus Template-Inhalt
 // =====================================================================
 
