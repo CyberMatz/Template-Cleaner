@@ -89,33 +89,25 @@
             </label>
         </div>
 
-        <!-- Action Buttons -->
+        <!-- Action Buttons: Links nebeneinander -->
         <div class="control-actions">
             <button id="processBtn" class="btn-action" disabled>
                 ⚙️ Template verarbeiten
             </button>
-        </div>
-        <div class="control-actions-secondary" style="display:none;">
+            <button id="downloadOptimized" class="btn-download" disabled>
+                ⬇️ Download Optimized Temp.
+            </button>
             <button id="suggestTextsBtn" class="btn-suggest" disabled title="Betreffzeilen, Pre-Header und Absender-Vorschläge generieren">
                 ✨ Texte vorschlagen
             </button>
         </div>
 
-        <!-- Download (versteckt, wird intern genutzt) -->
-        <button id="downloadOptimized" style="display:none;" disabled></button>
-
-        <!-- Inspector Trigger (versteckt, wird automatisch ausgelöst) -->
-        <button id="showInspectorBtn" style="display:none;" disabled></button>
-    </div>
-
-    <!-- Inspector Trenner (erscheint nach Verarbeitung) -->
-    <div id="inspectorDivider" class="inspector-divider" style="display:none;">
-        <div class="inspector-divider-line"></div>
-        <div class="inspector-divider-label">
-            <span class="inspector-divider-icon">🔍</span>
-            <span class="inspector-divider-text">Inspector</span>
+        <!-- Inspector Button: Rechts separat -->
+        <div class="control-inspector">
+            <button id="showInspectorBtn" class="btn-inspector" disabled>
+                🔍 Open Inspector
+            </button>
         </div>
-        <div class="inspector-divider-line"></div>
     </div>
 
     <!-- Hidden: Upload Hint -->
@@ -148,6 +140,8 @@
 
     <!-- Inspector Section (gemäß Scribble) -->
     <section id="inspectorSection" class="inspector-section" style="display: none;">
+        <!-- Attention Chips (werden per JS befüllt wenn Inspector öffnet) -->
+        <div id="inspectorAttentionBar" class="inspector-attention-bar" style="display:none;"></div>
         <!-- Tabs -->
         <div class="inspector-tabs">
             <button id="trackingTab" class="inspector-tab active" data-tab="tracking">

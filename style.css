@@ -214,73 +214,55 @@ body {
 }
 
 /* Inspector Button (light style) */
-/* Inspector Trenner */
-.inspector-divider {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin: 24px 0 0 0;
-    padding: 0 4px;
+.btn-inspector {
+    background: #f4f4f4;
+    color: #333;
+    border: 1px solid #ccc;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
 }
 
-.inspector-divider-line {
-    flex: 1;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #f2a93b, transparent);
-    border-radius: 1px;
+.btn-inspector:hover:not(:disabled) {
+    background: #e8e8e8;
+    border-color: #999;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-.inspector-divider-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff8ee;
-    border: 1.5px solid #f2a93b;
-    border-radius: 20px;
-    padding: 5px 18px;
-    white-space: nowrap;
-}
-
-.inspector-divider-icon {
-    font-size: 15px;
-}
-
-.inspector-divider-text {
-    font-size: 13px;
-    font-weight: 700;
-    color: #f2a93b;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
+.btn-inspector:disabled {
+    background: #f9f9f9;
+    color: #999;
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 /* Suggest Button */
-/* Sekundäre Aktionszeile (Texte vorschlagen) */
-.control-actions-secondary {
-    display: flex;
-    align-items: center;
-    margin-top: 8px;
-}
-
 .btn-suggest {
-    background: none;
-    color: #78716c;
-    border: 1px solid #d6d3d1;
-    padding: 6px 14px;
+    background: #7c5cbf;
+    color: white;
+    border: none;
+    padding: 12px 24px;
     border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    width: fit-content;
 }
 .btn-suggest:hover:not(:disabled) {
-    background: #f5f3f0;
-    border-color: #a8a29e;
-    color: #44403c;
+    background: #6a4dab;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 .btn-suggest:disabled {
-    color: #c8c3be;
-    border-color: #e7e5e4;
+    background: #ccc;
     cursor: not-allowed;
+    opacity: 0.6;
 }
 
 /* Suggest Modal */
@@ -3663,42 +3645,22 @@ body {
 
 /* === Neues Template Reset Button === */
 .btn-reset {
-    background: none;
-    color: #78716c;
-    border: 1px solid #d6d3d1;
-    padding: 8px 16px;
+    background: #78909c;
+    color: white;
+    border: none;
+    padding: 12px 24px;
     border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    white-space: nowrap;
+    width: fit-content;
 }
 
 .btn-reset:hover {
-    background: #f5f3f0;
-    border-color: #a8a29e;
-    color: #44403c;
-}
-
-/* Original wiederherstellen Button */
-.btn-restore {
-    background: none;
-    color: #78716c;
-    border: 1px solid #d6d3d1;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.btn-restore:hover {
-    background: #f5f3f0;
-    border-color: #a8a29e;
-    color: #44403c;
+    background: #607d8b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
 .upload-btn-row {
@@ -3706,7 +3668,6 @@ body {
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    width: 100%;
 }
 /* ============================================
    EOA CLIENT-VORSCHAU STYLES
@@ -4318,4 +4279,40 @@ body {
     font-size: 13px;
     color: #78716c;
     margin: 4px 0;
+}
+
+/* ===== Inspector Attention Chips Bar ===== */
+.inspector-attention-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 16px;
+    background: #fffbeb;
+    border-bottom: 1px solid #fde68a;
+}
+
+.inspector-attention-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #fff;
+    border: 1px solid #f59e0b;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #92400e;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    user-select: none;
+}
+
+.inspector-attention-chip:hover {
+    background: #fef3c7;
+    border-color: #d97706;
+}
+
+.inspector-attention-chip .chip-arrow {
+    font-size: 10px;
+    opacity: 0.6;
 }
