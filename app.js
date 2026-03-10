@@ -3545,6 +3545,9 @@ class TemplateProcessor {
         }
     }
     
+    // ⚠️ SYNC-HINWEIS: Button-Erkennungslogik existiert zweifach.
+    // Diese Funktion (Checker-Klasse) und extractCTAButtonsFromHTML (Inspector, ~Zeile 12239)
+    // müssen bei Button-Bugs BEIDE geprüft und angepasst werden.
     // Finde alle CTA-Buttons: Typ A (Link mit bg) + Typ B (TD mit bgcolor + Link)
     _findAllCTAButtons() {
         const buttons = [];
@@ -5084,7 +5087,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.42-2026-03-10';
+const APP_VERSION = 'v3.9.43-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6610,14 +6613,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         return { original: originalHtml, optimized: optimizedHtml };
     }
-
-    // HTML escapen für sichere Anzeige
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
 
     // ===== SHARED STATE (für Inspector Tag-Review) =====
     let manualActionLog = [];
@@ -8868,7 +8863,8 @@ td[width] { width: auto !important; }
         updateTabCountBadge('tracking', links.length);
     }
     
-    // Extrahiere Links aus HTML
+    // Extrahiere Links aus HTML via DOMParser (robust, MSO-aware)
+    // Für Tracking-Tab. Gegenstück: extractLinksRawByRegex (Regex-basiert, für Buttons-Tab)
     function extractLinksFromHTML(html) {
         if (!html) return [];
         
@@ -9634,13 +9630,6 @@ td[width] { width: auto !important; }
         // Re-render Tracking Tab (zeigt Auswahl + URL-Eingabe)
         // trackingContent bereits oben deklariert
         showTrackingTab(trackingContent);
-    }
-    
-    // HTML escape helper
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
     
     // ============================================
@@ -11487,7 +11476,7 @@ td[width] { width: auto !important; }
         html += '</div>'; // buttons-section
         
         // === Manuelle Markierung: Alle nicht-erkannten Links anzeigen ===
-        const allLinks = extractAllLinksFromHTML(buttonsTabHtml);
+        const allLinks = extractLinksRawByRegex(buttonsTabHtml);
         // Filtere Links die bereits als CTA erkannt sind (über Position, nicht href – da hrefs identisch sein können)
         const unrecognizedLinks = allLinks.filter(link => {
             // Nur Links mit Text (keine Bild-Links)
@@ -12249,6 +12238,9 @@ td[width] { width: auto !important; }
         return result;
     }
     
+    // ⚠️ SYNC-HINWEIS: Button-Erkennungslogik existiert zweifach.
+    // Diese Funktion (Inspector) und _findAllCTAButtons (Checker-Klasse, ~Zeile 3549)
+    // müssen bei Button-Bugs BEIDE geprüft und angepasst werden.
     // Extrahiere CTA-Buttons aus HTML (String-basiert, da VML in Comments)
     // Erkennt: Typ A = <a> mit background-color, Typ B = <td bgcolor> mit <a> drin
     function extractCTAButtonsFromHTML(html) {
@@ -12799,8 +12791,9 @@ td[width] { width: auto !important; }
         return buttons;
     }
     
-    // Extrahiere alle Links aus HTML (für manuelle Markierung)
-    function extractAllLinksFromHTML(html) {
+    // Extrahiere alle Links via Regex (schnell, positionsbasiert, für Buttons-Tab)
+    // Gegenstück: extractLinksFromHTML (DOMParser-basiert, für Tracking-Tab)
+    function extractLinksRawByRegex(html) {
         if (!html) return [];
         const links = [];
         const linkRegex = /<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -12822,7 +12815,7 @@ td[width] { width: auto !important; }
     
     // Manuell als CTA markieren: Fügt bgcolor auf die umgebende <td> ein
     function handleMarkAsCta(linkGlobalIndex) {
-        const allLinks = extractAllLinksFromHTML(buttonsTabHtml);
+        const allLinks = extractLinksRawByRegex(buttonsTabHtml);
         const link = allLinks.find(l => l.globalIndex === linkGlobalIndex);
         if (!link) {
             showInspectorToast('⚠️ Link nicht gefunden');
