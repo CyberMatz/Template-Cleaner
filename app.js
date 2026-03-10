@@ -2309,20 +2309,16 @@ class TemplateProcessor {
             if (w === '1' && h === '1') return;
             
             if (!img.includes('alt=')) {
-                // Alt-Attribut fehlt - hinzufügen mit generischem Text
-                const newImg = img.replace(/<img/, '<img alt="Image"');
-                this.html = this.html.replace(img, newImg);
                 fixed++;
             } else if (/alt=""/.test(img) || /alt=''/.test(img)) {
-                // Leeres Alt-Attribut (funktioniert, aber nicht optimal)
                 emptyAlt++;
             }
         });
 
         if (fixed > 0) {
-            this.addCheck(id, 'FIXED', `Alt-Attribute ergänzt (${fixed} Bilder mit alt="Image")`);
+            this.addCheck(id, 'WARN', `${fixed} Bild(er) ohne Alt-Text – bitte im Inspector (Bilder-Tab) eintragen`);
         } else if (emptyAlt > 0) {
-            this.addCheck(id, 'WARN', `${emptyAlt} Bilder mit leerem Alt-Attribut (funktioniert, aber nicht optimal)`);
+            this.addCheck(id, 'WARN', `${emptyAlt} Bild(er) mit leerem Alt-Text – bitte im Inspector (Bilder-Tab) prüfen`);
         } else {
             this.addCheck(id, 'PASS', 'Alt-Attribute korrekt');
         }
@@ -5070,7 +5066,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.50-2026-03-10';
+const APP_VERSION = 'v3.9.51-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
