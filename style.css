@@ -254,27 +254,33 @@ body {
 }
 
 /* Suggest Button */
+/* Sekundäre Aktionszeile (Texte vorschlagen) */
+.control-actions-secondary {
+    display: flex;
+    align-items: center;
+    margin-top: 8px;
+}
+
 .btn-suggest {
-    background: #7c5cbf;
-    color: white;
-    border: none;
-    padding: 12px 24px;
+    background: none;
+    color: #78716c;
+    border: 1px solid #d6d3d1;
+    padding: 6px 14px;
     border-radius: 6px;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
-    width: fit-content;
 }
 .btn-suggest:hover:not(:disabled) {
-    background: #6a4dab;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    background: #f5f3f0;
+    border-color: #a8a29e;
+    color: #44403c;
 }
 .btn-suggest:disabled {
-    background: #ccc;
+    color: #c8c3be;
+    border-color: #e7e5e4;
     cursor: not-allowed;
-    opacity: 0.6;
 }
 
 /* Suggest Modal */
@@ -3675,11 +3681,32 @@ body {
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
+/* Original wiederherstellen Button */
+.btn-restore {
+    background: none;
+    color: #78716c;
+    border: 1px solid #d6d3d1;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-restore:hover {
+    background: #f5f3f0;
+    border-color: #a8a29e;
+    color: #44403c;
+}
+
 .upload-btn-row {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: 12px;
+    width: 100%;
 }
 /* ============================================
    EOA CLIENT-VORSCHAU STYLES

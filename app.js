@@ -5084,7 +5084,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.39-2026-03-10';
+const APP_VERSION = 'v3.9.41-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5280,10 +5280,19 @@ document.addEventListener('DOMContentLoaded', () => {
     resetBtn.innerHTML = '🔄 Neues Template';
     resetBtn.title = 'Alles zurücksetzen und neues Template laden';
     resetBtn.style.display = 'none';
-    // Einfügen rechts neben Upload-Button (in einer Zeile)
+
+    // === "Original wiederherstellen" Button dynamisch erstellen ===
+    const restoreBtn = document.createElement('button');
+    restoreBtn.id = 'restoreBtn';
+    restoreBtn.className = 'btn-restore';
+    restoreBtn.innerHTML = '↩️ Original';
+    restoreBtn.title = 'Alle Änderungen verwerfen und Original neu verarbeiten';
+    restoreBtn.style.display = 'none';
+
+    // Einfügen in Upload-Zeile: [Upload] [Original] [Neues Template] ... [Texte vorschlagen]
     const uploadBtnEl = document.getElementById('uploadBtn');
+    const suggestTextsBtnEl = document.getElementById('suggestTextsBtn');
     if (uploadBtnEl) {
-        // Wrapper für Upload + Reset nebeneinander
         let uploadRow = uploadBtnEl.parentElement.querySelector('.upload-btn-row');
         if (!uploadRow) {
             uploadRow = document.createElement('div');
@@ -5291,7 +5300,16 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadBtnEl.parentElement.insertBefore(uploadRow, uploadBtnEl);
             uploadRow.appendChild(uploadBtnEl);
         }
+        uploadRow.appendChild(restoreBtn);
         uploadRow.appendChild(resetBtn);
+        // Texte vorschlagen: Spacer + rechts außen
+        const uploadRowSpacer = document.createElement('div');
+        uploadRowSpacer.style.flex = '1';
+        uploadRow.appendChild(uploadRowSpacer);
+        if (suggestTextsBtnEl) {
+            uploadRow.appendChild(suggestTextsBtnEl);
+            suggestTextsBtnEl.style.display = 'none'; // zunächst unsichtbar
+        }
     }
     
     // Reset-Funktion: Setzt alles sauber auf Anfangszustand zurück
@@ -5364,8 +5382,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Buttons deaktivieren
         processBtn.disabled = true;
         processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
+        processBtn.style.display = '';
         isProcessed = false;
-        if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = ''; }
+        if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = 'none'; }
         if (showDiffBtn) { showDiffBtn.disabled = true; }
         if (showInspectorBtn) { showInspectorBtn.disabled = true; }
         
@@ -5388,8 +5407,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Pending Warning ausblenden
         if (pendingWarning) pendingWarning.style.display = 'none';
         
-        // Reset-Button wieder verstecken
+        // Reset- und Restore-Button wieder verstecken
         resetBtn.style.display = 'none';
+        restoreBtn.style.display = 'none';
+        if (suggestTextsBtnEl) suggestTextsBtnEl.style.display = 'none';
         
         console.log('[RESET] Alles zurückgesetzt – bereit für neues Template');
         showInspectorToast('🔄 Zurückgesetzt – bitte neues Template hochladen');
@@ -5594,36 +5615,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Template verarbeiten
-    processBtn.addEventListener('click', async () => {
-        // Modus: Original wiederherstellen
-        if (isProcessed) {
-            const confirmed = confirm(
-                'Original wiederherstellen?\n\n' +
-                'Alle bisherigen Änderungen (Inspector, Tracking, Bilder etc.) gehen verloren.\n\n' +
-                'Das Template wird komplett neu verarbeitet.'
-            );
-            if (!confirmed) return;
-            
-            // Reset auf Ausgangszustand – aber Datei beibehalten
-            isProcessed = false;
-            processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
-            currentWorkingHtml = null;
-            processingResult = null;
-            resultsSection.style.display = 'none';
-            const updateWrapperRestore = document.getElementById('updateTitlePreheaderWrapper');
-            if (updateWrapperRestore) updateWrapperRestore.style.display = 'none';
-            const inspectorSection = document.getElementById('inspectorSection');
-            if (inspectorSection) inspectorSection.style.display = 'none';
-            const inspectorDividerRestore = document.getElementById('inspectorDivider');
-            if (inspectorDividerRestore) inspectorDividerRestore.style.display = 'none';
-            if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = ''; }
-            if (showDiffBtn) showDiffBtn.disabled = true;
-            if (showInspectorBtn) showInspectorBtn.disabled = true;
-            
-            showInspectorToast('🔄 Original wiederhergestellt – klicke "Template verarbeiten" um neu zu starten.');
-            return;
-        }
+    // restoreBtn: Original wiederherstellen
+    restoreBtn.addEventListener('click', () => {
+        const confirmed = confirm(
+            'Original wiederherstellen?\n\n' +
+            'Alle bisherigen Änderungen (Inspector, Tracking, Bilder etc.) gehen verloren.\n\n' +
+            'Das Template wird komplett neu verarbeitet.'
+        );
+        if (!confirmed) return;
         
+        isProcessed = false;
+        currentWorkingHtml = null;
+        processingResult = null;
+        resultsSection.style.display = 'none';
+        const updateWrapperRestore = document.getElementById('updateTitlePreheaderWrapper');
+        if (updateWrapperRestore) updateWrapperRestore.style.display = 'none';
+        const inspectorSection = document.getElementById('inspectorSection');
+        if (inspectorSection) inspectorSection.style.display = 'none';
+        const inspectorDividerRestore = document.getElementById('inspectorDivider');
+        if (inspectorDividerRestore) inspectorDividerRestore.style.display = 'none';
+        if (downloadOptimized) { downloadOptimized.disabled = true; }
+        if (showDiffBtn) showDiffBtn.disabled = true;
+        if (showInspectorBtn) showInspectorBtn.disabled = true;
+        // processBtn wieder zeigen, restoreBtn + Texte vorschlagen verstecken
+        processBtn.style.display = '';
+        processBtn.disabled = false;
+        restoreBtn.style.display = 'none';
+        if (suggestTextsBtnEl) suggestTextsBtnEl.style.display = 'none';
+        
+        showInspectorToast('↩️ Original wiederhergestellt – klicke "Template verarbeiten" um neu zu starten.');
+    });
+
+    processBtn.addEventListener('click', async () => {
         // Single Source of Truth: selectedHtml
         console.log('PROCESS_CLICK', 'selectedHtml=', selectedHtml ? selectedHtml.length + ' chars' : 'null', 'disabled=', processBtn.disabled);
         
@@ -5762,17 +5785,21 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Reset-Button anzeigen
             resetBtn.style.display = '';
+            // processBtn verstecken, restoreBtn + Texte vorschlagen einblenden
+            processBtn.style.display = 'none';
+            restoreBtn.style.display = '';
+            if (suggestTextsBtnEl) suggestTextsBtnEl.style.display = '';
 
         } catch (error) {
             showInspectorToast('❌ Fehler bei der Verarbeitung: ' + error.message);
         } finally {
             if (processingResult) {
-                // Erfolgreich verarbeitet → Button wird "Original wiederherstellen"
+                // Erfolgreich verarbeitet → processBtn bleibt versteckt (restoreBtn übernimmt)
                 isProcessed = true;
                 processBtn.disabled = false;
-                processBtn.innerHTML = '<span class="btn-icon">🔄</span> Original wiederherstellen';
             } else {
-                // Fehler → Button bleibt "Template verarbeiten"
+                // Fehler → processBtn wieder anzeigen
+                processBtn.style.display = '';
                 processBtn.disabled = false;
                 processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
             }

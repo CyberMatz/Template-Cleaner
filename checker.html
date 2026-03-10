@@ -89,18 +89,20 @@
             </label>
         </div>
 
-        <!-- Action Buttons: Links nebeneinander -->
+        <!-- Action Buttons -->
         <div class="control-actions">
             <button id="processBtn" class="btn-action" disabled>
                 ⚙️ Template verarbeiten
             </button>
-            <button id="downloadOptimized" class="btn-download" disabled>
-                ⬇️ Download Optimized Temp.
-            </button>
+        </div>
+        <div class="control-actions-secondary" style="display:none;">
             <button id="suggestTextsBtn" class="btn-suggest" disabled title="Betreffzeilen, Pre-Header und Absender-Vorschläge generieren">
                 ✨ Texte vorschlagen
             </button>
         </div>
+
+        <!-- Download (versteckt, wird intern genutzt) -->
+        <button id="downloadOptimized" style="display:none;" disabled></button>
 
         <!-- Inspector Trigger (versteckt, wird automatisch ausgelöst) -->
         <button id="showInspectorBtn" style="display:none;" disabled></button>
