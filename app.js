@@ -5087,7 +5087,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.43-2026-03-10';
+const APP_VERSION = 'v3.9.44-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5738,7 +5738,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 confHtml += '<div class="confidence-attention">';
                 confHtml += '<div class="confidence-attention-title">Bitte besonders prüfen:</div>';
                 processingResult.attentionItems.forEach(function(item) {
-                    confHtml += '<div class="confidence-attention-item">' + item + '</div>';
+                    // Tab-Zuordnung: Welches Schlüsselwort → welcher Tab?
+                    let targetTab = null;
+                    if (/tracking-tab|href|redirect|pixel|link|url/i.test(item)) targetTab = 'tracking';
+                    else if (/tag-review|tag.struktur|html-tag|schlie/i.test(item)) targetTab = 'tagreview';
+                    else if (/bild|img|base64/i.test(item)) targetTab = 'images';
+                    else if (/button|outlook|vml|gradient/i.test(item)) targetTab = 'buttons';
+                    else if (/viewport|style|font|css/i.test(item)) targetTab = 'tagreview';
+
+                    if (targetTab) {
+                        confHtml += '<div class="confidence-attention-item confidence-attention-item-link" data-target-tab="' + targetTab + '" title="Klicken um zum ' + targetTab + '-Tab zu springen">' + item + ' <span style="font-size:11px;opacity:0.7;">→ öffnen</span></div>';
+                    } else {
+                        confHtml += '<div class="confidence-attention-item">' + item + '</div>';
+                    }
                 });
                 confHtml += '</div>';
             }
@@ -5746,7 +5758,24 @@ document.addEventListener('DOMContentLoaded', () => {
             confHtml += '</div>';
             confidenceEl.innerHTML = confHtml;
 
-            // Diff-Button aktivieren
+            // Click-Handler für klickbare Attention Items (Tab-Sprung)
+            confidenceEl.querySelectorAll('.confidence-attention-item-link').forEach(function(el) {
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function() {
+                    const tab = el.dataset.targetTab;
+                    if (!tab) return;
+                    // Inspector öffnen falls noch nicht offen
+                    const inspSec = document.getElementById('inspectorSection');
+                    if (inspSec && inspSec.style.display === 'none') {
+                        if (showInspectorBtn && !showInspectorBtn.disabled) showInspectorBtn.click();
+                        setTimeout(function() { switchInspectorTab(tab); }, 400);
+                    } else {
+                        switchInspectorTab(tab);
+                    }
+                    // Zum Inspector scrollen
+                    if (inspSec) inspSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
             showDiffBtn.disabled = false;
             showDiffBtn.title = 'Änderungen zwischen Original und Optimiert anzeigen';
 
@@ -8747,6 +8776,36 @@ td[width] { width: auto !important; }
         if (links.length === 0) {
             html += '<p class="tracking-empty">Keine Links gefunden.</p>';
         } else {
+            // ⚠️ Leere hrefs immer zuerst anzeigen – unabhängig von Gruppe
+            const emptyHrefLinks = links.filter(l => !l.href || l.href.trim() === '' || l.href.trim() === '#');
+            if (emptyHrefLinks.length > 0) {
+                html += '<div class="section-divider">';
+                html += '<div class="section-divider-line"></div>';
+                html += '<div class="section-divider-label" style="color:#e65100;border-color:#e65100;">⚠️ Leere / fehlende URLs (' + emptyHrefLinks.length + ')</div>';
+                html += '<div class="section-divider-line"></div>';
+                html += '</div>';
+                emptyHrefLinks.forEach(link => {
+                    html += '<div class="link-card link-card-warning" data-link-id="' + link.id + '">';
+                    html += '<div class="link-card-header">';
+                    html += '<span class="link-card-id">' + link.id + '</span>';
+                    html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
+                    html += '<span class="link-card-warning-badge">⚠ Leerer Link</span>';
+                    html += '</div>';
+                    html += '<div class="link-card-text">' + escapeHtml(link.text) + '</div>';
+                    html += '<div class="link-card-url link-card-url-empty">⚠ href ist leer – Versandsystem belegt diesen Link ggf. automatisch mit Redirect!</div>';
+                    html += '<div class="link-card-actions">';
+                    html += '<button class="btn-card-action btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">📍 Finden</button>';
+                    html += '<button class="btn-card-action btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
+                    html += '<button class="btn-card-action btn-tracking-unlink" data-link-id="' + link.id + '" title="Link-Tag entfernen, Inhalt behalten">🔗✕ Ent-linken</button>';
+                    html += '</div>';
+                    html += '<div class="link-card-edit-row">';
+                    html += '<input type="text" class="link-edit-input" data-link-id="' + link.id + '" placeholder="Neue URL eingeben..." value="">';
+                    html += '<button class="btn-link-apply" data-link-id="' + link.id + '">✓</button>';
+                    html += '</div>';
+                    html += '</div>';
+                });
+            }
+
             groupOrder.forEach(groupKey => {
                 const groupLinks = linkGroups[groupKey];
                 if (groupLinks.length === 0) return;
@@ -8762,7 +8821,8 @@ td[width] { width: auto !important; }
                     // Prüfe ob der Link problematisch ist (leer, nur Whitespace, nur #)
                     const isEmptyHref = !link.href || link.href.trim() === '' || link.href.trim() === '#';
                     const isPlaceholderHref = /^#[A-Z]/.test((link.href || '').trim()); // z.B. #AMEX, #PLACEHOLDER
-                    const cardClass = (isEmptyHref || isPlaceholderHref) ? 'link-card link-card-warning' : 'link-card';
+                    const isCloudflareHref = /\/cdn-cgi\/l\/email-protection/i.test(link.href || '');
+                    const cardClass = (isEmptyHref || isPlaceholderHref || isCloudflareHref) ? 'link-card link-card-warning' : 'link-card';
                     
                     html += '<div class="' + cardClass + '" data-link-id="' + link.id + '">';
                     
@@ -8772,6 +8832,8 @@ td[width] { width: auto !important; }
                     html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
                     if (isEmptyHref) {
                         html += '<span class="link-card-warning-badge">⚠ Leerer Link</span>';
+                    } else if (isCloudflareHref) {
+                        html += '<span class="link-card-warning-badge">⚠ Cloudflare-Link</span>';
                     } else if (isPlaceholderHref) {
                         html += '<span class="link-card-warning-badge">⚠ Platzhalter</span>';
                     }
@@ -8783,6 +8845,8 @@ td[width] { width: auto !important; }
                     // URL (bei leerem href deutliche Anzeige)
                     if (isEmptyHref) {
                         html += '<div class="link-card-url link-card-url-empty">⚠ href ist leer – Versandsystem belegt diesen Link ggf. automatisch mit Redirect!</div>';
+                    } else if (isCloudflareHref) {
+                        html += '<div class="link-card-url link-card-url-empty">⚠ Cloudflare hat eine E-Mail-Adresse verschlüsselt – dieser Link funktioniert in E-Mails NICHT. Echte E-Mail-Adresse vom Kunden anfordern.</div>';
                     } else if (isPlaceholderHref) {
                         html += '<div class="link-card-url link-card-url-empty">⚠ Platzhalter-Link (' + escapeHtml(link.href) + ') – muss durch echte URL ersetzt werden!</div>';
                     } else {
@@ -8870,13 +8934,16 @@ td[width] { width: auto !important; }
         
         const parser = new DOMParser();
         const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
-        const anchors = doc.querySelectorAll('a[href]');
+        // Alle <a>-Tags holen, nicht nur a[href] – sonst fällt href="" raus
+        const anchors = doc.querySelectorAll('a');
         
         const links = [];
         let globalIndex = 0;
         
         anchors.forEach((anchor) => {
-            const href = anchor.getAttribute('href');
+            // Nur <a> mit href-Attribut (auch leer) – ohne href sind es Anker, keine Links
+            if (!anchor.hasAttribute('href')) return;
+            const href = anchor.getAttribute('href') || '';
             const text = anchor.textContent.trim() || '[ohne Text]';
             const id = 'L' + String(++globalIndex).padStart(3, '0');
             
