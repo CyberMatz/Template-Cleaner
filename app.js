@@ -5084,7 +5084,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.35-2026-03-10';
+const APP_VERSION = 'v3.9.36-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -13963,6 +13963,8 @@ td[width] { width: auto !important; }
         updateInspectorPreview();
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
+        recalculatePostCommitMetrics(currentWorkingHtml);
+        updateTagReviewSummary();
         showInspectorToast('✅ ' + fix.inserted + ' eingefügt (direkt übernommen)');
     }
     
@@ -14018,6 +14020,8 @@ td[width] { width: auto !important; }
         updateInspectorPreview();
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
+        recalculatePostCommitMetrics(currentWorkingHtml);
+        updateTagReviewSummary();
         showInspectorToast('↩️ ' + fix.inserted + ' entfernt (direkt übernommen)');
     }
     
