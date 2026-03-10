@@ -5084,7 +5084,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.38-2026-03-10';
+const APP_VERSION = 'v3.9.39-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5375,8 +5375,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (updateWrapperReset) updateWrapperReset.style.display = 'none';
         const inspectorSection = document.getElementById('inspectorSection');
         if (inspectorSection) inspectorSection.style.display = 'none';
-        
-        // Confidence Score entfernen
+        const inspectorDividerReset = document.getElementById('inspectorDivider');
+        if (inspectorDividerReset) inspectorDividerReset.style.display = 'none';
         const confEl = document.getElementById('confidenceScore');
         if (confEl) confEl.innerHTML = '';
         
@@ -5614,6 +5614,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (updateWrapperRestore) updateWrapperRestore.style.display = 'none';
             const inspectorSection = document.getElementById('inspectorSection');
             if (inspectorSection) inspectorSection.style.display = 'none';
+            const inspectorDividerRestore = document.getElementById('inspectorDivider');
+            if (inspectorDividerRestore) inspectorDividerRestore.style.display = 'none';
             if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = ''; }
             if (showDiffBtn) showDiffBtn.disabled = true;
             if (showInspectorBtn) showInspectorBtn.disabled = true;
@@ -6985,6 +6987,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Zeige Inspector Section
             inspectorSection.style.display = 'block';
+            
+            // Zeige Inspector-Trenner
+            const inspectorDivider = document.getElementById('inspectorDivider');
+            if (inspectorDivider) inspectorDivider.style.display = 'flex';
             
             // Orange Download-Button ausblenden (grüner im Inspector übernimmt)
             if (downloadOptimized) downloadOptimized.style.display = 'none';

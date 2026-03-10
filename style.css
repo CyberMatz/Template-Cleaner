@@ -214,31 +214,43 @@ body {
 }
 
 /* Inspector Button (light style) */
-.btn-inspector {
-    background: #f4f4f4;
-    color: #333;
-    border: 1px solid #ccc;
-    padding: 12px 24px;
-    border-radius: 6px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: fit-content;
+/* Inspector Trenner */
+.inspector-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 24px 0 0 0;
+    padding: 0 4px;
 }
 
-.btn-inspector:hover:not(:disabled) {
-    background: #e8e8e8;
-    border-color: #999;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+.inspector-divider-line {
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #f2a93b, transparent);
+    border-radius: 1px;
 }
 
-.btn-inspector:disabled {
-    background: #f9f9f9;
-    color: #999;
-    cursor: not-allowed;
-    opacity: 0.6;
+.inspector-divider-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff8ee;
+    border: 1.5px solid #f2a93b;
+    border-radius: 20px;
+    padding: 5px 18px;
+    white-space: nowrap;
+}
+
+.inspector-divider-icon {
+    font-size: 15px;
+}
+
+.inspector-divider-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f2a93b;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
 }
 
 /* Suggest Button */

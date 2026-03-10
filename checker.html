@@ -102,12 +102,18 @@
             </button>
         </div>
 
-        <!-- Inspector Button: Rechts separat -->
-        <div class="control-inspector">
-            <button id="showInspectorBtn" class="btn-inspector" disabled>
-                🔍 Open Inspector
-            </button>
+        <!-- Inspector Trigger (versteckt, wird automatisch ausgelöst) -->
+        <button id="showInspectorBtn" style="display:none;" disabled></button>
+    </div>
+
+    <!-- Inspector Trenner (erscheint nach Verarbeitung) -->
+    <div id="inspectorDivider" class="inspector-divider" style="display:none;">
+        <div class="inspector-divider-line"></div>
+        <div class="inspector-divider-label">
+            <span class="inspector-divider-icon">🔍</span>
+            <span class="inspector-divider-text">Inspector</span>
         </div>
+        <div class="inspector-divider-line"></div>
     </div>
 
     <!-- Hidden: Upload Hint -->
