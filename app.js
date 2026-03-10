@@ -5084,7 +5084,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.37-2026-03-10';
+const APP_VERSION = 'v3.9.38-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -8198,8 +8198,13 @@ td[width] { width: auto !important; }
         scriptLines.push('          ctaElements.push(a);');
         scriptLines.push('        }');
         scriptLines.push('      });');
-        scriptLines.push('      // Typ B: td mit bgcolor + align=center + link drin');
-        scriptLines.push('      var allTds = Array.from(document.querySelectorAll("td[bgcolor]"));');
+        scriptLines.push('      // Typ B: td mit bgcolor-Attribut ODER background-color im style + align=center + link drin');
+        scriptLines.push('      var allTds = Array.from(document.querySelectorAll("td[bgcolor], td[style]")).filter(function(td) {');
+        scriptLines.push('        var hasBgcolorAttr = !!td.getAttribute("bgcolor");');
+        scriptLines.push('        var styleStr = (td.getAttribute("style") || "").toLowerCase();');
+        scriptLines.push('        var hasBgInStyle = /background(?:-color)?\\s*:\\s*#?[a-f0-9]{3,6}/i.test(styleStr);');
+        scriptLines.push('        return hasBgcolorAttr || hasBgInStyle;');
+        scriptLines.push('      });');
         scriptLines.push('      allTds.forEach(function(td) {');
         scriptLines.push('        var align = (td.getAttribute("align") || "").toLowerCase();');
         scriptLines.push('        var style = (td.getAttribute("style") || "").toLowerCase();');
