@@ -5066,7 +5066,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.52-2026-03-10';
+const APP_VERSION = 'v3.9.53-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5744,16 +5744,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.addEventListener('click', function() {
                     const tab = el.dataset.targetTab;
                     if (!tab) return;
-                    // Inspector öffnen falls noch nicht offen
                     const inspSec = document.getElementById('inspectorSection');
-                    if (inspSec && inspSec.style.display === 'none') {
+                    const isOpen = inspSec && inspSec.style.display !== 'none';
+                    
+                    if (!isOpen) {
+                        // Inspector erst öffnen, dann Tab wechseln
                         if (showInspectorBtn && !showInspectorBtn.disabled) showInspectorBtn.click();
-                        setTimeout(function() { switchInspectorTab(tab); }, 400);
+                        setTimeout(function() {
+                            switchInspectorTab(tab);
+                            if (inspSec) inspSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 400);
                     } else {
+                        // Inspector bereits offen – direkt Tab wechseln, auch wenn pending
+                        // Pending-Dialog wird von switchInspectorTab ausgelöst falls nötig
                         switchInspectorTab(tab);
+                        if (inspSec) inspSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
-                    // Zum Inspector scrollen
-                    if (inspSec) inspSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
             });
             showDiffBtn.disabled = false;
@@ -7013,34 +7019,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Zeige Inspector Section
             inspectorSection.style.display = 'block';
-            
-            // Attention Chips befüllen
-            const attentionBar = document.getElementById('inspectorAttentionBar');
-            if (attentionBar && processingResult && processingResult.attentionItems && processingResult.attentionItems.length > 0) {
-                attentionBar.innerHTML = '';
-                processingResult.attentionItems.forEach(function(item) {
-                    let targetTab = null;
-                    if (/tracking-tab|href|redirect|pixel|link|url/i.test(item)) targetTab = 'tracking';
-                    else if (/tag-review|tag.struktur|html-tag|schlie/i.test(item)) targetTab = 'tagreview';
-                    else if (/bild|img|base64/i.test(item)) targetTab = 'images';
-                    else if (/button|outlook|vml|gradient/i.test(item)) targetTab = 'buttons';
-                    else if (/viewport|meta.tag/i.test(item)) targetTab = 'editor';
-                    else if (/style|font|css/i.test(item)) targetTab = 'editor';
-                    if (!targetTab) return; // Chips nur für navigierbare Items
-                    const chip = document.createElement('div');
-                    chip.className = 'inspector-attention-chip';
-                    chip.innerHTML = item + ' <span class="chip-arrow">→</span>';
-                    chip.addEventListener('click', function() {
-                        switchInspectorTab(targetTab);
-                        const panel = document.getElementById(targetTab + 'Panel') || document.querySelector('[id$="Panel"][style*="block"]');
-                        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    });
-                    attentionBar.appendChild(chip);
-                });
-                attentionBar.style.display = attentionBar.children.length > 0 ? 'flex' : 'none';
-            } else if (attentionBar) {
-                attentionBar.style.display = 'none';
-            }
             
             // Zeige Inspector-Trenner
             const inspectorDivider = document.getElementById('inspectorDivider');
