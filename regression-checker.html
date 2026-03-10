@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regression Checker – PW Werkbank</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --orange: #f2a93b;
+            --dark: #44403c;
+            --mid: #78716c;
+            --light: #a8a29e;
+            --bg: #f5f3f0;
+            --white: #ffffff;
+            --green: #2e7d32;
+            --green-bg: #e8f5e9;
+            --red: #c62828;
+            --red-bg: #ffebee;
+            --yellow: #e65100;
+            --yellow-bg: #fff3e0;
+            --blue: #1565c0;
+            --blue-bg: #e3f2fd;
+            --border: #e7e5e4;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--bg);
+            color: var(--dark);
+            min-height: 100vh;
+            padding: 32px 24px 60px;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--orange);
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            color: var(--orange);
+            font-weight: 500;
+            font-size: 14px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 2px solid var(--orange);
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .back-link:hover { background: var(--orange); color: #fff; }
+        .header-title { flex: 1; }
+        .header-title h1 { font-size: 22px; font-weight: 600; color: var(--dark); }
+        .header-title p { font-size: 13px; color: var(--light); margin-top: 3px; }
+        .version-badge {
+            font-size: 11px;
+            font-family: 'Roboto Mono', monospace;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 20px;
+            color: var(--light);
+        }
+
+        /* ── LAYOUT ── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* ── CARDS ── */
+        .card {
+            background: var(--white);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .card-icon { font-size: 22px; }
+        .card-title { font-size: 16px; font-weight: 600; }
+        .card-subtitle { font-size: 12px; color: var(--light); margin-top: 2px; }
+        .card-body { padding: 20px 24px; }
+
+        /* ── STEP INDICATORS ── */
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--orange);
+            color: white;
+            font-size: 13px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        /* ── UPLOAD ZONE ── */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 28px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg);
+            margin-bottom: 16px;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--orange);
+            background: #fffbf4;
+        }
+        .upload-zone-icon { font-size: 32px; margin-bottom: 8px; }
+        .upload-zone-text { font-size: 14px; color: var(--mid); }
+        .upload-zone-hint { font-size: 12px; color: var(--light); margin-top: 4px; }
+        input[type="file"] { display: none; }
+
+        /* ── FILE LIST ── */
+        .file-list { margin-bottom: 16px; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        .file-item-icon { font-size: 16px; flex-shrink: 0; }
+        .file-item-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-item-size { color: var(--light); font-size: 11px; white-space: nowrap; }
+        .file-item-remove {
+            background: none;
+            border: none;
+            color: var(--light);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .file-item-remove:hover { color: var(--red); }
+
+        /* ── CHECKLIST TYPE ── */
+        .checklist-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .checklist-option {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .checklist-option input { display: none; }
+        .checklist-option:has(input:checked) {
+            border-color: var(--orange);
+            background: #fffbf4;
+            color: var(--orange);
+        }
+
+        /* ── SNAPSHOT FILE ── */
+        .snapshot-upload {
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 16px;
+        }
+        .snapshot-upload:hover { border-color: var(--orange); }
+        .snapshot-upload.loaded { border-color: var(--green); background: var(--green-bg); }
+        .snapshot-upload-icon { font-size: 24px; }
+        .snapshot-upload-text { flex: 1; }
+        .snapshot-upload-label { font-size: 13px; font-weight: 500; }
+        .snapshot-upload-hint { font-size: 11px; color: var(--light); margin-top: 2px; }
+
+        /* ── BUTTONS ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Roboto', sans-serif;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: var(--orange); color: white; }
+        .btn-primary:hover:not(:disabled) { background: #e09930; }
+        .btn-secondary { background: var(--bg); color: var(--dark); border: 2px solid var(--border); }
+        .btn-secondary:hover:not(:disabled) { border-color: var(--dark); }
+        .btn-full { width: 100%; justify-content: center; }
+
+        /* ── PROGRESS ── */
+        .progress-wrap {
+            display: none;
+            margin-bottom: 16px;
+        }
+        .progress-wrap.visible { display: block; }
+        .progress-bar-bg {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--orange);
+            border-radius: 3px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+        .progress-label { font-size: 12px; color: var(--mid); }
+
+        /* ── RESULTS PANEL ── */
+        .results-panel {
+            display: none;
+            margin-top: 20px;
+            grid-column: 1 / -1;
+        }
+        .results-panel.visible { display: block; }
+
+        /* ── RESULT SUMMARY BAR ── */
+        .result-summary {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: var(--white);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .result-summary-title { font-size: 16px; font-weight: 600; flex: 1; }
+        .stat-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .stat-chip.green { background: var(--green-bg); color: var(--green); }
+        .stat-chip.red { background: var(--red-bg); color: var(--red); }
+        .stat-chip.yellow { background: var(--yellow-bg); color: var(--yellow); }
+        .stat-chip.blue { background: var(--blue-bg); color: var(--blue); }
+        .stat-chip.grey { background: var(--bg); color: var(--mid); }
+
+        /* ── TEMPLATE RESULT CARDS ── */
+        .template-results-grid {
+            display: grid;
+            gap: 12px;
+        }
+        .template-result-card {
+            background: var(--white);
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .template-result-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+        .template-result-header:hover { background: var(--bg); }
+        .template-result-name { flex: 1; font-weight: 600; font-size: 14px; }
+        .template-result-badges { display: flex; gap: 8px; align-items: center; }
+        .result-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-pass { background: var(--green-bg); color: var(--green); }
+        .badge-warn { background: var(--yellow-bg); color: var(--yellow); }
+        .badge-fail { background: var(--red-bg); color: var(--red); }
+        .badge-new { background: var(--blue-bg); color: var(--blue); }
+        .badge-changed { background: #f3e5f5; color: #6a1b9a; }
+        .badge-same { background: var(--bg); color: var(--light); }
+        .chevron { font-size: 16px; color: var(--light); transition: transform 0.2s; }
+        .chevron.open { transform: rotate(90deg); }
+
+        .template-result-body {
+            display: none;
+            padding: 0 20px 16px;
+            border-top: 1px solid var(--border);
+        }
+        .template-result-body.open { display: block; }
+
+        /* ── DIFF TABLE ── */
+        .diff-section { margin-top: 14px; }
+        .diff-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--light);
+            margin-bottom: 8px;
+        }
+        .diff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .diff-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background: var(--bg);
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--mid);
+            border-bottom: 1px solid var(--border);
+        }
+        .diff-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        .diff-table tr:last-child td { border-bottom: none; }
+        .diff-row-added { background: #f1f8e9; }
+        .diff-row-removed { background: #fce4ec; }
+        .diff-row-changed { background: #fff8e1; }
+        .diff-row-same { }
+        .diff-cell-old { color: var(--red); text-decoration: line-through; opacity: 0.7; }
+        .diff-cell-new { color: var(--green); }
+        .check-id {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 11px;
+            background: var(--bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .pill-pass { background: var(--green-bg); color: var(--green); }
+        .pill-warn { background: var(--yellow-bg); color: var(--yellow); }
+        .pill-fail { background: var(--red-bg); color: var(--red); }
+        .pill-fixed { background: var(--blue-bg); color: var(--blue); }
+
+        /* ── INFO BOX ── */
+        .info-box {
+            background: var(--blue-bg);
+            border-left: 3px solid var(--blue);
+            border-radius: 0 8px 8px 0;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: var(--blue);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        /* ── EMPTY STATE ── */
+        .empty-hint {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--light);
+        }
+        .empty-hint-icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-hint-text { font-size: 14px; }
+
+        /* ── TOAST ── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--dark);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+
+        /* ── SEPARATOR ── */
+        .section-sep {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: var(--light);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .section-sep::before, .section-sep::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <a href="index.html" class="back-link">← <span style="font-weight:700;color:#f2a93b;">werk</span><span style="font-weight:300;color:#44403c;">bank</span></a>
+    <div class="header-title">
+        <h1>🔬 Regression Checker</h1>
+        <p>Internes Entwicklungs-Tool – prüft ob Code-Änderungen bestehende Templates beeinflussen</p>
+    </div>
+    <span class="version-badge" id="appVersionBadge">app.js lädt...</span>
+</div>
+
+<div class="main-grid" id="mainGrid">
+
+    <!-- LINKE SEITE: Snapshot erstellen -->
+    <div class="card">
+        <div class="card-header">
+            <span class="step-badge">1</span>
+            <div>
+                <div class="card-title">Snapshot erstellen</div>
+                <div class="card-subtitle">Templates verarbeiten und Ergebnis speichern</div>
+            </div>
+        </div>
+        <div class="card-body">
+
+            <div class="info-box">
+                Lade deine Test-Templates hoch. Das Tool verarbeitet sie und erstellt eine Snapshot-Datei mit allen Prüfergebnissen. Diese Datei aufheben – sie ist deine Vergleichsbasis.
+            </div>
+
+            <!-- Upload Zone -->
+            <div class="upload-zone" id="snapshotDropZone">
+                <div class="upload-zone-icon">📁</div>
+                <div class="upload-zone-text">Templates hierher ziehen oder klicken</div>
+                <div class="upload-zone-hint">Mehrere .html-Dateien gleichzeitig möglich</div>
+            </div>
+            <input type="file" id="snapshotFileInput" accept=".html,.htm" multiple>
+
+            <!-- Checklist Type -->
+            <div class="checklist-row">
+                <label class="checklist-option">
+                    <input type="radio" name="snapshotChecklist" value="standard" checked>
+                    📋 Standard
+                </label>
+                <label class="checklist-option">
+                    <input type="radio" name="snapshotChecklist" value="dpl">
+                    📋 DPL
+                </label>
+            </div>
+
+            <!-- File List -->
+            <div class="file-list" id="snapshotFileList"></div>
+
+            <!-- Progress -->
+            <div class="progress-wrap" id="snapshotProgress">
+                <div class="progress-bar-bg"><div class="progress-bar-fill" id="snapshotProgressBar"></div></div>
+                <div class="progress-label" id="snapshotProgressLabel">Verarbeite...</div>
+            </div>
+
+            <button class="btn btn-primary btn-full" id="snapshotBtn" disabled>
+                📸 Snapshot erstellen & herunterladen
+            </button>
+        </div>
+    </div>
+
+    <!-- RECHTE SEITE: Vergleich -->
+    <div class="card">
+        <div class="card-header">
+            <span class="step-badge">2</span>
+            <div>
+                <div class="card-title">Mit Snapshot vergleichen</div>
+                <div class="card-subtitle">Nach einer Code-Änderung: hat sich etwas verändert?</div>
+            </div>
+        </div>
+        <div class="card-body">
+
+            <div class="info-box">
+                Lade dieselben Templates nochmal hoch – plus die Snapshot-Datei von vorhin. Das Tool zeigt dir genau was sich verändert hat.
+            </div>
+
+            <!-- Upload Zone Templates -->
+            <div class="upload-zone" id="compareDropZone">
+                <div class="upload-zone-icon">📁</div>
+                <div class="upload-zone-text">Dieselben Templates wie im Snapshot</div>
+                <div class="upload-zone-hint">Gleiche Dateinamen wie beim Snapshot-Lauf</div>
+            </div>
+            <input type="file" id="compareFileInput" accept=".html,.htm" multiple>
+
+            <!-- Checklist Type -->
+            <div class="checklist-row">
+                <label class="checklist-option">
+                    <input type="radio" name="compareChecklist" value="standard" checked>
+                    📋 Standard
+                </label>
+                <label class="checklist-option">
+                    <input type="radio" name="compareChecklist" value="dpl">
+                    📋 DPL
+                </label>
+            </div>
+
+            <!-- File List -->
+            <div class="file-list" id="compareFileList"></div>
+
+            <!-- Snapshot File Upload -->
+            <div class="snapshot-upload" id="snapshotLoadZone">
+                <input type="file" id="snapshotLoadInput" accept=".json">
+                <div class="snapshot-upload-icon" id="snapshotLoadIcon">📂</div>
+                <div class="snapshot-upload-text">
+                    <div class="snapshot-upload-label" id="snapshotLoadLabel">Snapshot-Datei laden (.json)</div>
+                    <div class="snapshot-upload-hint" id="snapshotLoadHint">Die gespeicherte Vergleichsbasis von Schritt 1</div>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-wrap" id="compareProgress">
+                <div class="progress-bar-bg"><div class="progress-bar-fill" id="compareProgressBar"></div></div>
+                <div class="progress-label" id="compareProgressLabel">Verarbeite...</div>
+            </div>
+
+            <button class="btn btn-primary btn-full" id="compareBtn" disabled>
+                🔍 Vergleich starten
+            </button>
+        </div>
+    </div>
+
+    <!-- ERGEBNISSE (volle Breite) -->
+    <div class="results-panel" id="resultsPanel">
+        <div id="resultsContent"></div>
+    </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+    document.write('<script src="app.js?v=' + Date.now() + '"><\/script>');
+</script>
+<script>
+window.addEventListener('load', function() {
+
+    // ── Version Badge ──
+    setTimeout(function() {
+        if (typeof APP_VERSION !== 'undefined') {
+            document.getElementById('appVersionBadge').textContent = APP_VERSION;
+        } else {
+            document.getElementById('appVersionBadge').textContent = 'app.js geladen';
+        }
+    }, 500);
+
+    // ── STATE ──
+    let snapshotFiles = [];
+    let compareFiles = [];
+    let loadedSnapshot = null;
+
+    // ── TOAST ──
+    function showToast(msg, duration) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(function() { t.classList.remove('show'); }, duration || 3000);
+    }
+
+    // ── FILE HELPERS ──
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    function renderFileList(files, containerId, onRemove) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        files.forEach(function(file, idx) {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            item.innerHTML =
+                '<span class="file-item-icon">📄</span>' +
+                '<span class="file-item-name" title="' + file.name + '">' + file.name + '</span>' +
+                '<span class="file-item-size">' + formatSize(file.size) + '</span>' +
+                '<button class="file-item-remove" data-idx="' + idx + '" title="Entfernen">×</button>';
+            container.appendChild(item);
+        });
+        container.querySelectorAll('.file-item-remove').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                onRemove(parseInt(btn.dataset.idx));
+            });
+        });
+    }
+
+    // ── DRAG & DROP SETUP ──
+    function setupDropZone(dropZoneId, fileInputId, filesArray, fileListId, removeCallback, updateCallback) {
+        const zone = document.getElementById(dropZoneId);
+        const input = document.getElementById(fileInputId);
+
+        zone.addEventListener('click', function() { input.click(); });
+        zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', function() { zone.classList.remove('drag-over'); });
+        zone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            addFiles(Array.from(e.dataTransfer.files).filter(f => f.name.match(/\.html?$/i)));
+        });
+        input.addEventListener('change', function() {
+            addFiles(Array.from(input.files));
+            input.value = '';
+        });
+
+        function addFiles(newFiles) {
+            newFiles.forEach(function(f) {
+                if (!filesArray.find(function(x) { return x.name === f.name; })) {
+                    filesArray.push(f);
+                }
+            });
+            renderFileList(filesArray, fileListId, removeCallback);
+            updateCallback();
+        }
+    }
+
+    // ── SNAPSHOT FILES ──
+    setupDropZone(
+        'snapshotDropZone', 'snapshotFileInput', snapshotFiles, 'snapshotFileList',
+        function(idx) {
+            snapshotFiles.splice(idx, 1);
+            renderFileList(snapshotFiles, 'snapshotFileList', function(i) {
+                snapshotFiles.splice(i, 1);
+                renderFileList(snapshotFiles, 'snapshotFileList', arguments.callee);
+                updateSnapshotBtn();
+            });
+            updateSnapshotBtn();
+        },
+        updateSnapshotBtn
+    );
+
+    // ── COMPARE FILES ──
+    setupDropZone(
+        'compareDropZone', 'compareFileInput', compareFiles, 'compareFileList',
+        function(idx) {
+            compareFiles.splice(idx, 1);
+            renderFileList(compareFiles, 'compareFileList', function(i) {
+                compareFiles.splice(i, 1);
+                renderFileList(compareFiles, 'compareFileList', arguments.callee);
+                updateCompareBtn();
+            });
+            updateCompareBtn();
+        },
+        updateCompareBtn
+    );
+
+    // ── SNAPSHOT JSON LADEN ──
+    const snapshotLoadZone = document.getElementById('snapshotLoadZone');
+    const snapshotLoadInput = document.getElementById('snapshotLoadInput');
+    snapshotLoadZone.addEventListener('click', function() { snapshotLoadInput.click(); });
+    snapshotLoadInput.addEventListener('change', function() {
+        const file = snapshotLoadInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                loadedSnapshot = JSON.parse(e.target.result);
+                snapshotLoadZone.classList.add('loaded');
+                document.getElementById('snapshotLoadIcon').textContent = '✅';
+                document.getElementById('snapshotLoadLabel').textContent = file.name;
+                document.getElementById('snapshotLoadHint').textContent =
+                    'Erstellt am ' + (loadedSnapshot.createdAt || '?') +
+                    ' · ' + (loadedSnapshot.results ? loadedSnapshot.results.length : '?') + ' Templates · ' +
+                    (loadedSnapshot.appVersion || '?');
+                updateCompareBtn();
+                showToast('✅ Snapshot geladen: ' + (loadedSnapshot.results ? loadedSnapshot.results.length : '?') + ' Templates');
+            } catch(err) {
+                showToast('❌ Datei konnte nicht gelesen werden');
+            }
+        };
+        reader.readAsText(file);
+        snapshotLoadInput.value = '';
+    });
+
+    // ── UPDATE BUTTONS ──
+    function updateSnapshotBtn() {
+        document.getElementById('snapshotBtn').disabled = snapshotFiles.length === 0;
+    }
+    function updateCompareBtn() {
+        document.getElementById('compareBtn').disabled =
+            compareFiles.length === 0 || !loadedSnapshot;
+    }
+
+    // ── PROCESS TEMPLATES ──
+    function processTemplates(files, checklistType, progressBarId, progressLabelId, progressWrapId, callback) {
+        const progressWrap = document.getElementById(progressWrapId);
+        const progressBar = document.getElementById(progressBarId);
+        const progressLabel = document.getElementById(progressLabelId);
+
+        progressWrap.classList.add('visible');
+        progressBar.style.width = '0%';
+
+        const results = [];
+        let idx = 0;
+
+        function processNext() {
+            if (idx >= files.length) {
+                progressWrap.classList.remove('visible');
+                callback(results);
+                return;
+            }
+            const file = files[idx];
+            const pct = Math.round((idx / files.length) * 100);
+            progressBar.style.width = pct + '%';
+            progressLabel.textContent = '(' + (idx + 1) + '/' + files.length + ') ' + file.name;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const html = e.target.result;
+                let result = { name: file.name, error: null, checks: [], status: null, confidence: null, attentionItems: [] };
+                try {
+                    if (typeof TemplateProcessor === 'undefined') {
+                        result.error = 'TemplateProcessor nicht gefunden – app.js korrekt geladen?';
+                    } else {
+                        const processor = new TemplateProcessor(html, checklistType);
+                        const processed = processor.process();
+                        result.status = processed.status;
+                        result.confidence = processed.confidence;
+                        result.confidenceLevel = processed.confidenceLevel;
+                        result.attentionItems = processed.attentionItems || [];
+                        result.checks = (processor.checks || []).map(function(c) {
+                            return { id: c.id, status: c.status, message: c.message };
+                        });
+                    }
+                } catch(err) {
+                    result.error = err.message;
+                }
+                results.push(result);
+                idx++;
+                setTimeout(processNext, 10);
+            };
+            reader.readAsText(file);
+        }
+        processNext();
+    }
+
+    // ── SNAPSHOT ERSTELLEN ──
+    document.getElementById('snapshotBtn').addEventListener('click', function() {
+        const checklistType = document.querySelector('input[name="snapshotChecklist"]:checked').value;
+        document.getElementById('snapshotBtn').disabled = true;
+
+        processTemplates(snapshotFiles, checklistType, 'snapshotProgressBar', 'snapshotProgressLabel', 'snapshotProgress', function(results) {
+            const snapshot = {
+                createdAt: new Date().toLocaleString('de-DE'),
+                appVersion: (typeof APP_VERSION !== 'undefined') ? APP_VERSION : 'unbekannt',
+                checklistType: checklistType,
+                results: results
+            };
+
+            const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = 'snapshot-' + dateStr + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            document.getElementById('snapshotBtn').disabled = false;
+            showToast('✅ Snapshot erstellt: ' + results.length + ' Templates gespeichert', 4000);
+        });
+    });
+
+    // ── VERGLEICH STARTEN ──
+    document.getElementById('compareBtn').addEventListener('click', function() {
+        const checklistType = document.querySelector('input[name="compareChecklist"]:checked').value;
+        document.getElementById('compareBtn').disabled = true;
+
+        processTemplates(compareFiles, checklistType, 'compareProgressBar', 'compareProgressLabel', 'compareProgress', function(newResults) {
+            renderComparison(loadedSnapshot, newResults);
+            document.getElementById('compareBtn').disabled = false;
+        });
+    });
+
+    // ── VERGLEICH RENDERN ──
+    function renderComparison(snapshot, newResults) {
+        const panel = document.getElementById('resultsPanel');
+        const content = document.getElementById('resultsContent');
+        panel.classList.add('visible');
+
+        // Stats berechnen
+        let countSame = 0, countChanged = 0, countNew = 0, countMissing = 0;
+
+        const oldMap = {};
+        (snapshot.results || []).forEach(function(r) { oldMap[r.name] = r; });
+        const newMap = {};
+        newResults.forEach(function(r) { newMap[r.name] = r; });
+
+        const allNames = new Set([
+            ...Object.keys(oldMap),
+            ...newResults.map(function(r) { return r.name; })
+        ]);
+
+        const comparisons = [];
+        allNames.forEach(function(name) {
+            const oldR = oldMap[name];
+            const newR = newMap[name];
+
+            if (!oldR) { countNew++; comparisons.push({ name: name, type: 'new', oldR: null, newR: newR }); return; }
+            if (!newR) { countMissing++; comparisons.push({ name: name, type: 'missing', oldR: oldR, newR: null }); return; }
+
+            const diff = buildDiff(oldR, newR);
+            if (diff.hasChanges) {
+                countChanged++;
+                comparisons.push({ name: name, type: 'changed', oldR: oldR, newR: newR, diff: diff });
+            } else {
+                countSame++;
+                comparisons.push({ name: name, type: 'same', oldR: oldR, newR: newR, diff: diff });
+            }
+        });
+
+        // Sortierung: changed zuerst, dann new, dann same, dann missing
+        const order = { changed: 0, new: 1, missing: 2, same: 3 };
+        comparisons.sort(function(a, b) { return (order[a.type] || 9) - (order[b.type] || 9); });
+
+        // Summary bar
+        let summaryHtml = '<div class="result-summary">';
+        summaryHtml += '<div class="result-summary-title">📊 Vergleichs-Ergebnis</div>';
+        if (countChanged > 0) {
+            summaryHtml += '<span class="stat-chip red">⚠️ ' + countChanged + ' verändert</span>';
+        }
+        if (countNew > 0) {
+            summaryHtml += '<span class="stat-chip blue">+ ' + countNew + ' neu</span>';
+        }
+        if (countMissing > 0) {
+            summaryHtml += '<span class="stat-chip yellow">- ' + countMissing + ' fehlt</span>';
+        }
+        summaryHtml += '<span class="stat-chip green">✓ ' + countSame + ' unverändert</span>';
+        summaryHtml += '<span class="stat-chip grey">Snapshot: ' + (snapshot.appVersion || '?') + '</span>';
+        summaryHtml += '<span class="stat-chip grey">Aktuell: ' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') + '</span>';
+        summaryHtml += '</div>';
+
+        // Template cards
+        let cardsHtml = '<div class="template-results-grid">';
+        comparisons.forEach(function(comp, i) {
+            cardsHtml += renderTemplateCard(comp, i);
+        });
+        cardsHtml += '</div>';
+
+        content.innerHTML = summaryHtml + cardsHtml;
+
+        // Toggle handlers
+        content.querySelectorAll('.template-result-header').forEach(function(header) {
+            header.addEventListener('click', function() {
+                const body = header.nextElementSibling;
+                const chevron = header.querySelector('.chevron');
+                const isOpen = body.classList.contains('open');
+                body.classList.toggle('open', !isOpen);
+                if (chevron) chevron.classList.toggle('open', !isOpen);
+            });
+        });
+
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function renderTemplateCard(comp, idx) {
+        const name = comp.name;
+        const type = comp.type;
+
+        let typeLabel = '';
+        if (type === 'changed') typeLabel = '<span class="result-badge badge-changed">⚠️ Verändert</span>';
+        else if (type === 'new') typeLabel = '<span class="result-badge badge-new">+ Neu</span>';
+        else if (type === 'missing') typeLabel = '<span class="result-badge badge-fail">− Fehlt</span>';
+        else typeLabel = '<span class="result-badge badge-same">✓ Unverändert</span>';
+
+        // Status badges
+        let statusBadge = '';
+        if (comp.newR) {
+            const s = comp.newR.status;
+            const cls = s === 'pass' ? 'badge-pass' : s === 'warn' ? 'badge-warn' : 'badge-fail';
+            statusBadge = '<span class="result-badge ' + cls + '">' + s.toUpperCase() + '</span>';
+        }
+
+        let confidenceDiff = '';
+        if (comp.oldR && comp.newR && comp.oldR.confidence !== comp.newR.confidence) {
+            const delta = comp.newR.confidence - comp.oldR.confidence;
+            const color = delta > 0 ? 'green' : 'red';
+            confidenceDiff = '<span class="stat-chip ' + color + '" style="padding:2px 8px;font-size:11px;">' +
+                comp.oldR.confidence + '% → ' + comp.newR.confidence + '% (' + (delta > 0 ? '+' : '') + delta + ')</span>';
+        } else if (comp.newR) {
+            confidenceDiff = '<span style="font-size:12px;color:var(--light);">' + comp.newR.confidence + '%</span>';
+        }
+
+        // Auto-open if changed
+        const bodyOpen = type === 'changed' ? ' open' : '';
+        const chevronOpen = type === 'changed' ? ' open' : '';
+
+        let html = '<div class="template-result-card">';
+        html += '<div class="template-result-header">';
+        html += '<span style="font-size:18px;">📄</span>';
+        html += '<span class="template-result-name">' + escapeHtmlLocal(name) + '</span>';
+        html += '<div class="template-result-badges">' + confidenceDiff + statusBadge + typeLabel + '</div>';
+        html += '<span class="chevron' + chevronOpen + '">›</span>';
+        html += '</div>';
+
+        html += '<div class="template-result-body' + bodyOpen + '">';
+        html += renderCardBody(comp);
+        html += '</div>';
+        html += '</div>';
+        return html;
+    }
+
+    function renderCardBody(comp) {
+        if (comp.type === 'missing') {
+            return '<p style="color:var(--red);padding:12px 0;font-size:13px;">⚠️ Dieses Template war im Snapshot, wurde aber im aktuellen Lauf nicht gefunden. Hast du alle Dateien hochgeladen?</p>';
+        }
+        if (comp.type === 'new') {
+            return '<p style="color:var(--blue);padding:12px 0;font-size:13px;">ℹ️ Dieses Template war nicht im Snapshot. Kein Vergleich möglich.</p>';
+        }
+        if (!comp.diff) return '';
+
+        const diff = comp.diff;
+        let html = '';
+
+        // Attention Items Diff
+        const attDiff = diffAttentionItems(comp.oldR.attentionItems || [], comp.newR.attentionItems || []);
+        if (attDiff.added.length > 0 || attDiff.removed.length > 0) {
+            html += '<div class="diff-section">';
+            html += '<div class="diff-section-title">Bitte besonders prüfen – Änderungen</div>';
+            if (attDiff.added.length > 0) {
+                attDiff.added.forEach(function(item) {
+                    html += '<div style="padding:5px 10px;background:var(--red-bg);border-radius:5px;margin-bottom:4px;font-size:13px;color:var(--red);">+ NEU: ' + escapeHtmlLocal(item) + '</div>';
+                });
+            }
+            if (attDiff.removed.length > 0) {
+                attDiff.removed.forEach(function(item) {
+                    html += '<div style="padding:5px 10px;background:var(--green-bg);border-radius:5px;margin-bottom:4px;font-size:13px;color:var(--green);">− WEG: ' + escapeHtmlLocal(item) + '</div>';
+                });
+            }
+            html += '</div>';
+        }
+
+        // Checks Diff
+        const changed = diff.changed;
+        const added = diff.added;
+        const removed = diff.removed;
+
+        if (changed.length === 0 && added.length === 0 && removed.length === 0) {
+            html += '<p style="color:var(--green);padding:12px 0;font-size:13px;">✅ Alle Prüfergebnisse identisch – keine Regression erkannt.</p>';
+            return html;
+        }
+
+        if (changed.length > 0) {
+            html += '<div class="diff-section">';
+            html += '<div class="diff-section-title">Veränderte Checks (' + changed.length + ')</div>';
+            html += '<table class="diff-table"><thead><tr><th>Check</th><th>Vorher</th><th>Nachher</th><th>Meldung</th></tr></thead><tbody>';
+            changed.forEach(function(c) {
+                html += '<tr class="diff-row-changed">';
+                html += '<td><span class="check-id">' + escapeHtmlLocal(c.id) + '</span></td>';
+                html += '<td><span class="status-pill pill-' + c.oldStatus.toLowerCase() + '">' + c.oldStatus + '</span></td>';
+                html += '<td><span class="status-pill pill-' + c.newStatus.toLowerCase() + '">' + c.newStatus + '</span></td>';
+                html += '<td style="font-size:12px;">';
+                if (c.oldMessage !== c.newMessage) {
+                    html += '<div class="diff-cell-old">' + escapeHtmlLocal(c.oldMessage) + '</div>';
+                    html += '<div class="diff-cell-new">' + escapeHtmlLocal(c.newMessage) + '</div>';
+                } else {
+                    html += escapeHtmlLocal(c.newMessage);
+                }
+                html += '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        if (added.length > 0) {
+            html += '<div class="diff-section">';
+            html += '<div class="diff-section-title">Neue Checks (' + added.length + ')</div>';
+            html += '<table class="diff-table"><thead><tr><th>Check</th><th>Status</th><th>Meldung</th></tr></thead><tbody>';
+            added.forEach(function(c) {
+                html += '<tr class="diff-row-added">';
+                html += '<td><span class="check-id">' + escapeHtmlLocal(c.id) + '</span></td>';
+                html += '<td><span class="status-pill pill-' + (c.status || '').toLowerCase() + '">' + (c.status || '') + '</span></td>';
+                html += '<td style="font-size:12px;">' + escapeHtmlLocal(c.message) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        if (removed.length > 0) {
+            html += '<div class="diff-section">';
+            html += '<div class="diff-section-title">Weggefallene Checks (' + removed.length + ')</div>';
+            html += '<table class="diff-table"><thead><tr><th>Check</th><th>Status</th><th>Meldung</th></tr></thead><tbody>';
+            removed.forEach(function(c) {
+                html += '<tr class="diff-row-removed">';
+                html += '<td><span class="check-id">' + escapeHtmlLocal(c.id) + '</span></td>';
+                html += '<td><span class="status-pill pill-' + (c.status || '').toLowerCase() + '">' + (c.status || '') + '</span></td>';
+                html += '<td style="font-size:12px;">' + escapeHtmlLocal(c.message) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+
+        return html;
+    }
+
+    // ── DIFF LOGIK ──
+    function buildDiff(oldR, newR) {
+        const oldChecks = {};
+        (oldR.checks || []).forEach(function(c) { oldChecks[c.id] = c; });
+        const newChecks = {};
+        (newR.checks || []).forEach(function(c) { newChecks[c.id] = c; });
+
+        const allIds = new Set([...Object.keys(oldChecks), ...Object.keys(newChecks)]);
+        const changed = [], added = [], removed = [];
+
+        allIds.forEach(function(id) {
+            const oldC = oldChecks[id];
+            const newC = newChecks[id];
+            if (!oldC) { added.push(newC); return; }
+            if (!newC) { removed.push(oldC); return; }
+            if (oldC.status !== newC.status || oldC.message !== newC.message) {
+                changed.push({ id: id, oldStatus: oldC.status, newStatus: newC.status, oldMessage: oldC.message, newMessage: newC.message });
+            }
+        });
+
+        return {
+            hasChanges: changed.length > 0 || added.length > 0 || removed.length > 0,
+            changed: changed,
+            added: added,
+            removed: removed
+        };
+    }
+
+    function diffAttentionItems(oldItems, newItems) {
+        const added = newItems.filter(function(i) { return !oldItems.includes(i); });
+        const removed = oldItems.filter(function(i) { return !newItems.includes(i); });
+        return { added: added, removed: removed };
+    }
+
+    function escapeHtmlLocal(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+});
+</script>
+</body>
+</html>
