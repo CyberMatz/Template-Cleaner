@@ -5087,7 +5087,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.44-2026-03-10';
+const APP_VERSION = 'v3.9.45-debug-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -8936,6 +8936,10 @@ td[width] { width: auto !important; }
         const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         // Alle <a>-Tags holen, nicht nur a[href] – sonst fällt href="" raus
         const anchors = doc.querySelectorAll('a');
+        console.log('[DEBUG-LINKS] Total <a> tags:', anchors.length);
+        anchors.forEach((a, i) => {
+            console.log('[DEBUG-LINKS] a[' + i + '] hasHref=' + a.hasAttribute('href') + ' href=' + JSON.stringify(a.getAttribute('href')) + ' text=' + JSON.stringify(a.textContent.trim().substring(0, 30)));
+        });
         
         const links = [];
         let globalIndex = 0;
