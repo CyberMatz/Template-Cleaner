@@ -5084,7 +5084,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.41-2026-03-10';
+const APP_VERSION = 'v3.9.42-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5274,13 +5274,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Datei-Upload Handler (change + input für Browser-Kompatibilität)
     
     // === "Neues Template" Button dynamisch erstellen ===
-    const resetBtn = document.createElement('button');
-    resetBtn.id = 'resetBtn';
-    resetBtn.className = 'btn-reset';
-    resetBtn.innerHTML = '🔄 Neues Template';
-    resetBtn.title = 'Alles zurücksetzen und neues Template laden';
-    resetBtn.style.display = 'none';
-
     // === "Original wiederherstellen" Button dynamisch erstellen ===
     const restoreBtn = document.createElement('button');
     restoreBtn.id = 'restoreBtn';
@@ -5289,7 +5282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreBtn.title = 'Alle Änderungen verwerfen und Original neu verarbeiten';
     restoreBtn.style.display = 'none';
 
-    // Einfügen in Upload-Zeile: [Upload] [Original] [Neues Template] ... [Texte vorschlagen]
+    // Einfügen in Upload-Zeile: [Upload/Neues Template] [Original] ... [Texte vorschlagen]
     const uploadBtnEl = document.getElementById('uploadBtn');
     const suggestTextsBtnEl = document.getElementById('suggestTextsBtn');
     if (uploadBtnEl) {
@@ -5301,14 +5294,13 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadRow.appendChild(uploadBtnEl);
         }
         uploadRow.appendChild(restoreBtn);
-        uploadRow.appendChild(resetBtn);
         // Texte vorschlagen: Spacer + rechts außen
         const uploadRowSpacer = document.createElement('div');
         uploadRowSpacer.style.flex = '1';
         uploadRow.appendChild(uploadRowSpacer);
         if (suggestTextsBtnEl) {
             uploadRow.appendChild(suggestTextsBtnEl);
-            suggestTextsBtnEl.style.display = 'none'; // zunächst unsichtbar
+            suggestTextsBtnEl.style.display = 'none';
         }
     }
     
@@ -5384,6 +5376,7 @@ document.addEventListener('DOMContentLoaded', () => {
         processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
         processBtn.style.display = '';
         isProcessed = false;
+        if (uploadBtn) uploadBtn.innerHTML = '📁 Upload Template';
         if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = 'none'; }
         if (showDiffBtn) { showDiffBtn.disabled = true; }
         if (showInspectorBtn) { showInspectorBtn.disabled = true; }
@@ -5407,8 +5400,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Pending Warning ausblenden
         if (pendingWarning) pendingWarning.style.display = 'none';
         
-        // Reset- und Restore-Button wieder verstecken
-        resetBtn.style.display = 'none';
+        // Restore-Button + Texte vorschlagen verstecken
         restoreBtn.style.display = 'none';
         if (suggestTextsBtnEl) suggestTextsBtnEl.style.display = 'none';
         
@@ -5418,8 +5410,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Scroll nach oben
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    
-    resetBtn.addEventListener('click', resetForNewTemplate);
     
     const handleFileSelect = () => {
         const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
@@ -5459,6 +5449,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 processBtn.disabled = false;
                 processBtn.classList.remove('disabled');
                 processBtn.removeAttribute('aria-disabled');
+                processBtn.style.display = '';
                 isProcessed = false;
                 processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
                 
@@ -5568,9 +5559,12 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.addEventListener('change', handleFileSelect);
     fileInput.addEventListener('input', handleFileSelect);
     
-    // PATCH: uploadBtn triggert fileInput click (bereits oben deklariert)
+    // PATCH: uploadBtn triggert fileInput click – wenn bereits verarbeitet erst Reset
     if (uploadBtn) {
         uploadBtn.addEventListener('click', () => {
+            if (isProcessed) {
+                resetForNewTemplate();
+            }
             fileInput.click();
         });
     }
@@ -5640,6 +5634,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // processBtn wieder zeigen, restoreBtn + Texte vorschlagen verstecken
         processBtn.style.display = '';
         processBtn.disabled = false;
+        if (uploadBtn) uploadBtn.innerHTML = '📁 Upload Template';
         restoreBtn.style.display = 'none';
         if (suggestTextsBtnEl) suggestTextsBtnEl.style.display = 'none';
         
@@ -5783,8 +5778,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 300); // Kurze Verzögerung damit die Ergebnisse erst sichtbar werden
             }
             
-            // Reset-Button anzeigen
-            resetBtn.style.display = '';
+            // Reset-Button anzeigen → uploadBtn wird zu "Neues Template"
+            if (uploadBtn) uploadBtn.innerHTML = '📁 Neues Template';
             // processBtn verstecken, restoreBtn + Texte vorschlagen einblenden
             processBtn.style.display = 'none';
             restoreBtn.style.display = '';
