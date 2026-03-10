@@ -3663,22 +3663,22 @@ body {
 
 /* === Neues Template Reset Button === */
 .btn-reset {
-    background: #78909c;
-    color: white;
-    border: none;
-    padding: 12px 24px;
+    background: none;
+    color: #78716c;
+    border: 1px solid #d6d3d1;
+    padding: 8px 16px;
     border-radius: 6px;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
-    width: fit-content;
+    white-space: nowrap;
 }
 
 .btn-reset:hover {
-    background: #607d8b;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    background: #f5f3f0;
+    border-color: #a8a29e;
+    color: #44403c;
 }
 
 /* Original wiederherstellen Button */
