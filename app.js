@@ -1349,8 +1349,6 @@ class TemplateProcessor {
     // Zusätzlich werden leere href="" erkannt und gewarnt.
     fixHrefWhitespace() {
         let cleanedCount = 0;
-        let emptyHrefCount = 0;
-        const emptyHrefElements = [];
 
         // 1. Zeilenumbrüche und Whitespace in href-Werten bereinigen
         // Matcht href="..." wobei der Inhalt Newlines/Carriage Returns enthält
@@ -1370,13 +1368,7 @@ class TemplateProcessor {
                 return 'href="' + trimmed + '"';
             }
             
-            // Leere hrefs zählen (für Warnung)
-            if (trimmed === '') {
-                emptyHrefCount++;
-                // Kontext sammeln: versuche das Element zu identifizieren
-                const context = match;
-                emptyHrefElements.push(context);
-            }
+            // Leere hrefs werden separat gezählt (nach dem replace, mit vollem Tag-Kontext)
             
             return match; // Unverändert
         });
@@ -1394,7 +1386,7 @@ class TemplateProcessor {
                 return "href='" + trimmed + "'";
             }
             if (trimmed === '') {
-                emptyHrefCount++;
+                // Leere hrefs werden separat gezählt (nach dem replace, mit vollem Tag-Kontext)
             }
             return match;
         });
@@ -1406,8 +1398,18 @@ class TemplateProcessor {
             this.addCheck('S12_HREF_WHITESPACE', 'PASS', 'Keine Zeilenumbrüche in href-URLs gefunden');
         }
 
-        if (emptyHrefCount > 0) {
-            this.addCheck('S12b_EMPTY_HREF', 'WARN', emptyHrefCount + '× leere href="" gefunden – Versandsysteme belegen diese ggf. automatisch mit Redirects. Prüfung empfohlen im Tracking-Tab.');
+        // Leere hrefs separat zählen – mit vollem <a>-Tag-Kontext damit
+        // e-editable-Links (werden von S14 entfernt) nicht als Problem gemeldet werden
+        const emptyHrefReal = [];
+        const aTagScan = /<a\b([^>]*)href\s*=\s*["'](\s*)["']([^>]*)>/gi;
+        let aMatch;
+        while ((aMatch = aTagScan.exec(this.html)) !== null) {
+            const fullTag = aMatch[0];
+            if (/e-editable\s*=/i.test(fullTag)) continue; // Wird von S14 entfernt – kein Problem
+            emptyHrefReal.push(fullTag);
+        }
+        if (emptyHrefReal.length > 0) {
+            this.addCheck('S12b_EMPTY_HREF', 'WARN', emptyHrefReal.length + '× leere href="" gefunden – Versandsysteme belegen diese ggf. automatisch mit Redirects. Prüfung empfohlen im Tracking-Tab.');
         }
     }
 
@@ -2659,7 +2661,12 @@ class TemplateProcessor {
                 if (hasWidth && hasInitialScale) {
                     this.addCheck(id, 'PASS', 'Viewport Meta-Tag korrekt');
                 } else {
-                    this.addCheck(id, 'WARN', 'Viewport Meta-Tag vorhanden, aber möglicherweise unvollständig');
+                    // Unvollständig – Tag durch korrekte Version ersetzen
+                    this.html = this.html.replace(
+                        /<meta[^>]*name="viewport"[^>]*>/i,
+                        '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+                    );
+                    this.addCheck(id, 'FIXED', 'Viewport Meta-Tag korrigiert (war unvollständig, fehlte: ' + (!hasWidth ? 'width=device-width ' : '') + (!hasInitialScale ? 'initial-scale=1' : '') + ')');
                 }
             }
         } else {
@@ -3969,35 +3976,11 @@ class TemplateProcessor {
         return vml;
     }
 
-    // P15: Inline Styles Check
+    // P15: Inline Styles Check – deaktiviert
+    // Fast jedes Template hat <style>-Tags (Font-Definitionen, Resets, Media Queries).
+    // Der Check feuerte zu häufig ohne handlungsfähiges Ergebnis.
     checkInlineStyles() {
-        const id = 'P15_INLINE_STYLES';
-        
-        // Prüfe ob wichtige Styles inline sind (nicht nur in <style> Tags)
-        const hasStyleTag = /<style[^>]*>[\s\S]*?<\/style>/i.test(this.html);
-        
-        if (!hasStyleTag) {
-            this.addCheck(id, 'PASS', 'Keine <style> Tags gefunden (alle Styles inline)');
-            return;
-        }
-        
-        // Prüfe ob kritische Styles in <style> Tags sind
-        const styleTagContent = this.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-        if (styleTagContent) {
-            const styles = styleTagContent[1];
-            
-            // Kritische Styles die inline sein sollten (außer Media Queries)
-            const hasCriticalStyles = /(?:width|height|padding|margin|background|color|font-size):/i.test(styles);
-            const hasMediaQueries = /@media/i.test(styles);
-            
-            if (hasCriticalStyles && !hasMediaQueries) {
-                this.addCheck(id, 'WARN', 'Wichtige Styles in <style> Tags gefunden - sollten inline sein für bessere E-Mail-Client-Kompatibilität');
-            } else if (hasMediaQueries) {
-                this.addCheck(id, 'PASS', 'Styles in <style> Tags sind hauptsächlich Media Queries (korrekt)');
-            } else {
-                this.addCheck(id, 'PASS', 'Inline Styles korrekt');
-            }
-        }
+        return;
     }
 
     // P16: Broken/Placeholder Links prüfen
@@ -5087,7 +5070,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.45-debug-2026-03-10';
+const APP_VERSION = 'v3.9.50-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5744,7 +5727,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     else if (/tag-review|tag.struktur|html-tag|schlie/i.test(item)) targetTab = 'tagreview';
                     else if (/bild|img|base64/i.test(item)) targetTab = 'images';
                     else if (/button|outlook|vml|gradient/i.test(item)) targetTab = 'buttons';
-                    else if (/viewport|style|font|css/i.test(item)) targetTab = 'tagreview';
+                    else if (/viewport|meta.tag/i.test(item)) targetTab = 'editor';
+                    else if (/style|font|css/i.test(item)) targetTab = 'editor';
 
                     if (targetTab) {
                         confHtml += '<div class="confidence-attention-item confidence-attention-item-link" data-target-tab="' + targetTab + '" title="Klicken um zum ' + targetTab + '-Tab zu springen">' + item + ' <span style="font-size:11px;opacity:0.7;">→ öffnen</span></div>';
@@ -8936,10 +8920,6 @@ td[width] { width: auto !important; }
         const doc = parser.parseFromString(protectMsoStyles(html), 'text/html');
         // Alle <a>-Tags holen, nicht nur a[href] – sonst fällt href="" raus
         const anchors = doc.querySelectorAll('a');
-        console.log('[DEBUG-LINKS] Total <a> tags:', anchors.length);
-        anchors.forEach((a, i) => {
-            console.log('[DEBUG-LINKS] a[' + i + '] hasHref=' + a.hasAttribute('href') + ' href=' + JSON.stringify(a.getAttribute('href')) + ' text=' + JSON.stringify(a.textContent.trim().substring(0, 30)));
-        });
         
         const links = [];
         let globalIndex = 0;
