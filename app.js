@@ -5084,7 +5084,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.36-2026-03-10';
+const APP_VERSION = 'v3.9.37-2026-03-10';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6852,10 +6852,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const oldW05Idx = processingResult.attentionItems.findIndex(item => /relativem Pfad|relative.*Pfad/i.test(item));
         if (oldW05Idx !== -1) {
-            if (relativeImgCount === 0) {
+            const totalImgsInHtml = (htmlForRelImg.match(/<img\b/gi) || []).length;
+            if (relativeImgCount === 0 && totalImgsInHtml > 0) {
+                // Genuine fix: images exist but none are relative anymore
                 confidenceDelta += 5;
                 changes.push('🖼️ Relative Bildpfade: alle behoben ✓');
                 processingResult.attentionItems[oldW05Idx] = '✅ Bildpfade vollständig (https://...)';
+            } else if (relativeImgCount === 0 && totalImgsInHtml === 0) {
+                // No img tags found at all – keep warning unchanged (likely HTML parsing issue)
             } else {
                 const moreRel = relativeImgCount > 3 ? ' und ' + (relativeImgCount - 3) + ' weitere' : '';
                 processingResult.attentionItems[oldW05Idx] = '⚠️ ' + relativeImgCount + ' Bilder mit relativem Pfad: ' + relativeImgExamples.join(', ') + moreRel + ' → vollständige URL (https://...) benötigt';
@@ -6878,7 +6882,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         const oldW02Idx = processingResult.attentionItems.findIndex(item =>
-            /Tracking-Pixel.*HTTP|HTTP.*Tracking-Pixel|Bild.*HTTP|HTTP.*Bild/i.test(item)
+            /nutzen HTTP statt HTTPS|Tracking-Pixel mit HTTP/i.test(item)
         );
         if (oldW02Idx !== -1) {
             if (newTrackingPixels === 0 && newContentImages === 0) {
@@ -13963,8 +13967,8 @@ td[width] { width: auto !important; }
         updateInspectorPreview();
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
-        recalculatePostCommitMetrics(currentWorkingHtml);
         updateTagReviewSummary();
+        recalculatePostCommitMetrics(currentWorkingHtml);
         showInspectorToast('✅ ' + fix.inserted + ' eingefügt (direkt übernommen)');
     }
     
@@ -14020,8 +14024,8 @@ td[width] { width: auto !important; }
         updateInspectorPreview();
         if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
         resetNonPendingTabHtmls();
-        recalculatePostCommitMetrics(currentWorkingHtml);
         updateTagReviewSummary();
+        recalculatePostCommitMetrics(currentWorkingHtml);
         showInspectorToast('↩️ ' + fix.inserted + ' entfernt (direkt übernommen)');
     }
     
@@ -14433,6 +14437,21 @@ td[width] { width: auto !important; }
             if (openSuggested > 0) parts.push(openSuggested + ' Vorschlag' + (openSuggested > 1 ? 'e' : '') + ' offen');
             if (openCount > 0) parts.push(openCount + ' Problem' + (openCount > 1 ? 'e' : '') + ' offen');
             titleEl.textContent = '⚙️ Tag-Balancing: ' + parts.join(', ');
+        }
+
+        // Haupt-Status-Panel ebenfalls aktualisieren
+        if (typeof processingResult !== 'undefined' && processingResult && processingResult.attentionItems) {
+            const tagBalIdx = processingResult.attentionItems.findIndex(item => /Tag-Balancing/i.test(item));
+            if (tagBalIdx !== -1) {
+                if (openCount === 0 && openSuggested === 0) {
+                    processingResult.attentionItems[tagBalIdx] = '✅ Tag-Balancing: alle Tags korrekt';
+                } else {
+                    const statusParts = [];
+                    if (openSuggested > 0) statusParts.push(openSuggested + ' fehlende Tags (Vorschläge)');
+                    if (openCount > 0) statusParts.push(openCount + ' Problem(e) offen');
+                    processingResult.attentionItems[tagBalIdx] = '⚠️ Tag-Balancing: ' + statusParts.join(', ') + ' – bitte im Inspector prüfen';
+                }
+            }
         }
     }
 
