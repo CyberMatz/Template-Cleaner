@@ -5007,7 +5007,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.55-2026-03-11';
+const APP_VERSION = 'v3.9.56-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11890,11 +11890,18 @@ td[width] { width: auto !important; }
         }
         
         // === Kandidat 5: Innerhalb des Hintergrund-Wrappers (Standard) ===
-        // Suche nach dem Wrapper-Div mit nicht-weißer Hintergrundfarbe und finde dessen schließendes </div>
+        // Nur wenn Wrapper eine echte, sichtbare (nicht-weiße) Hintergrundfarbe hat
         const bgWrapperFooterMatch = html.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
         if (bgWrapperFooterMatch) {
             const bgColor = bgWrapperFooterMatch[1].trim().toLowerCase().replace(/\s/g, '');
-            if (bgColor !== '#fff' && bgColor !== '#ffffff' && bgColor !== 'white') {
+            // Erkennt weiß in allen Varianten: #fff, #ffffff, #ffffffXX (mit Alpha), white, rgba(255,255,255,...)
+            const isWhiteOrTransparent = (
+                bgColor === '#fff' || bgColor === '#ffffff' || bgColor === 'white' ||
+                /^#ffffff[0-9a-f]{2}$/i.test(bgColor) ||  // 8-stellig mit Alpha z.B. #ffffff3b
+                /^rgba?\(255,255,255/i.test(bgColor) ||
+                bgColor === 'transparent'
+            );
+            if (!isWhiteOrTransparent) {
                 const wrapperStart = html.indexOf(bgWrapperFooterMatch[0]);
                 const afterWrapper = html.slice(wrapperStart);
                 
