@@ -2841,9 +2841,10 @@ class TemplateProcessor {
             ranges.push({ start: contStart, end: contStart + 12000, textColor });
         }
 
-        // Schritt 2: Alle h1-h6, p, span ohne inline color finden und patchen
+        // Schritt 2: Alle h1-h6, p, span, td ohne inline color finden und patchen
+        // td: nur wenn kein <table> direkt darin (strukturelle TDs überspringen)
         // Rückwärts-Sammlung damit Positionen nach dem Ersetzen stimmen
-        const childRegex = /(<(?:h[1-6]|p|span)\b([^>]*))>/gi;
+        const childRegex = /(<(?:h[1-6]|p|span|td)\b([^>]*))>/gi;
         let childMatch;
         const fixes = [];
 
@@ -2854,6 +2855,13 @@ class TemplateProcessor {
 
             const range = ranges.find(r => childPos >= r.start && childPos < r.end);
             if (!range) continue;
+
+            // Sicherheitscheck für <td>: strukturelle TDs (enthalten <table>) überspringen
+            const tagName = (childMatch[1].match(/^<(\w+)/i)||[])[1]||'';
+            if (tagName.toLowerCase() === 'td') {
+                const afterTd = html.substring(childPos + childMatch[0].length, childPos + childMatch[0].length + 200);
+                if (/<table\b/i.test(afterTd)) continue;
+            }
 
             const originalTag = childMatch[0];
             const childStyleM = childMatch[2].match(/style\s*=\s*["']([^"']*)["']/i);
@@ -2884,7 +2892,7 @@ class TemplateProcessor {
         if (fixCount > 0 || colorCorrections > 0) {
             const msg = [];
             if (colorCorrections > 0) msg.push(colorCorrections + '\u00d7 dunkle Textfarbe auf #ffffff korrigiert');
-            if (fixCount > 0) msg.push(fixCount + '\u00d7 Textfarbe inline auf Kind-Elemente gesetzt (T-Online/GMX-kompatibel)');
+            if (fixCount > 0) msg.push(fixCount + '\u00d7 Textfarbe inline auf Kind-Elemente (p, span, td, h1-h6) gesetzt (T-Online/GMX-kompatibel)');
             this.addCheck(id, 'FIXED', msg.join(', '));
         } else {
             this.addCheck(id, 'PASS', 'Keine dunklen Container mit Textfarben-Problem gefunden');
@@ -4559,8 +4567,8 @@ class TemplateProcessor {
             const examples = unique.slice(0, 2).join(' | ');
             const more = unique.length > 2 ? ' (+' + (unique.length - 2) + ' weitere)' : '';
             this.addCheck(id, 'WARN',
-                '⚠️ Textfarben-Risiko (' + unique.length + ' Problem(e)): ' + examples + more + '. ' +
-                'Betroffene Texte können in T-Online, GMX, Web.de unsichtbar werden.'
+                '⚠️ Textfarben-Risiko (' + unique.length + ' Stelle(n) konnten nicht automatisch behoben werden): ' + examples + more + '. ' +
+                'Heller Text auf dunklem Hintergrund ist möglicherweise in T-Online, GMX oder Web.de nicht sichtbar. Template ggf. neu exportieren.'
             );
         } else {
             this.addCheck(id, 'PASS', 'Keine kritischen Textfarben-Probleme gefunden');
@@ -5007,7 +5015,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.58-2026-03-11';
+const APP_VERSION = 'v3.9.59-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
