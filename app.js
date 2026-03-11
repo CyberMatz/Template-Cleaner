@@ -628,44 +628,25 @@ class TemplateProcessor {
         }
     }
 
-    // Header-Platzhalter einfügen
+    // Header-Platzhalter einfügen – immer ganz oben (nach Preheader falls vorhanden)
     insertHeaderPlaceholder() {
         const bodyMatch = this.html.match(/<body[^>]*>/i);
         if (!bodyMatch) return;
 
         let insertPos = this.html.indexOf(bodyMatch[0]) + bodyMatch[0].length;
 
-        // Prüfe ob Preheader vorhanden (direkt nach body) - breite Erkennung (div UND span)
+        // Prüfe ob Preheader direkt nach <body> vorhanden → Header kommt danach
         const afterBody = this.html.slice(insertPos);
         const preheaderMatch = afterBody.match(/^\s*<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0|visibility:\s*hidden|mso-hide:\s*all|font-size:\s*0|color:\s*transparent)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
-
         if (preheaderMatch) {
-            // Header nach Preheader einfügen
             insertPos += preheaderMatch[0].length;
-        }
-
-        // Standard: Header INNERHALB des Hintergrund-Wrappers einfügen
-        if (this.checklistType !== 'dpl') {
-            const afterPreheader = this.html.slice(insertPos);
-            // Suche das erste Element mit nicht-weißer Hintergrundfarbe (= der äußere Wrapper)
-            const bgWrapperMatch = afterPreheader.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
-            if (bgWrapperMatch) {
-                const color = bgWrapperMatch[1].trim().toLowerCase().replace(/\s/g, '');
-                // Nur reingehen wenn Farbe nicht weiß ist (sonst kein visueller Unterschied)
-                if (color !== '#fff' && color !== '#ffffff' && color !== 'white' && color !== '#FFF' && color !== '#FFFFFF') {
-                    insertPos += afterPreheader.indexOf(bgWrapperMatch[0]) + bgWrapperMatch[0].length;
-                }
-            }
         }
 
         // DPL: Header INNERHALB des roten Hintergrund-Divs einfügen
         if (this.checklistType === 'dpl') {
-            // Suche nach dem roten Hintergrund-Div (#6B140F)
             const afterPreheader = this.html.slice(insertPos);
             const redBgDivMatch = afterPreheader.match(/<div[^>]*background-color:\s*#6B140F[^>]*>/i);
-            
             if (redBgDivMatch) {
-                // Header nach dem öffnenden roten Div einfügen
                 insertPos += afterPreheader.indexOf(redBgDivMatch[0]) + redBgDivMatch[0].length;
             }
         }
@@ -1469,14 +1450,11 @@ class TemplateProcessor {
             });
             this.addCheck(id, 'FIXED', `Footer-Platzhalter reduziert (${footerCount} → 1)`);
         } else {
-            // Kein Footer - einfügen
+            // Kein Footer - immer ganz unten einfügen
             let insertPos;
             
             // DPL: Footer INNERHALB des roten Hintergrund-Divs einfügen
             if (this.checklistType === 'dpl') {
-                // Suche nach dem schließenden Div des roten Hintergrunds
-                // Der rote Div enthält den weißen Content-Div, Footer kommt nach Content aber vor </div> des roten Divs
-                
                 // Strategie: Finde den weißen Content-Div und dessen schließendes </div>
                 // Footer kommt nach diesem </div> aber vor dem nächsten </div> (roter Div)
                 const whiteDivMatch = this.html.match(/<div[^>]*background-color:\s*#fafdfe[^>]*>/i);
@@ -1485,18 +1463,13 @@ class TemplateProcessor {
                     const whiteDivStart = this.html.indexOf(whiteDivMatch[0]);
                     const afterWhiteDiv = this.html.slice(whiteDivStart);
                     
-                    // Finde das schließende </div> des weißen Divs
-                    // Einfache Heuristik: Zähle öffnende und schließende Divs
                     let depth = 0;
                     let whiteDivEnd = -1;
                     
                     for (let i = 0; i < afterWhiteDiv.length; i++) {
-                        // Prüfe auf öffnende <div Tags (mit beliebigen Attributen)
                         if (afterWhiteDiv.substr(i, 4) === '<div' && (afterWhiteDiv[i+4] === ' ' || afterWhiteDiv[i+4] === '>')) {
                             depth++;
-                        } 
-                        // Prüfe auf schließende </div> Tags
-                        else if (afterWhiteDiv.substr(i, 6) === '</div>') {
+                        } else if (afterWhiteDiv.substr(i, 6) === '</div>') {
                             depth--;
                             if (depth === 0) {
                                 whiteDivEnd = whiteDivStart + i + 6;
@@ -1511,40 +1484,8 @@ class TemplateProcessor {
                 }
             }
             
-            // Standard: Footer INNERHALB des Hintergrund-Wrappers einfügen (vor dessen schließendem </div>)
-            if (!insertPos && this.checklistType !== 'dpl') {
-                // Suche das Wrapper-Div mit nicht-weißer Hintergrundfarbe
-                const bgWrapperMatch = this.html.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
-                if (bgWrapperMatch) {
-                    const color = bgWrapperMatch[1].trim().toLowerCase().replace(/\s/g, '');
-                    if (color !== '#fff' && color !== '#ffffff' && color !== 'white' && color !== '#FFF' && color !== '#FFFFFF') {
-                        const wrapperStart = this.html.indexOf(bgWrapperMatch[0]);
-                        const afterWrapper = this.html.slice(wrapperStart);
-                        
-                        // Finde das schließende </div> des Wrappers durch Div-Tiefe zählen
-                        let depth = 0;
-                        let wrapperEndPos = -1;
-                        
-                        for (let i = 0; i < afterWrapper.length; i++) {
-                            if (afterWrapper.substr(i, 4) === '<div' && (afterWrapper[i+4] === ' ' || afterWrapper[i+4] === '>')) {
-                                depth++;
-                            } else if (afterWrapper.substr(i, 6) === '</div>') {
-                                depth--;
-                                if (depth === 0) {
-                                    wrapperEndPos = wrapperStart + i;
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        if (wrapperEndPos > 0) {
-                            insertPos = wrapperEndPos;
-                        }
-                    }
-                }
-            }
-            
-            // Fallback 1: Vor </body> einfügen
+            // Standard: Footer vor </body> einfügen (immer ganz unten)
+            // Fallback 1: Vor </body>
             if (!insertPos) {
                 const bodyCloseMatch = this.html.match(/<\/body>/i);
                 if (bodyCloseMatch) {
@@ -5066,7 +5007,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.53-2026-03-10';
+const APP_VERSION = 'v3.9.55-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11809,14 +11750,23 @@ td[width] { width: auto !important; }
             }
         }
         
-        // Markiere aktuelle Position
+        // Markiere aktuelle Position – nächstgelegenen Kandidaten wählen
         const currentPos = html.indexOf('%header%');
-        if (currentPos !== -1) {
-            candidates.forEach(c => {
-                if (Math.abs(c.position - currentPos) < 200) {
-                    c.isCurrent = true;
-                }
-            });
+        if (currentPos !== -1 && candidates.length > 0) {
+            // Erst exakter Match versuchen (< 200 Zeichen)
+            const exactMatch = candidates.find(c => Math.abs(c.position - currentPos) < 200);
+            if (exactMatch) {
+                exactMatch.isCurrent = true;
+            } else {
+                // Fallback: nächstgelegenen Kandidaten markieren
+                let closest = candidates[0];
+                let minDist = Math.abs(candidates[0].position - currentPos);
+                candidates.forEach(c => {
+                    const dist = Math.abs(c.position - currentPos);
+                    if (dist < minDist) { minDist = dist; closest = c; }
+                });
+                closest.isCurrent = true;
+            }
         }
         
         return candidates;
@@ -12008,13 +11958,22 @@ td[width] { width: auto !important; }
             }
         }
         
-        // Markiere aktuelle Position
-        if (footerPos !== -1) {
-            candidates.forEach(c => {
-                if (Math.abs(c.position - footerPos) < 200) {
-                    c.isCurrent = true;
-                }
-            });
+        // Markiere aktuelle Position – nächstgelegenen Kandidaten wählen
+        if (footerPos !== -1 && candidates.length > 0) {
+            // Erst exakter Match versuchen (< 200 Zeichen)
+            const exactMatch = candidates.find(c => Math.abs(c.position - footerPos) < 200);
+            if (exactMatch) {
+                exactMatch.isCurrent = true;
+            } else {
+                // Fallback: nächstgelegenen Kandidaten markieren
+                let closest = candidates[0];
+                let minDist = Math.abs(candidates[0].position - footerPos);
+                candidates.forEach(c => {
+                    const dist = Math.abs(c.position - footerPos);
+                    if (dist < minDist) { minDist = dist; closest = c; }
+                });
+                closest.isCurrent = true;
+            }
         }
         
         return candidates;
