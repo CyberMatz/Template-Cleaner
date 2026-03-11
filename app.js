@@ -4547,6 +4547,8 @@ class TemplateProcessor {
                     if (elTagName.toLowerCase() === 'td') {
                         const afterEl = innerHtml.substring(textEl.index + textEl[0].length, textEl.index + textEl[0].length + 200);
                         if (/<table\b/i.test(afterEl)) continue;
+                        // Leere TD (nur Whitespace/closing tags) → überspringen
+                        if (/^\s*(<\/td>|<\/tr>|$)/i.test(afterEl)) continue;
                         // Button-TD mit hellem bgcolor überspringen (gleiche Logik wie S15)
                         const tdBgM2 = textEl[1].match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,8}|white)\s*["']?/i);
                         if (tdBgM2) {
@@ -5020,7 +5022,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.63-2026-03-11';
+const APP_VERSION = 'v3.9.64-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
