@@ -3193,7 +3193,11 @@ class TemplateProcessor {
                         // Outlook kollabiert align=left Spalten → VML erzwingen unabhängig von bgcolor
                         const btnProps = this._extractButtonProperties(cta);
                         if (btnProps && btnProps.href) {
-                            const vmlCode = this._generateVmlButton(btnProps);
+                            // VML braucht <td>-Wrapper damit Outlook die Tabellenstruktur korrekt rendert
+                            const vmlRaw = this._generateVmlButton(btnProps);
+                            const vmlCode = vmlRaw
+                                .replace('<!--[if mso]>\n', '<!--[if mso]><td align="center">\n')
+                                .replace('<![endif]-->', '</td><![endif]-->');
                             const notMsoOpen = '<!--[if !mso]><!-->\n';
                             const notMsoClose = '\n<!--<![endif]-->';
                             const insertPos = cta.containerIndex || cta.index;
@@ -5021,7 +5025,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.60-2026-03-11';
+const APP_VERSION = 'v3.9.61-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
