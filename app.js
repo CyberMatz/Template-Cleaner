@@ -5007,7 +5007,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.56-2026-03-11';
+const APP_VERSION = 'v3.9.57-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11716,11 +11716,17 @@ td[width] { width: auto !important; }
         }
         
         // === Kandidat 6: Innerhalb des Hintergrund-Wrappers (Standard) ===
-        // Suche nach dem ersten Div mit nicht-weißer Hintergrundfarbe – das ist typischerweise der äußere Wrapper
+        // Nur wenn Wrapper eine echte, sichtbare (nicht-weiße) Hintergrundfarbe hat
         const bgWrapperHeaderMatch = html.match(/<div[^>]*style="[^"]*background-color\s*:\s*([^;"]+)[^"]*"[^>]*>/i);
         if (bgWrapperHeaderMatch) {
             const bgColor = bgWrapperHeaderMatch[1].trim().toLowerCase().replace(/\s/g, '');
-            if (bgColor !== '#fff' && bgColor !== '#ffffff' && bgColor !== 'white') {
+            const isWhiteOrTransparent = (
+                bgColor === '#fff' || bgColor === '#ffffff' || bgColor === 'white' ||
+                /^#ffffff[0-9a-f]{2}$/i.test(bgColor) ||
+                /^rgba?\(255,255,255/i.test(bgColor) ||
+                bgColor === 'transparent'
+            );
+            if (!isWhiteOrTransparent) {
                 const wrapperPos = html.indexOf(bgWrapperHeaderMatch[0]) + bgWrapperHeaderMatch[0].length;
                 if (!positionAlreadyExists(wrapperPos)) {
                     candidates.push({
