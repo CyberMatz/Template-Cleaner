@@ -5007,7 +5007,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.57-2026-03-11';
+const APP_VERSION = 'v3.9.58-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5162,6 +5162,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastUploadResults = null;  // Upload-Ergebnisse über Re-Renders hinweg speichern
     let lastUploadFolder = '';  // Letzter verwendeter Ordnername
     let currentBrowsingFolder = '';  // Aktuell geöffneter Ordner im Browser
+    let folderSetByBrowse = false;  // true wenn Ordner manuell via "Ordner suchen" gewählt wurde
     
     // Buttons Tab State
     let buttonsTabHtml = null;  // Separate HTML für Buttons Tab
@@ -9662,15 +9663,14 @@ td[width] { width: auto !important; }
         html += '<div class="upload-dropzone" id="imageDropZone">';
         html += '<div class="upload-dropzone-content">';
         html += '<span class="upload-dropzone-icon">📁</span>';
-        html += '<span>Bilder hierher ziehen oder <label for="imageFileInput" class="upload-browse-link">durchsuchen</label></span>';
+        html += '<span>Upload Bilder – <label for="imageFileInput" class="upload-browse-link">Dateien auswählen</label></span>';
         html += '<input type="file" id="imageFileInput" multiple accept="image/*" style="display:none">';
         html += '</div>';
         html += '</div>';
         html += '<div class="upload-options">';
-        html += '<label>Ordner: </label>';
-        html += '<input type="text" id="imageUploadFolder" class="upload-folder-input" placeholder="auto (' + getTodayFolderName() + ')">';
-        html += '<button class="btn-small" id="btnNewFolder" title="Neuen Ordner erzwingen (mit _1, _2...)">+ Neu</button>';
-        html += '<button class="btn-small" id="btnBrowseFolders" title="Vorhandene Ordner anzeigen">📂 Ordner</button>';
+        html += '<label>Ordner suchen: </label>';
+        html += '<input type="text" id="imageUploadFolder" class="upload-folder-input" placeholder="' + getTodayFolderName() + '" readonly>';
+        html += '<button class="btn-small" id="btnBrowseFolders" title="Vorhandene Ordner anzeigen">📂 Ordner suchen</button>';
         html += '</div>';
         html += '<div class="upload-folder-browser" id="folderBrowser" style="display:none;"></div>';
         html += '<div class="upload-results" id="imageUploadResults"></div>';
@@ -10834,11 +10834,10 @@ td[width] { width: auto !important; }
     }
     
     // Bild(er) hochladen
-    async function uploadImages(files, forceNewFolder) {
+    async function uploadImages(files) {
         const statusEl = document.getElementById('imageUploadStatus');
         const resultsEl = document.getElementById('imageUploadResults');
         const folderInput = document.getElementById('imageUploadFolder');
-        const folder = folderInput ? folderInput.value.trim() : getTodayFolderName();
         
         if (!files || files.length === 0) return;
         
@@ -10851,8 +10850,14 @@ td[width] { width: auto !important; }
         for (let i = 0; i < files.length; i++) {
             formData.append('files', files[i]);
         }
-        formData.append('folder', folder);
-        if (forceNewFolder) formData.append('newFolder', 'true');
+        
+        if (folderSetByBrowse && folderInput && folderInput.value.trim()) {
+            // Manuell gewählter Ordner via "Ordner suchen" → in diesen Ordner hochladen
+            formData.append('folder', folderInput.value.trim());
+        } else {
+            // Standard: immer neuen Ordner erstellen (260311 → 260311_1 → 260311_2 usw.)
+            formData.append('newFolder', 'true');
+        }
         
         try {
             const resp = await fetch(IMAGE_UPLOAD_SERVER + '/upload', {
@@ -10872,8 +10877,9 @@ td[width] { width: auto !important; }
                 statusEl.innerHTML = '<span class="upload-status-ok">✅ ' + data.files.length + ' Bild(er) hochgeladen in <strong>' + data.folder + '</strong></span>';
             }
             
-            // Ordner-Input aktualisieren (falls Server neuen _N Ordner erstellt hat)
+            // Ordner-Input aktualisieren (zeigt welcher Ordner verwendet wurde)
             if (folderInput) folderInput.value = data.folder;
+            folderSetByBrowse = false;  // Nächster Upload erstellt wieder neuen Ordner
             
             // Ergebnisse speichern (überleben Re-Renders)
             if (!lastUploadResults) lastUploadResults = [];
@@ -11035,6 +11041,7 @@ td[width] { width: auto !important; }
                     // Ordner ins Eingabefeld übernehmen
                     const folderInput = document.getElementById('imageUploadFolder');
                     if (folderInput) folderInput.value = folderName;
+                    folderSetByBrowse = true;  // Nächster Upload geht in diesen Ordner
                     lastUploadFolder = folderName;
                     // Inhalt des Ordners laden
                     loadFolderContents(folderName);
@@ -11196,7 +11203,7 @@ td[width] { width: auto !important; }
             // File-Input Change
             fileInput.addEventListener('change', function() {
                 if (this.files.length > 0) {
-                    uploadImages(this.files, false);
+                    uploadImages(this.files);
                 }
             });
             
@@ -11227,24 +11234,7 @@ td[width] { width: auto !important; }
                 
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
-                    uploadImages(files, false);
-                }
-            });
-        }
-        
-        // Neuer Ordner Button
-        if (newFolderBtn) {
-            newFolderBtn.addEventListener('click', function() {
-                const fileInput = document.getElementById('imageFileInput');
-                if (fileInput) {
-                    // Markiere für nächsten Upload: neuer Ordner
-                    newFolderBtn.classList.toggle('active');
-                    if (newFolderBtn.classList.contains('active')) {
-                        newFolderBtn.textContent = 'Neu ✓';
-                        showInspectorToast('📁 Nächster Upload erstellt neuen Ordner');
-                    } else {
-                        newFolderBtn.textContent = 'Neu';
-                    }
+                    uploadImages(files);
                 }
             });
         }
