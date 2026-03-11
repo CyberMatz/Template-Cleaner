@@ -2856,11 +2856,20 @@ class TemplateProcessor {
             const range = ranges.find(r => childPos >= r.start && childPos < r.end);
             if (!range) continue;
 
-            // Sicherheitscheck für <td>: strukturelle TDs (enthalten <table>) überspringen
+            // Sicherheitscheck für <td>:
+            // 1. Strukturelle TDs (enthalten <table>) überspringen
+            // 2. Button-TDs mit hellem bgcolor überspringen (weiße Farbe würde auf weißem Hintergrund unsichtbar)
             const tagName = (childMatch[1].match(/^<(\w+)/i)||[])[1]||'';
             if (tagName.toLowerCase() === 'td') {
                 const afterTd = html.substring(childPos + childMatch[0].length, childPos + childMatch[0].length + 200);
                 if (/<table\b/i.test(afterTd)) continue;
+                // Helles bgcolor → Button-TD → Farbe nicht propagieren
+                const tdBgM = childMatch[2].match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,8}|white)\s*["']?/i);
+                if (tdBgM) {
+                    const tdBg = tdBgM[1].replace('#','').toLowerCase();
+                    // Weiß oder sehr helle Farbe: #fff, #ffffff, ffffff, fff, white
+                    if (tdBg === 'fff' || tdBg === 'ffffff' || tdBg === 'white' || /^ffffff/i.test(tdBg)) continue;
+                }
             }
 
             const originalTag = childMatch[0];
@@ -3153,6 +3162,7 @@ class TemplateProcessor {
         let ctasMismatched = 0;
         let ctasSkippedTable = 0;
         let ctasBgcolorFixed = 0;
+        let multiColumnWarnings = 0;
         
         // Prüfe für jeden CTA ob ein VML-Block in der Nähe ist
         for (const cta of allCtaPositions) {
@@ -3190,41 +3200,11 @@ class TemplateProcessor {
                     const isMultiColumnLayout = alignLeftTables >= 2;
 
                     if (isMultiColumnLayout) {
-                        // Outlook kollabiert align=left Spalten → VML erzwingen unabhängig von bgcolor
-                        const btnProps = this._extractButtonProperties(cta);
-                        if (btnProps && btnProps.href) {
-                            // VML braucht <td>-Wrapper damit Outlook die Tabellenstruktur korrekt rendert
-                            const vmlRaw = this._generateVmlButton(btnProps);
-                            const vmlCode = vmlRaw
-                                .replace('<!--[if mso]>\n', '<!--[if mso]><td align="center">\n')
-                                .replace('<![endif]-->', '</td><![endif]-->');
-                            const notMsoOpen = '<!--[if !mso]><!-->\n';
-                            const notMsoClose = '\n<!--<![endif]-->';
-                            const insertPos = cta.containerIndex || cta.index;
-                            const ctaEndPos = cta.endIndex;
-                            this.html = this.html.substring(0, insertPos) +
-                                        vmlCode + '\n' +
-                                        notMsoOpen +
-                                        this.html.substring(insertPos, ctaEndPos) +
-                                        notMsoClose +
-                                        this.html.substring(ctaEndPos);
-                            ctasFixed++;
-                            const offset = vmlCode.length + 1 + notMsoOpen.length + notMsoClose.length;
-                            for (const otherCta of allCtaPositions) {
-                                if (otherCta.index > insertPos) {
-                                    otherCta.index += offset;
-                                    otherCta.endIndex += offset;
-                                    if (otherCta.containerIndex) otherCta.containerIndex += offset;
-                                }
-                            }
-                            for (const otherVml of vmlPositions) {
-                                if (otherVml.index > insertPos) {
-                                    otherVml.index += offset;
-                                    otherVml.endIndex += offset;
-                                }
-                            }
-                        }
-                    } else if (cta.hasBgcolorAttr) {
+                        // Button liegt in mehrspaltigem align=left Layout → kann in Outlook verschoben erscheinen.
+                        // Automatischer Fix nicht möglich ohne Template-Struktur umzubauen.
+                        // Warnung ausgeben damit der Anwender manuell anpassen kann.
+                        multiColumnWarnings++;
+                                        } else if (cta.hasBgcolorAttr) {
                         // Wirklich bulletproof: bgcolor-Attribut vorhanden, kein Multi-Spalten-Layout → kein Fix nötig
                         ctasSkippedTable++;
                     } else {
@@ -3498,6 +3478,13 @@ class TemplateProcessor {
             this.addCheck(id, 'FIXED', parts.join(', ') + ` (${totalCtas} CTAs gesamt)`);
         } else {
             this.addCheck(id, 'PASS', `Alle ${totalCtas} CTA-Button(s) Outlook-kompatibel` + (ctasSkippedTable > 0 ? ` (${ctasSkippedTable} Tabellen-Button(s) nativ kompatibel)` : ''));
+        }
+        
+        // Warnung für Buttons in mehrspaltigem Layout (können in Outlook verschoben erscheinen)
+        if (multiColumnWarnings > 0) {
+            this.addCheck('P14_MULTI_COLUMN_BTN', 'WARN',
+                `⚠️ ${multiColumnWarnings} Button(s) in mehrspaltigem Layout erkannt – kann in Outlook verschoben erscheinen. Breite ggf. im Buttons-Tab anpassen.`
+            );
         }
     }
     
@@ -4546,7 +4533,9 @@ class TemplateProcessor {
             // Prüfe ob direkte Kind-Text-Elemente KEINE eigene inline color haben
             const contStart = contMatch.index + contMatch[0].length;
             // Suche die nächsten 3000 Zeichen auf Text-Elemente ohne inline color
-            const innerHtml = htmlNoComments.substring(contStart, contStart + 3000);
+            // Conditional Comments (MSO-only Blöcke wie VML-Buttons) ebenfalls entfernen
+            const innerHtml = htmlNoComments.substring(contStart, contStart + 3000)
+                .replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
             const textElRegex = /<(?:p|span|td|h[1-6])\b([^>]*)>/gi;
             let textEl;
             let foundUnsafeChild = false;
@@ -4558,6 +4547,12 @@ class TemplateProcessor {
                     if (elTagName.toLowerCase() === 'td') {
                         const afterEl = innerHtml.substring(textEl.index + textEl[0].length, textEl.index + textEl[0].length + 200);
                         if (/<table\b/i.test(afterEl)) continue;
+                        // Button-TD mit hellem bgcolor überspringen (gleiche Logik wie S15)
+                        const tdBgM2 = textEl[1].match(/bgcolor\s*=\s*["']?\s*(#?[a-fA-F0-9]{3,8}|white)\s*["']?/i);
+                        if (tdBgM2) {
+                            const tdBg2 = tdBgM2[1].replace('#','').toLowerCase();
+                            if (tdBg2 === 'fff' || tdBg2 === 'ffffff' || tdBg2 === 'white' || /^ffffff/i.test(tdBg2)) continue;
+                        }
                     }
                     foundUnsafeChild = true;
                     break;
@@ -5025,7 +5020,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.61-2026-03-11';
+const APP_VERSION = 'v3.9.63-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
