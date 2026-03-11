@@ -4549,6 +4549,12 @@ class TemplateProcessor {
             while ((textEl = textElRegex.exec(innerHtml)) !== null) {
                 const elStyle = (textEl[1].match(/style\s*=\s*["']([^"']*)["']/i) || [])[1] || '';
                 if (!/(?:^|;)\s*color\s*:/i.test(elStyle)) {
+                    // Gleicher Sicherheitscheck wie S15: strukturelle TDs überspringen
+                    const elTagName = (textEl[0].match(/^<(\w+)/i)||[])[1]||'';
+                    if (elTagName.toLowerCase() === 'td') {
+                        const afterEl = innerHtml.substring(textEl.index + textEl[0].length, textEl.index + textEl[0].length + 200);
+                        if (/<table\b/i.test(afterEl)) continue;
+                    }
                     foundUnsafeChild = true;
                     break;
                 }
@@ -5015,7 +5021,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.59-2026-03-11';
+const APP_VERSION = 'v3.9.60-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
