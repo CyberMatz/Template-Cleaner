@@ -5022,7 +5022,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.64-2026-03-11';
+const APP_VERSION = 'v3.9.65-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -11590,6 +11590,20 @@ td[width] { width: auto !important; }
         
         // Event Listener für Kandidaten-Karten
         attachPlacementListeners(html, headerCandidates, footerCandidates);
+        
+        // Vorschau direkt beim Öffnen mit dem aktuellen Kandidaten initialisieren
+        // (ohne Klick würde die Vorschau sonst den alten Stand zeigen)
+        const initPreview = (candidates, placeholder) => {
+            const current = candidates.find(c => c.isCurrent);
+            if (!current) return;
+            const typeEl = document.querySelector('.placement-candidate.selected[data-type="' + (placeholder === '%header%' ? 'header' : 'footer') + '"]');
+            const width = '100%';
+            const previewHtml = buildPlacementPreview(html, placeholder, current.position, width);
+            placementTabHtml = previewHtml;
+        };
+        initPreview(headerCandidates, '%header%');
+        initPreview(footerCandidates, '%footer%');
+        updateInspectorPreview();
     }
     
     function analyzePlaceholderPosition(html, placeholder) {
