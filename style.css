@@ -242,9 +242,27 @@ body {
 }
 
 /* Suggest Button */
+.btn-restore {
+    background: #e0e0e0;
+    color: #444;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+}
+.btn-restore:hover {
+    background: #cacaca;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
 .btn-suggest {
-    background: #7c5cbf;
-    color: white;
+    background: #e0e0e0;
+    color: #444;
     border: none;
     padding: 12px 24px;
     border-radius: 6px;
@@ -255,12 +273,13 @@ body {
     width: fit-content;
 }
 .btn-suggest:hover:not(:disabled) {
-    background: #6a4dab;
+    background: #cacaca;
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 .btn-suggest:disabled {
-    background: #ccc;
+    background: #e0e0e0;
+    color: #aaa;
     cursor: not-allowed;
     opacity: 0.6;
 }
