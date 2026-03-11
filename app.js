@@ -5011,7 +5011,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.66-2026-03-11';
+const APP_VERSION = 'v3.9.67-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5056,7 +5056,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeFonts = document.getElementById('removeFonts');
     const resultsSection = document.getElementById('resultsSection');
     const statusBadge = document.getElementById('statusBadge');
-    const downloadOptimized = document.getElementById('downloadOptimized');
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
     const showInspectorBtn = document.getElementById('showInspectorBtn');  // FIX: TDZ - früh deklarieren
     const suggestTextsBtn = document.getElementById('suggestTextsBtn');
@@ -5304,7 +5303,6 @@ document.addEventListener('DOMContentLoaded', () => {
         processBtn.style.display = '';
         isProcessed = false;
         if (uploadBtn) uploadBtn.innerHTML = '📁 Upload Template';
-        if (downloadOptimized) { downloadOptimized.disabled = true; downloadOptimized.style.display = 'none'; }
         if (showDiffBtn) { showDiffBtn.disabled = true; }
         if (showInspectorBtn) { showInspectorBtn.disabled = true; }
         
@@ -5381,7 +5379,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
                 
                 // Download & Inspector Buttons deaktivieren (bis Processing abgeschlossen)
-                if (downloadOptimized) downloadOptimized.disabled = true;
                 if (showInspectorBtn) showInspectorBtn.disabled = true;
                 
                 // Hinweistext ausblenden
@@ -5517,7 +5514,6 @@ document.addEventListener('DOMContentLoaded', () => {
             processBtn.removeAttribute('aria-disabled');
             isProcessed = false;
             processBtn.innerHTML = '<span class="btn-icon">⚙️</span> Template verarbeiten';
-            if (downloadOptimized) downloadOptimized.disabled = true;
             if (showInspectorBtn) showInspectorBtn.disabled = true;
             uploadHint.style.display = 'none';
 
@@ -5555,7 +5551,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (inspectorSection) inspectorSection.style.display = 'none';
         const inspectorDividerRestore = document.getElementById('inspectorDivider');
         if (inspectorDividerRestore) inspectorDividerRestore.style.display = 'none';
-        if (downloadOptimized) { downloadOptimized.disabled = true; }
         if (showDiffBtn) showDiffBtn.disabled = true;
         if (showInspectorBtn) showInspectorBtn.disabled = true;
         // processBtn wieder zeigen, restoreBtn + Texte vorschlagen verstecken
@@ -5719,12 +5714,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 showInspectorBtn.disabled = false;
                 showInspectorBtn.title = 'Inspector öffnen';
             }
-            
-            // Download Optimized Button aktivieren
-            if (downloadOptimized) {
-                downloadOptimized.disabled = false;
-                downloadOptimized.title = 'Optimiertes Template herunterladen';
-            }
 
             // Texte-vorschlagen Button aktivieren
             if (suggestTextsBtn) {
@@ -5764,137 +5753,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download-Buttons
-    downloadOptimized.addEventListener('click', () => {
-        if (processingResult && selectedFilename) {
-            // Phase 12 FIX 2: Download strikt aus currentWorkingHtml (kein Fallback)
-            if (!currentWorkingHtml) {
-                showInspectorToast('❌ Kein committed Stand vorhanden');
-                console.log('[DOWNLOAD] currentWorkingHtml is empty');
-                return;
-            }
-            
-            let downloadHtml = currentWorkingHtml;
-            
-            // Sicherheitsnetz: CC-Platzhalter (<ins data-cc-idx>) dürfen NIE im Export landen
-            if (/<ins\s+data-cc-idx=/i.test(downloadHtml)) {
-                console.warn('[DOWNLOAD] CC-Platzhalter im HTML gefunden! Versuche Wiederherstellung...');
-                
-                // Wiederherstellen: Primär aus data-cc-content, Fallback auf _ccBlockStore
-                downloadHtml = downloadHtml.replace(/<ins data-cc-idx="(\d+)"(?:\s+data-cc-content="([^"]*)")?[^>]*><\/ins>/gi, (match, idxStr, encoded) => {
-                    const idx = parseInt(idxStr);
-                    // Versuch 1: data-cc-content (selbst-wiederherstellend)
-                    if (encoded) {
-                        try { return decodeURIComponent(encoded); } catch(e) {}
-                    }
-                    // Versuch 2: _ccBlockStore
-                    if (_ccBlockStore && idx >= 0 && idx < _ccBlockStore.length) {
-                        return _ccBlockStore[idx];
-                    }
-                    return match;
-                });
-                
-                // Finale Prüfung: Sind noch Platzhalter übrig?
-                const remaining = (downloadHtml.match(/<ins\s+data-cc-idx=/gi) || []).length;
-                if (remaining > 0) {
-                    showInspectorToast('⚠️ WARNUNG: ' + remaining + ' Outlook-Conditional-Comments konnten nicht wiederhergestellt werden. Das Template wird in Outlook möglicherweise nicht korrekt angezeigt.');
-                    console.error('[DOWNLOAD] ' + remaining + ' CC-Platzhalter konnten NICHT wiederhergestellt werden!');
-                } else {
-                    showInspectorToast('✅ Outlook-Conditional-Comments wiederhergestellt.');
-                }
-            }
-            
-            // Originalnamen verwenden und "_optimized" anhängen
-            const originalName = selectedFilename;
-            const nameParts = originalName.split('.');
-            const extension = nameParts.pop();
-            const baseName = nameParts.join('.');
-            const templateWidth = detectTemplateWidth(downloadHtml);
-            const widthSuffix = templateWidth ? `_${templateWidth}` : '';
-            const newName = `${baseName}_optimized${widthSuffix}.${extension}`;
-            // Sicherheitsnetz: Preheader muss VOR %header% stehen
-            // (Manche Verarbeitungsschritte können die Reihenfolge ändern)
-            const preheaderMatch = downloadHtml.match(/<(?:div|span)[^>]*(?:style="[^"]*(?:display:\s*none|max-height:\s*0)[^"]*"|class="[^"]*preheader[^"]*")[^>]*>[\s\S]*?<\/(?:div|span)>/i);
-            const headerIdx = downloadHtml.indexOf('%header%');
-            if (preheaderMatch && headerIdx > -1) {
-                const preheaderIdx = downloadHtml.indexOf(preheaderMatch[0]);
-                if (preheaderIdx > headerIdx) {
-                    // Preheader steht NACH %header% → verschieben
-                    // 1. Preheader entfernen
-                    downloadHtml = downloadHtml.replace(preheaderMatch[0], '');
-                    // 2. Vor %header%-Container einfügen
-                    const newHeaderIdx = downloadHtml.indexOf('%header%');
-                    const beforeHeader = downloadHtml.substring(0, newHeaderIdx);
-                    const lastTableOpen = beforeHeader.lastIndexOf('<table');
-                    if (lastTableOpen > -1) {
-                        downloadHtml = downloadHtml.slice(0, lastTableOpen) + preheaderMatch[0] + '\n' + downloadHtml.slice(lastTableOpen);
-                    }
-                    console.log('[DOWNLOAD] Preheader vor %header% verschoben');
-                }
-            }
-            
-            // Sicherheitsnetz: Korrupte CC-Placeholders aufräumen
-            // (Legacy) DOMParser kann <ins>-Placeholders zu &lt;ins HTML-encodieren
-            downloadHtml = downloadHtml.replace(/&lt;ins\s+data-cc-idx[^>]*&gt;/gi, '');
-            downloadHtml = downloadHtml.replace(/&lt;\s*ins\s+data-cc-idx[^>]*&gt;/gi, '');
-            // Verbliebene <tr>-Block-Placeholders wiederherstellen
-            downloadHtml = downloadHtml.replace(/<tr data-cc-block-idx="(\d+)"(?:\s+data-cc-block-content="([^"]*)")?[^>]*><td><\/td><\/tr>/gi, (match, idxStr, encoded) => {
-                const idx = parseInt(idxStr);
-                if (idx >= 0 && idx < _ccBlockStore.length) {
-                    return _ccBlockStore[idx];
-                }
-                if (encoded) {
-                    try { return decodeURIComponent(encoded); } catch(e) {}
-                }
-                return '';
-            });
-            // Verbliebene <td>-MSO-Placeholders wiederherstellen (Outlook-Zentrierung)
-            downloadHtml = downloadHtml.replace(/<td data-mso-td-idx="(\d+)"(?:\s+data-mso-td-content="([^"]*)")?[^>]*><\/td>/gi, (match, idxStr, encoded) => {
-                const idx = parseInt(idxStr);
-                if (idx >= 0 && idx < _ccBlockStore.length) {
-                    return _ccBlockStore[idx];
-                }
-                if (encoded) {
-                    try { return decodeURIComponent(encoded); } catch(e) {}
-                }
-                return '';
-            });
-            // Verbliebene CC-Kommentar-Placeholders wiederherstellen (Legacy v3.8.19)
-            downloadHtml = downloadHtml.replace(/<!-- cc-nm([oc])-(\d+) -->/gi, (match, type, idxStr) => {
-                const idx = parseInt(idxStr);
-                if (idx >= 0 && idx < _ccBlockStore.length) {
-                    return _ccBlockStore[idx];
-                }
-                return '';
-            });
-            // Aufräumen: verbliebene data-cc-* Attribute
-            downloadHtml = downloadHtml.replace(/\s+data-cc-(?:open|close|idx|nmo-idx|nmo-content|block-idx|block-content)(?:-content)?="[^"]*"/gi, '');
-            // Aufräumen: verbliebene data-mso-td-* Attribute
-            downloadHtml = downloadHtml.replace(/\s+data-mso-td-(?:idx|content)="[^"]*"/gi, '');
-            // Aufräumen: verbliebene Text-Marker
-            downloadHtml = downloadHtml.replace(/___CC_NMO_(\d+)___/g, (match, idxStr) => {
-                const idx = parseInt(idxStr);
-                if (idx >= 0 && idx < _ccBlockStore.length) {
-                    return _ccBlockStore[idx];
-                }
-                return '';
-            });
-            
-            // Sicherheitsnetz: &amp; in href/src zurück zu & konvertieren
-            // (Versandsysteme lesen URLs oft als Rohtext ohne HTML-Dekodierung)
-            downloadHtml = downloadHtml.replace(/(href|src|action)\s*=\s*"([^"]*)"/gi, (match, attr, url) => {
-                if (/&amp;/.test(url)) {
-                    return attr + '="' + url.replace(/&amp;/g, '&') + '"';
-                }
-                return match;
-            });
-            
-            downloadFile(downloadHtml, newName, 'text/html');
-        }
-    });
 
-
-    
     // Phase 11 B3: Final Output Download
     if (downloadFinalOutput) {
         downloadFinalOutput.addEventListener('click', () => {
@@ -6959,10 +6818,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Zeige Inspector-Trenner
             const inspectorDivider = document.getElementById('inspectorDivider');
             if (inspectorDivider) inspectorDivider.style.display = 'flex';
-            
-            // Orange Download-Button ausblenden (grüner im Inspector übernimmt)
-            if (downloadOptimized) downloadOptimized.style.display = 'none';
-            
+
             // Scroll zu Inspector
             inspectorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             
