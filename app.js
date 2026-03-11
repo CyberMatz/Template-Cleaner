@@ -4745,22 +4745,11 @@ class TemplateProcessor {
             confidenceLevel = 'low';
         }
 
-        // Unresolved generieren
-        let unresolved = '=== UNRESOLVED ISSUES ===\n\n';
-        const unresolvedChecks = this.checks.filter(c => c.status === 'FAIL' || c.status === 'STILL_FAIL' || c.status === 'WARN');
-        
-        if (unresolvedChecks.length > 0) {
-            unresolvedChecks.forEach(check => {
-                unresolved += `${check.id} ${check.status} - ${check.message}\n`;
-            });
-        } else {
-            unresolved += 'Keine ungelösten Probleme.\n';
-        }
 
         return {
             originalHtml: this.originalHtml,
             optimizedHtml: this.html,
-            unresolved: unresolved,
+
             status: status,
             confidence: confidence,
             confidenceLevel: confidenceLevel,
@@ -5022,7 +5011,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.65-2026-03-11';
+const APP_VERSION = 'v3.9.66-2026-03-11';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5068,7 +5057,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsSection = document.getElementById('resultsSection');
     const statusBadge = document.getElementById('statusBadge');
     const downloadOptimized = document.getElementById('downloadOptimized');
-    const downloadUnresolved = document.getElementById('downloadUnresolved');
     const downloadFinalOutput = document.getElementById('downloadFinalOutput');  // Phase 11 B3
     const showInspectorBtn = document.getElementById('showInspectorBtn');  // FIX: TDZ - früh deklarieren
     const suggestTextsBtn = document.getElementById('suggestTextsBtn');
@@ -5905,16 +5893,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    downloadUnresolved.addEventListener('click', () => {
-        if (processingResult && selectedFilename) {
-            // Originalnamen verwenden und "_unresolved" anhängen
-            const originalName = selectedFilename;
-            const nameParts = originalName.split('.');
-            const baseName = nameParts.join('.');
-            const newName = `${baseName}_unresolved.txt`;
-            downloadFile(processingResult.unresolved, newName, 'text/plain');
-        }
-    });
+
     
     // Phase 11 B3: Final Output Download
     if (downloadFinalOutput) {
@@ -13453,103 +13432,6 @@ td[width] { width: auto !important; }
         console.log('[INSPECTOR] Button updated:', btnId);
     }
     
-    // VML neu generieren für einen bestimmten Button
-    function handleButtonRebuildVml(btnId) {
-        const buttons = extractCTAButtonsFromHTML(buttonsTabHtml);
-        const btnData = buttons.find(b => b.id === btnId);
-        if (!btnData) {
-            showInspectorToast('⚠️ Button nicht gefunden');
-            return;
-        }
-        
-        // Typ B (td mit bgcolor): 
-        // - Hat bgcolor-Attribut → Outlook versteht nativ, kein VML nötig
-        // - Nur CSS background-color → wurde beim Verarbeiten automatisch um bgcolor ergänzt
-        if (btnData.type === 'table') {
-            showInspectorToast('ℹ️ Tabellen-Button (bgcolor) – Outlook-kompatibel. Bei reinen CSS-Hintergrundfarben wurde beim Verarbeiten automatisch ein bgcolor-Attribut ergänzt.');
-            return;
-        }
-        
-        // Speichere in History
-        buttonsHistory.push(buttonsTabHtml);
-        
-        let html = buttonsTabHtml;
-        
-        // Wenn bereits VML vorhanden, entferne den alten Block zuerst
-        if (btnData.hasVml) {
-            const vmlRegex = /(<!--\[if\s+mso\]>(?:(?!<!\[endif\])[\s\S])*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->)/gi;
-            let vmlMatch;
-            const btnPos = html.indexOf(btnData.fullMatch);
-            
-            while ((vmlMatch = vmlRegex.exec(html)) !== null) {
-                if (vmlMatch.index + vmlMatch[0].length <= btnPos && (btnPos - (vmlMatch.index + vmlMatch[0].length)) < 500) {
-                    // Entferne alten VML-Block (inkl. trailing whitespace)
-                    html = html.substring(0, vmlMatch.index) + html.substring(vmlMatch.index + vmlMatch[0].length).replace(/^\s*\n?/, '');
-                    break;
-                }
-            }
-        }
-        
-        // Generiere neuen VML-Block
-        const arcsize = btnData.borderRadius > 0 ? Math.min(50, Math.round((btnData.borderRadius / Math.min(btnData.width, btnData.height)) * 100)) + '%' : '0%';
-        
-        let vml = '<!--[if mso]>\n';
-        vml += '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ';
-        vml += 'href="' + btnData.href + '" ';
-        vml += 'style="height:' + btnData.height + 'px;v-text-anchor:middle;width:' + btnData.width + 'px;" ';
-        vml += 'arcsize="' + arcsize + '" ';
-        vml += 'strokecolor="' + btnData.bgColor + '" ';
-        vml += 'fillcolor="' + btnData.bgColor + '">\n';
-        vml += '<w:anchorlock/>\n';
-        vml += '<center style="color:' + btnData.textColor + ';font-family:Arial,sans-serif;font-size:' + btnData.fontSize + 'px;font-weight:bold;">\n';
-        vml += btnData.text + '\n';
-        vml += '</center>\n';
-        vml += '</v:roundrect>\n';
-        vml += '<![endif]-->\n';
-        
-        // Füge VML VOR dem Button ein + !mso Wrapper um originalen Button
-        const btnPos = html.indexOf(btnData.fullMatch);
-        if (btnPos >= 0) {
-            // Prüfe ob der Button bereits einen !mso Wrapper hat
-            const beforeBtn = html.substring(Math.max(0, btnPos - 80), btnPos);
-            const hasNotMsoWrapper = /<!--\[if\s+!mso[^\]]*\]><!--(?:\s*-->|>)/i.test(beforeBtn);
-            
-            if (hasNotMsoWrapper) {
-                // Wrapper existiert bereits → VML VOR dem Wrapper einfügen
-                // Suche beide Varianten: mit und ohne Leerzeichen
-                let wrapperPos = html.lastIndexOf('<!--[if !mso]><!-->', btnPos);
-                if (wrapperPos < 0) wrapperPos = html.lastIndexOf('<!--[if !mso]><!-- -->', btnPos);
-                if (wrapperPos >= 0) {
-                    html = html.substring(0, wrapperPos) + vml + html.substring(wrapperPos);
-                } else {
-                    html = html.substring(0, btnPos) + vml + html.substring(btnPos);
-                }
-            } else {
-                // Kein Wrapper → VML einfügen + !mso Wrapper um Button
-                const btnEnd = btnPos + btnData.fullMatch.length;
-                html = html.substring(0, btnPos) + 
-                       vml + 
-                       '<!--[if !mso]><!-->\n' +
-                       html.substring(btnPos, btnEnd) +
-                       '\n<!--<![endif]-->' +
-                       html.substring(btnEnd);
-            }
-        }
-        
-        buttonsTabHtml = html;
-        
-        // Check Pending
-        checkButtonsPending();
-        
-        // Update Preview
-        updateInspectorPreview();
-        
-        // Re-render
-        showButtonsTab(buttonsContent);
-        
-        showInspectorToast('🔄 VML-Block für ' + btnId + ' neu generiert');
-        console.log('[INSPECTOR] VML rebuilt for:', btnId);
-    }
     
     // Highlight Button in Preview
     function highlightButtonInPreview(btnId) {
@@ -14841,59 +14723,6 @@ td[width] { width: auto !important; }
         showEditorTab(ec);
     }
     
-    // Extrahiere Block (±30 Zeilen) aus HTML
-    function extractBlockFromHtml(html, qaNodeId) {
-        if (!html || !qaNodeId) return null;
-        
-        // Finde Element via data-qa-node-id
-        const searchPattern = 'data-qa-node-id="' + qaNodeId + '"';
-        const index = html.indexOf(searchPattern);
-        
-        if (index === -1) return null;
-        
-        // Finde Start des Tags (rückwärts bis <)
-        let tagStart = index;
-        while (tagStart > 0 && html[tagStart] !== '<') {
-            tagStart--;
-        }
-        
-        // Finde Ende des Tags (vorwärts bis >)
-        let tagEnd = index;
-        while (tagEnd < html.length && html[tagEnd] !== '>') {
-            tagEnd++;
-        }
-        tagEnd++; // Include >
-        
-        // Zähle Zeilen vor und nach
-        const linesBefore = 30;
-        const linesAfter = 30;
-        
-        // Finde Start (30 Zeilen vor tagStart)
-        let blockStart = tagStart;
-        let lineCount = 0;
-        while (blockStart > 0 && lineCount < linesBefore) {
-            blockStart--;
-            if (html[blockStart] === '\n') lineCount++;
-        }
-        
-        // Finde Ende (30 Zeilen nach tagEnd)
-        let blockEnd = tagEnd;
-        lineCount = 0;
-        while (blockEnd < html.length && lineCount < linesAfter) {
-            if (html[blockEnd] === '\n') lineCount++;
-            blockEnd++;
-        }
-        
-        const snippet = html.substring(blockStart, blockEnd);
-        
-        return {
-            snippet: snippet,
-            start: blockStart,
-            end: blockEnd,
-            tagStart: tagStart,
-            tagEnd: tagEnd
-        };
-    }
     
     // Phase 10: Check if editor tab has pending changes
     function checkEditorPending() {
@@ -15089,59 +14918,6 @@ td[width] { width: auto !important; }
         }
     }
     
-    // Handle Replace Block (deaktiviert - Button wurde aus UI entfernt)
-    function handleEditorReplaceBlock() {
-        showInspectorToast('ℹ️ Funktion nicht verfügbar.');
-        return;
-        // eslint-disable-next-line no-unreachable
-        
-        if (!editorSelectedElement) return;
-        
-        const blockSnippet = editorSelectedElement.blockSnippet;
-        
-        // Zeige Textarea mit Block-Inhalt
-        const newBlock = prompt(
-            'Block ersetzen:\n\n' +
-            'Bearbeiten Sie den Block-Inhalt unten:\n\n' +
-            '(Hinweis: Verwenden Sie einen externen Editor für größere Änderungen)',
-            blockSnippet
-        );
-        
-        if (newBlock === null) return; // Cancel
-        
-        // Bestätigung mit Vorher/Nachher
-        const confirmed = confirm(
-            'Block ersetzen?\n\n' +
-            'VORHER:\n' + blockSnippet.substring(0, 200) + '...\n\n' +
-            'NACHHER:\n' + newBlock.substring(0, 200) + '...\n\n' +
-            'Bestätigen?'
-        );
-        
-        if (!confirmed) return;
-        
-        // Speichere in History
-        editorHistory.push(editorTabHtml);
-        
-        // Ersetze Block
-        const before = editorTabHtml.substring(0, editorSelectedElement.blockStart);
-        const after = editorTabHtml.substring(editorSelectedElement.blockEnd);
-        editorTabHtml = before + newBlock + after;
-        
-        // Check Pending (Phase 10)
-        setEditorPending(true);
-        
-        // Auswahl zurücksetzen
-        editorSelectedElement = null;
-        
-        // Update Preview
-        updateInspectorPreview();
-        
-        // Re-render Editor Tab
-        // editorContent bereits oben deklariert
-        showEditorTab(editorContent);
-        
-        console.log('[INSPECTOR] Block replaced');
-    }
     
     // Handle Undo
     function handleEditorUndo() {
@@ -15405,10 +15181,6 @@ td[width] { width: auto !important; }
         });
     }
     
-    function prepareHighlightAPI() {
-        // Wird in Phase 3+ verwendet
-        // Placeholder für spätere Implementierung
-    }
 
     // ============================================
     // EOA CLIENT-VORSCHAU
