@@ -136,6 +136,8 @@ class TemplateProcessor {
         // === PHASE A2: Tag-Reparatur ===
         // Vor-Fix: Fehlende </a> in <!--[if !mso]>-Blöcken (vor Tag-Balancing, damit P07 sie nicht doppelt meldet)
         this._fixMissingClosingAInMsoBlocks();
+        // Vor-Fix: VML Text + Farbe mit HTML-Buttons synchronisieren (vor checkCTAButtonFallback)
+        this._syncVmlWithHtmlButtons();
 
         // P07/P08: Tag-Balancing
         this.checkTagBalancing();
@@ -3162,6 +3164,77 @@ class TemplateProcessor {
         }
     }
 
+    // Hilfsmethode: VML Text + Farbe mit HTML-Button synchronisieren
+    // Läuft als eigener Pass VOR checkCTAButtonFallback um Positions-Konflikte zu vermeiden
+    _syncVmlWithHtmlButtons() {
+        // Finde alle VML-Blöcke
+        const vmlRegex = /<!--\[if\s+mso\]>(?:(?!<!\[endif\])[\s\S])*?<v:(?:roundrect|rect)\b[\s\S]*?<!\[endif\]-->/gi;
+        // Finde alle <a>-Buttons mit background-color (max 600 Zeichen Inhalt)
+        const ctaRegex = /<a\b[^>]*style\s*=\s*"[^"]*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"]*"[^>]*>[\s\S]{0,600}?<\/a>/gi;
+        
+        const vmls = [...this.html.matchAll(vmlRegex)];
+        const ctas = [...this.html.matchAll(ctaRegex)];
+        
+        if (vmls.length === 0 || ctas.length === 0) return;
+        
+        // Paare bilden: jeder VML-Block + nächste CTA innerhalb von 1000 Zeichen
+        const pairs = [];
+        for (const vml of vmls) {
+            const vmlEnd = vml.index + vml[0].length;
+            // Suche die erste CTA die direkt nach dem VML-Block kommt
+            const nearCta = ctas.find(c => c.index >= vmlEnd && c.index - vmlEnd < 1000);
+            if (nearCta) pairs.push({ vml, cta: nearCta });
+        }
+        
+        if (pairs.length === 0) return;
+        
+        // Sync von hinten nach vorne (damit Positionen stimmen)
+        for (let i = pairs.length - 1; i >= 0; i--) {
+            const { vml, cta } = pairs[i];
+            const currentVml = vml[0];
+            
+            // HTML-Button-Text extrahieren
+            const innerText = (cta[0].match(/<a\b[^>]*>([\s\S]*?)<\/a>/i) || [])[1] || '';
+            const htmlText = innerText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            
+            // VML-Text extrahieren
+            const vmlTextMatch = currentVml.match(/<(?:center|span)[^>]*>([^<]+)<\/(?:center|span)>/i);
+            const vmlText = vmlTextMatch ? vmlTextMatch[1].trim() : null;
+            
+            // HTML-Farbe extrahieren
+            const aTag = (cta[0].match(/<a\b[^>]*>/is) || [''])[0];
+            const htmlBg = (aTag.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i) || [])[1];
+            
+            // VML-Farbe extrahieren
+            const vmlBg = (currentVml.match(/fillcolor\s*=\s*["'](#[a-fA-F0-9]{3,6})["']/i) || [])[1];
+            
+            let syncedVml = currentVml;
+            
+            // Text synchronisieren
+            if (htmlText && htmlText.length >= 2 && vmlText && htmlText !== vmlText) {
+                syncedVml = syncedVml.replace(
+                    /(<(?:center|span)[^>]*>)[^<]+(<\/(?:center|span)>)/i,
+                    '$1' + htmlText + '$2'
+                );
+            }
+            
+            // Farbe synchronisieren
+            if (htmlBg && vmlBg && htmlBg.toLowerCase() !== vmlBg.toLowerCase()) {
+                syncedVml = syncedVml.replace(
+                    /fillcolor\s*=\s*["']#[a-fA-F0-9]{3,6}["']/i,
+                    'fillcolor="' + htmlBg + '"'
+                );
+            }
+            
+            // Einsetzen per Position (von hinten → keine Offset-Probleme)
+            if (syncedVml !== currentVml) {
+                this.html = this.html.substring(0, vml.index) +
+                            syncedVml +
+                            this.html.substring(vml.index + currentVml.length);
+            }
+        }
+    }
+
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
         this._vmlSyncOffset = 0;
@@ -3318,87 +3391,6 @@ class TemplateProcessor {
                     ctasMismatched++;
                 }
                 
-                // VML-TEXT-SYNC: Prüfe ob VML-Text mit HTML-Button-Text übereinstimmt
-                // Problem: Vorlage enthält oft noch "Call to Action" im VML, obwohl HTML-Button
-                // bereits den echten Text hat (z.B. "MEHR ERFAHREN", "ANGEBOT EINHOLEN")
-                {
-                    const currentVmlForSync = vmlBlock.fullMatch;
-                    
-                    // HTML-Button-Text extrahieren (aus dem <a>-Tag)
-                    // Der Text kann auf einer eigenen Zeile mit führenden Leerzeichen stehen
-                    const htmlTextRaw = cta.fullMatch
-                        ? (cta.fullMatch.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i) || [])[1]
-                        : null;
-                    const htmlTextClean = htmlTextRaw
-                        ? htmlTextRaw.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
-                        : null;
-                    
-                    // VML-Text extrahieren
-                    const vmlTextMatch = currentVmlForSync.match(/<(?:center|span)[^>]*>([^<]+)<\/(?:center|span)>/i);
-                    const vmlTextClean = vmlTextMatch ? vmlTextMatch[1].trim() : null;
-                    
-                    // HTML-Button-Farbe extrahieren
-                    const aTagMatch = cta.fullMatch ? (cta.fullMatch.match(/<a\b[^>]*>/is) || [''])[0] : '';
-                    const htmlStyle = this._extractStyleValue(aTagMatch);
-                    const htmlBgMatch = htmlStyle.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
-                    const htmlBgColor = htmlBgMatch ? htmlBgMatch[1].toLowerCase() : null;
-                    
-                    // VML-Farbe extrahieren
-                    const vmlColorMatch = currentVmlForSync.match(/fillcolor\s*=\s*["'](#[a-fA-F0-9]{3,6})["']/i);
-                    const vmlBgColor = vmlColorMatch ? vmlColorMatch[1].toLowerCase() : null;
-                    
-                    let syncedVml = currentVmlForSync;
-                    let vmlChanged = false;
-                    
-                    // Text synchronisieren wenn abweichend und HTML-Text sinnvoll (≥2 Zeichen)
-                    if (htmlTextClean && vmlTextClean && 
-                        htmlTextClean !== vmlTextClean &&
-                        htmlTextClean.length >= 2) {
-                        syncedVml = syncedVml.replace(
-                            /(<(?:center|span)[^>]*>)[^<]+(<\/(?:center|span)>)/i,
-                            '$1' + htmlTextClean + '$2'
-                        );
-                        vmlChanged = true;
-                    }
-                    
-                    // Farbe synchronisieren wenn abweichend
-                    if (htmlBgColor && vmlBgColor && htmlBgColor !== vmlBgColor) {
-                        syncedVml = syncedVml.replace(
-                            /fillcolor\s*=\s*["']#[a-fA-F0-9]{3,6}["']/i,
-                            'fillcolor="' + htmlBgColor + '"'
-                        );
-                        vmlChanged = true;
-                    }
-                    
-                    if (vmlChanged && syncedVml !== currentVmlForSync) {
-                        // Sicheres Replace per Position (funktioniert auch bei identischen VML-Blöcken)
-                        this.html = this.html.substring(0, vmlBlock.index) +
-                                    syncedVml +
-                                    this.html.substring(vmlBlock.endIndex);
-                        // Alle nachfolgenden VML-Block-Positionen um Längenunterschied verschieben
-                        const lenDiff = syncedVml.length - currentVmlForSync.length;
-                        if (lenDiff !== 0) {
-                            for (const otherVml of vmlPositions) {
-                                if (otherVml.index > vmlBlock.index) {
-                                    otherVml.index += lenDiff;
-                                    otherVml.endIndex += lenDiff;
-                                }
-                            }
-                            // Auch CTA-Positionen verschieben
-                            for (const otherCta of allCtaPositions) {
-                                if (otherCta.index > vmlBlock.index) {
-                                    otherCta.index += lenDiff;
-                                    otherCta.endIndex += lenDiff;
-                                    if (otherCta.containerIndex) otherCta.containerIndex += lenDiff;
-                                }
-                            }
-                        }
-                        vmlBlock.fullMatch = syncedVml;
-                        vmlBlock.endIndex = vmlBlock.index + syncedVml.length;
-                        ctasMismatched++;
-                    }
-                }
-
                 // VML-BREITEN-FIX: Prüfe ob VML-Button die volle Template-Breite (≥500px) hat
                 // aber der <a>-Button kein explizites width hat (= eigentlich schmaler Button).
                 // Typisch wenn Template-Ersteller width:600px im VML setzen statt Button-Breite.
@@ -3433,7 +3425,8 @@ class TemplateProcessor {
                 const ctaStart = cta.containerIndex || cta.index;
                 const beforeCtaCheck = this.html.substring(Math.max(0, ctaStart - 500), ctaStart);
                 // Suche den LETZTEN !mso Opener im Lookback
-                const nmoOpenerMatch = beforeCtaCheck.match(/<!--\[if\s+!mso[^\]]*\]><!--(?:\s*-->|>)/gi);
+                // Erkenne beide Varianten: <!--[if !mso]><!--> UND <!--[if !mso]> -->
+                const nmoOpenerMatch = beforeCtaCheck.match(/<!--\[if\s+!mso[^\]]*\]>(?:<!--(?:\s*-->|>)|[ \t]*-->)/gi);
                 let alreadyWrapped = false;
                 
                 if (nmoOpenerMatch) {
