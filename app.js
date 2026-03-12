@@ -3332,10 +3332,14 @@ class TemplateProcessor {
                     const currentVmlForSync = this.html.substring(vmlBlock.index, vmlBlock.endIndex);
                     
                     // HTML-Button-Text extrahieren (aus dem <a>-Tag)
-                    const htmlText = cta.fullMatch
-                        ? (cta.fullMatch.match(/>([^<\n]{2,}?)(?=\s*(?:<|<!--|\n))/i) || [])[1]
+                    // Der Text kann auf einer eigenen Zeile mit führenden Leerzeichen stehen
+                    const htmlTextRaw = cta.fullMatch
+                        ? (cta.fullMatch.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i) || [])[1]
                         : null;
-                    const htmlTextClean = htmlText ? htmlText.trim() : null;
+                    // HTML-Tags entfernen, Whitespace normalisieren
+                    const htmlTextClean = htmlTextRaw
+                        ? htmlTextRaw.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+                        : null;
                     
                     // VML-Text extrahieren (aus <center>...</center> oder <span>...</span>)
                     const vmlTextMatch = currentVmlForSync.match(/<(?:center|span)[^>]*>([^<]+)<\/(?:center|span)>/i);
