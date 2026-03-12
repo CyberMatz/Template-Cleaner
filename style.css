@@ -3008,11 +3008,20 @@ body {
 
 /* Image Upload Section */
 .images-upload-section {
-    border: 2px solid #e8e8e8;
+    border: 1px solid #b7e4c7;
     border-radius: 8px;
     padding: 12px 16px;
     margin-bottom: 16px;
-    background: #fafbfc;
+    background: #f0faf4;
+}
+
+.images-upload-section h3 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e7e34;
+    border-bottom: 1px solid #b7e4c7;
+    padding-bottom: 8px;
 }
 
 .upload-status {
