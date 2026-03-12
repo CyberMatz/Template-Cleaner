@@ -5011,7 +5011,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.67-2026-03-11';
+const APP_VERSION = 'v3.9.68-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -9545,6 +9545,39 @@ td[width] { width: auto !important; }
         if (images.length === 0) {
             html += '<p class="images-empty">Keine Bilder gefunden.</p>';
         } else {
+            // Vorschlag-Tabelle: alle Bilder mit Vorschlag (keine Platzhalter/Pixel)
+            const imagesWithSuggestions = images.filter(img => 
+                img.altEmpty && img.altSuggestion && img.altSuggestionSource !== 'pixel' && !img.isSpacerOrPixel
+            );
+            
+            if (imagesWithSuggestions.length > 0) {
+                html += '<div class="alt-bulk-panel">';
+                html += '<div class="alt-bulk-header">';
+                html += '<span class="alt-bulk-title">💡 ' + imagesWithSuggestions.length + ' Alt-Text-Vorschlag' + (imagesWithSuggestions.length > 1 ? 'e' : '') + '</span>';
+                html += '<button class="btn-alt-bulk-apply btn-small" id="btnAltBulkApply">✓ Alle markierten übernehmen</button>';
+                html += '</div>';
+                html += '<table class="alt-bulk-table">';
+                html += '<thead><tr>';
+                html += '<th class="alt-bulk-col-check"><input type="checkbox" id="altBulkCheckAll" checked title="Alle aus/abwählen"></th>';
+                html += '<th class="alt-bulk-col-id">Bild</th>';
+                html += '<th class="alt-bulk-col-src">URL</th>';
+                html += '<th class="alt-bulk-col-alt">Vorgeschlagener Alt-Text</th>';
+                html += '</tr></thead>';
+                html += '<tbody>';
+                imagesWithSuggestions.forEach(img => {
+                    const sourceLabel = img.altSuggestionSource === 'link' ? 'Link' : 
+                                       img.altSuggestionSource === 'title' ? 'Title' : 'Dateiname';
+                    html += '<tr class="alt-bulk-row" data-img-id="' + img.id + '">';
+                    html += '<td class="alt-bulk-col-check"><input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '" checked></td>';
+                    html += '<td class="alt-bulk-col-id"><span class="image-card-new-id">' + img.id + '</span></td>';
+                    html += '<td class="alt-bulk-col-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</td>';
+                    html += '<td class="alt-bulk-col-alt"><input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altSuggestion) + '" title="Aus ' + sourceLabel + '"></td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                html += '</div>';
+            }
+
             html += '<div class="images-list">';
             images.forEach(img => {
                 html += '<div class="image-item-edit image-card-new" data-img-id="' + img.id + '">';
@@ -9958,6 +9991,13 @@ td[width] { width: auto !important; }
                 }
             }
             
+            // Abstandshalter-Erkennung: platzhalter-URL oder 1×1 Pixel
+            const isSpacerOrPixel = 
+                src.toLowerCase().includes('platzhalter') ||
+                (width === '1' && height === '1') ||
+                (img.getAttribute('style') || '').includes('width:1px') ||
+                (img.getAttribute('style') || '').includes('height:1px');
+
             images.push({
                 id: id,
                 src: src,
@@ -9968,6 +10008,7 @@ td[width] { width: auto !important; }
                 altEmpty: rawAlt === '' || rawAlt === null,
                 altSuggestion: altSuggestion,
                 altSuggestionSource: altSuggestionSource,
+                isSpacerOrPixel: isSpacerOrPixel,
                 width: width,
                 widthSource: widthSource,
                 height: height,
@@ -10078,7 +10119,79 @@ td[width] { width: auto !important; }
         });
         
         // Alt-Text Apply Buttons
-        document.querySelectorAll('.btn-image-alt-apply').forEach(btn => {
+        // Alt-Text Bulk: Alle markierten Vorschläge auf einmal übernehmen
+        const btnAltBulkApply = document.getElementById('btnAltBulkApply');
+        if (btnAltBulkApply) {
+            btnAltBulkApply.addEventListener('click', function() {
+                const checkedRows = document.querySelectorAll('.alt-bulk-check:checked');
+                if (checkedRows.length === 0) {
+                    showInspectorToast('⚠️ Keine Bilder ausgewählt');
+                    return;
+                }
+                // Sammle alle Änderungen
+                const changes = [];
+                checkedRows.forEach(cb => {
+                    const imgId = cb.getAttribute('data-img-id');
+                    const input = document.querySelector('.alt-bulk-input[data-img-id="' + imgId + '"]');
+                    if (input && input.value.trim()) {
+                        changes.push({ imgId, alt: input.value.trim() });
+                    }
+                });
+                if (changes.length === 0) {
+                    showInspectorToast('⚠️ Keine gültigen Alt-Texte vorhanden');
+                    return;
+                }
+                // Alle auf einmal in imagesTabHtml anwenden (ein Undo-Eintrag, ein Re-render)
+                imagesHistory.push(imagesTabHtml);
+                const imgMatches = [...imagesTabHtml.matchAll(/<img\b[^>]*\/?>/gi)];
+                // Von hinten nach vorne ersetzen damit Indizes stimmen
+                const changeMap = {};
+                changes.forEach(c => { changeMap[c.imgId] = c.alt; });
+                let newHtml = imagesTabHtml;
+                // Rückwärts durch alle img-Tags
+                for (let i = imgMatches.length - 1; i >= 0; i--) {
+                    const imgId = 'I' + String(i + 1).padStart(3, '0');
+                    if (!changeMap[imgId]) continue;
+                    const m = imgMatches[i];
+                    const oldTag = m[0];
+                    const safeAlt = changeMap[imgId].replace(/"/g, '&quot;');
+                    let newTag;
+                    if (/alt\s*=\s*"[^"]*"/i.test(oldTag)) {
+                        newTag = oldTag.replace(/alt\s*=\s*"[^"]*"/i, 'alt="' + safeAlt + '"');
+                    } else {
+                        newTag = oldTag.replace(/(src\s*=\s*"[^"]*")/i, '$1 alt="' + safeAlt + '"');
+                        if (newTag === oldTag) newTag = oldTag.replace(/^<img\b/i, '<img alt="' + safeAlt + '"');
+                    }
+                    newHtml = newHtml.substring(0, m.index) + newTag + newHtml.substring(m.index + oldTag.length);
+                }
+                imagesTabHtml = newHtml;
+                checkImagesPending();
+                updateInspectorPreview();
+                showImagesTab(imagesContent);
+                recalculatePostCommitMetrics(imagesTabHtml);
+                showInspectorToast('✅ ' + changes.length + ' Alt-Text' + (changes.length > 1 ? 'e' : '') + ' übernommen');
+            });
+        }
+
+        // Alt-Text Bulk: Alle-Checkbox steuert alle Einzelcheckboxen
+        const altBulkCheckAll = document.getElementById('altBulkCheckAll');
+        if (altBulkCheckAll) {
+            altBulkCheckAll.addEventListener('change', function() {
+                document.querySelectorAll('.alt-bulk-check').forEach(cb => {
+                    cb.checked = this.checked;
+                });
+            });
+            // Einzelne Checkbox abgewählt → Alle-Checkbox anpassen
+            document.querySelectorAll('.alt-bulk-check').forEach(cb => {
+                cb.addEventListener('change', function() {
+                    const allChecked = document.querySelectorAll('.alt-bulk-check').length === 
+                                      document.querySelectorAll('.alt-bulk-check:checked').length;
+                    altBulkCheckAll.checked = allChecked;
+                });
+            });
+        }
+
+        // Alt-Text: einzelner ✓ Button
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const imgId = this.getAttribute('data-img-id');

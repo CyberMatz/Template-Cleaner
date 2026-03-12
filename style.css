@@ -981,6 +981,119 @@ body {
     flex-shrink: 0;
 }
 
+/* Alt-Text Bulk-Panel */
+.alt-bulk-panel {
+    background: #fffbf2;
+    border: 1px solid #f2a93b;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.alt-bulk-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #fff8ee;
+    border-bottom: 1px solid #f2e0b8;
+}
+
+.alt-bulk-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #78716c;
+}
+
+.btn-alt-bulk-apply {
+    background: #f2a93b;
+    color: white;
+    border: none;
+    padding: 5px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-alt-bulk-apply:hover {
+    background: #e09930;
+}
+
+.alt-bulk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.alt-bulk-table thead tr {
+    background: #fdf5e6;
+    border-bottom: 1px solid #f2e0b8;
+}
+
+.alt-bulk-table th {
+    padding: 6px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #a8a29e;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.alt-bulk-table tbody tr {
+    border-bottom: 1px solid #f5f0e8;
+    transition: background 0.1s;
+}
+
+.alt-bulk-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.alt-bulk-table tbody tr:hover {
+    background: #fdf8f0;
+}
+
+.alt-bulk-col-check {
+    width: 32px;
+    padding: 6px 10px;
+    text-align: center;
+}
+
+.alt-bulk-col-id {
+    width: 50px;
+    padding: 6px 10px;
+}
+
+.alt-bulk-col-src {
+    width: 35%;
+    padding: 6px 10px;
+    color: #a8a29e;
+    font-size: 11px;
+    word-break: break-all;
+}
+
+.alt-bulk-col-alt {
+    padding: 6px 10px;
+}
+
+.alt-bulk-input {
+    width: 100%;
+    border: 1px solid #e5e3e0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: #44403c;
+    background: white;
+    transition: border-color 0.2s;
+}
+
+.alt-bulk-input:focus {
+    outline: none;
+    border-color: #f2a93b;
+}
+
 /* 2-Column Layout */
 .inspector-layout {
     display: grid;
