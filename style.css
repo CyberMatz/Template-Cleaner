@@ -216,12 +216,10 @@ body {
 /* Inspector Button → Visueller Trenner (kein CTA) */
 .btn-inspector {
     width: 100%;
-    background: #fafaf9;
+    background: transparent;
     color: #a8a29e;
     border: none;
-    border-top: 1px solid #e5e3e0;
-    border-bottom: 1px solid #e5e3e0;
-    padding: 7px 40px;
+    padding: 7px 0;
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.12em;
@@ -230,7 +228,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 14px;
     pointer-events: none;
     transition: none;
 }
@@ -239,24 +237,23 @@ body {
 .btn-inspector::after {
     content: '';
     flex: 1;
-    height: 1px;
-    background: #e5e3e0;
-    max-width: 120px;
+    height: 2px;
+    background: #f2a93b;
 }
 
 .btn-inspector:disabled {
     opacity: 1;
 }
 
-/* Suggest Button – dezent (Ghost-Style) */
+/* Suggest Button – dezent (Ghost-Style, gleiche Größe wie btn-upload) */
 .btn-suggest {
     background: transparent;
     color: #9c85c8;
     border: 1px solid #c4b5e8;
-    padding: 8px 18px;
+    padding: 12px 24px;
     border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     width: fit-content;
@@ -273,15 +270,15 @@ body {
     opacity: 0.7;
 }
 
-/* Restore / Neues Template Button – dezent (Ghost-Style) */
+/* Restore / Neues Template Button – dezent (Ghost-Style, gleiche Größe wie btn-upload) */
 .btn-restore {
     background: transparent;
     color: #a8a29e;
     border: 1px solid #d6d3d1;
-    padding: 8px 18px;
+    padding: 12px 24px;
     border-radius: 6px;
-    font-size: 13px;
-    font-weight: 400;
+    font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     width: fit-content;
