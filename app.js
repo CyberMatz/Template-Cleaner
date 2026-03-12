@@ -5113,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.74-2026-03-12';
+const APP_VERSION = 'v3.9.76-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -8672,7 +8672,7 @@ td[width] { width: auto !important; }
             // Tabelle
             html += '<table class="bulk-url-table">';
             html += '<thead><tr>';
-            html += '<th class="bulk-url-col-id">ID</th>';
+            html += '<th class="bulk-url-col-id">📍</th>';
             html += '<th class="bulk-url-col-type"></th>';
             html += '<th class="bulk-url-col-text">Linktext</th>';
             html += '<th class="bulk-url-col-url">Aktuelle URL → Neue URL</th>';
@@ -8685,7 +8685,7 @@ td[width] { width: auto !important; }
                 const typeCss   = typeCssClasses[link._type] || '';
                 const currentUrl = link.href || '';
                 html += '<tr class="bulk-url-row' + (isProblem ? ' bulk-url-row-warn' : '') + '" data-link-id="' + link.id + '">';
-                html += '<td class="bulk-url-col-id"><span class="link-card-id">' + link.id + '</span></td>';
+                html += '<td class="bulk-url-col-id"><button class="btn-bulk-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(currentUrl) + '" title="Im Preview anzeigen">📍</button></td>';
                 html += '<td class="bulk-url-col-type"><span class="link-card-type ' + typeCss + '">' + typeLabel + '</span></td>';
                 html += '<td class="bulk-url-col-text" title="' + escapeHtml(link.text) + '">' + escapeHtml((link.text||'[Bild]').substring(0,30)) + ((link.text||'').length > 30 ? '…' : '') + '</td>';
                 html += '<td class="bulk-url-col-url">';
@@ -9159,6 +9159,15 @@ td[width] { width: auto !important; }
             });
         }
         // ═══ Bulk URL Editor Listeners ═══
+
+        // Locate-Buttons in Bulk-Tabelle
+        document.querySelectorAll('.btn-bulk-locate').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const linkId = this.getAttribute('data-link-id');
+                const href = this.getAttribute('data-href');
+                highlightLinkInPreview(linkId, href);
+            });
+        });
 
         // Ein-/Ausklappen
         const bulkToggleBtn = document.getElementById('bulkUrlToggle');

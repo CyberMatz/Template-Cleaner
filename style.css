@@ -523,8 +523,15 @@ body {
    ═══════════════════════════════════════ */
 .tracking-summary-stats {
     display: flex;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.summary-stat {
+    flex: 1;
+    padding: 7px 10px;
+    border-radius: 8px;
+    text-align: center;
 }
 
 /* ═══ Sub-Tabs (innerhalb Tracking + Bilder) ═══ */
@@ -538,17 +545,18 @@ body {
 .subtab-btn {
     background: none;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-bottom: 3px solid transparent;
     margin-bottom: -2px;
-    padding: 7px 16px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #78716c;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #a8a29e;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     transition: color 0.15s;
+    letter-spacing: 0.01em;
 }
 .subtab-btn:hover { color: #44403c; }
 .subtab-btn.subtab-active {
@@ -704,7 +712,18 @@ body {
 .bulk-url-row:hover { background: #faf9f7; }
 .bulk-url-row-warn { background: #fffbf0; }
 .bulk-url-row-warn:hover { background: #fff8e8; }
-.bulk-url-col-id { width: 46px; padding: 7px 10px; }
+.bulk-url-col-id { width: 38px; padding: 7px 6px; text-align: center; }
+.btn-bulk-locate {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: opacity 0.15s, background 0.15s;
+}
+.btn-bulk-locate:hover { opacity: 1; background: #f0eeec; }
 .bulk-url-col-type { width: 52px; padding: 7px 6px; }
 .bulk-url-col-text { width: 22%; padding: 7px 10px; color: #78716c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
 .bulk-url-col-url { padding: 7px 10px; }
@@ -755,7 +774,7 @@ body {
 }
 
 .summary-stat-value {
-    font-size: 22px;
+    font-size: 16px;
     font-weight: 700;
     line-height: 1.2;
 }
@@ -764,10 +783,10 @@ body {
 .stat-untracked .summary-stat-value { color: #dc2626; }
 
 .summary-stat-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 500;
     color: #777;
-    margin-top: 2px;
+    margin-top: 1px;
 }
 
 /* ═══════════════════════════════════════
