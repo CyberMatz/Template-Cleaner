@@ -2254,6 +2254,10 @@ class TemplateProcessor {
             const h = (img.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
             if (w === '1' && h === '1') return;
             
+            // Spacer/Platzhalter-Bilder überspringen – leeres alt="" ist korrekt
+            const src = (img.match(/src\s*=\s*["']([^"']*)/i) || [])[1] || '';
+            if (src.toLowerCase().includes('platzhalter')) return;
+            
             if (!img.includes('alt=')) {
                 fixed++;
             } else if (/alt=""/.test(img) || /alt=''/.test(img)) {
@@ -5109,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.70-2026-03-12';
+const APP_VERSION = 'v3.9.71-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -6743,6 +6747,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const w = (tag.match(/width\s*=\s*["']?(\d+)/i) || [])[1];
             const h = (tag.match(/height\s*=\s*["']?(\d+)/i) || [])[1];
             if (w === '1' && h === '1') return; // Tracking-Pixel überspringen
+            const src = (tag.match(/src\s*=\s*["']([^"']*)/i) || [])[1] || '';
+            if (src.toLowerCase().includes('platzhalter')) return; // Spacer überspringen
             if (!/\balt\s*=/i.test(tag)) {
                 missingAltCount++;
             } else if (/\balt\s*=\s*["']\s*["']/i.test(tag)) {
