@@ -61,10 +61,10 @@ body {
     align-items: center;
 }
 
-/* Inspector Button Container (rechts separat) */
+/* Inspector Divider (kein CTA mehr – visueller Trenner) */
 .control-inspector {
-    display: flex;
-    justify-content: flex-end;
+    display: block;
+    margin: 0 -40px;  /* Bricht aus dem Panel-Padding heraus */
 }
 
 .control-item {
@@ -213,56 +213,84 @@ body {
     opacity: 0.6;
 }
 
-/* Inspector Button (light style) */
+/* Inspector Button → Visueller Trenner (kein CTA) */
 .btn-inspector {
-    background: #f4f4f4;
-    color: #333;
-    border: 1px solid #ccc;
-    padding: 12px 24px;
-    border-radius: 6px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: fit-content;
+    width: 100%;
+    background: #fafaf9;
+    color: #a8a29e;
+    border: none;
+    border-top: 1px solid #e5e3e0;
+    border-bottom: 1px solid #e5e3e0;
+    padding: 7px 40px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    transition: none;
 }
 
-.btn-inspector:hover:not(:disabled) {
-    background: #e8e8e8;
-    border-color: #999;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+.btn-inspector::before,
+.btn-inspector::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e5e3e0;
+    max-width: 120px;
 }
 
 .btn-inspector:disabled {
-    background: #f9f9f9;
-    color: #999;
-    cursor: not-allowed;
-    opacity: 0.6;
+    opacity: 1;
 }
 
-/* Suggest Button */
+/* Suggest Button – dezent (Ghost-Style) */
 .btn-suggest {
-    background: #7c5cbf;
-    color: white;
-    border: none;
-    padding: 12px 24px;
+    background: transparent;
+    color: #9c85c8;
+    border: 1px solid #c4b5e8;
+    padding: 8px 18px;
     border-radius: 6px;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
     width: fit-content;
 }
 .btn-suggest:hover:not(:disabled) {
-    background: #6a4dab;
+    background: #f3f0fa;
+    border-color: #9c85c8;
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 .btn-suggest:disabled {
-    background: #ccc;
+    color: #ccc;
+    border-color: #e0e0e0;
     cursor: not-allowed;
-    opacity: 0.6;
+    opacity: 0.7;
+}
+
+/* Restore / Neues Template Button – dezent (Ghost-Style) */
+.btn-restore {
+    background: transparent;
+    color: #a8a29e;
+    border: 1px solid #d6d3d1;
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: fit-content;
+}
+.btn-restore:hover {
+    color: #44403c;
+    border-color: #a8a29e;
+    background: #f5f3f0;
+    transform: translateY(-1px);
 }
 
 /* Suggest Modal */
