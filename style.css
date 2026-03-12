@@ -65,7 +65,7 @@ body {
 .control-inspector {
     display: block;
     margin: 0 -40px -30px -40px;
-    background: #f0ede9;
+    background: #f5f3f0;
     padding: 0 40px;
     border-radius: 0 0 8px 8px;
 }
@@ -220,18 +220,18 @@ body {
 .btn-inspector {
     width: 100%;
     background: transparent;
-    color: #a8a29e;
+    color: #78716c;
     border: none;
-    padding: 10px 0;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.14em;
+    padding: 12px 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     cursor: default;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 14px;
+    gap: 16px;
     pointer-events: none;
     transition: none;
 }
