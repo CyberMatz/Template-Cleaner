@@ -64,7 +64,9 @@ body {
 /* Inspector Divider (kein CTA mehr – visueller Trenner) */
 .control-inspector {
     display: block;
-    margin: 0 -40px;  /* Bricht aus dem Panel-Padding heraus */
+    margin: 0 -40px;
+    background: #f0ede9;
+    padding: 0 40px;
 }
 
 .control-item {
@@ -237,19 +239,19 @@ body {
 .btn-inspector::after {
     content: '';
     flex: 1;
-    height: 1px;
-    background: rgba(242, 169, 59, 0.35);
+    height: 2px;
+    background: rgba(242, 169, 59, 0.5);
 }
 
 .btn-inspector:disabled {
     opacity: 1;
 }
 
-/* Suggest Button – dezent (Ghost-Style, gleiche Größe wie btn-upload) */
+/* Suggest Button – Sekundär (warmes Grau, kein Rahmen) */
 .btn-suggest {
-    background: transparent;
-    color: #a8a29e;
-    border: 1px solid #f2a93b;
+    background: #e8e3dc;
+    color: #78716c;
+    border: none;
     padding: 12px 24px;
     border-radius: 6px;
     font-size: 16px;
@@ -259,21 +261,21 @@ body {
     width: fit-content;
 }
 .btn-suggest:hover:not(:disabled) {
-    background: #fff8ee;
+    background: #ddd8d0;
     transform: translateY(-1px);
 }
 .btn-suggest:disabled {
-    color: #ccc;
-    border-color: #e0e0e0;
+    background: #eeebe7;
+    color: #bbb5af;
     cursor: not-allowed;
     opacity: 0.7;
 }
 
-/* Restore / Neues Template Button – dezent (Ghost-Style, gleiche Größe wie btn-upload) */
+/* Restore / Neues Template Button – Sekundär (warmes Grau, kein Rahmen) */
 .btn-restore {
-    background: transparent;
-    color: #a8a29e;
-    border: 1px solid #f2a93b;
+    background: #e8e3dc;
+    color: #78716c;
+    border: none;
     padding: 12px 24px;
     border-radius: 6px;
     font-size: 16px;
@@ -283,7 +285,7 @@ body {
     width: fit-content;
 }
 .btn-restore:hover {
-    background: #fff8ee;
+    background: #ddd8d0;
     transform: translateY(-1px);
 }
 
