@@ -134,6 +134,9 @@ class TemplateProcessor {
         this.checkFooterPlaceholder();
 
         // === PHASE A2: Tag-Reparatur ===
+        // Vor-Fix: Fehlende </a> in <!--[if !mso]>-Blöcken (vor Tag-Balancing, damit P07 sie nicht doppelt meldet)
+        this._fixMissingClosingAInMsoBlocks();
+
         // P07/P08: Tag-Balancing
         this.checkTagBalancing();
 
@@ -3140,39 +3143,28 @@ class TemplateProcessor {
     }
 
     // P14: CTA Button Fallback Check + Auto-Fix (VML Buttons für Outlook)
+    // Hilfsmethode: Fehlende </a> in <!--[if !mso]>-Blöcken ergänzen
+    // Wird VOR checkTagBalancing aufgerufen damit P07 nicht doppelt meldet
+    _fixMissingClosingAInMsoBlocks() {
+        const msoBlockRegex = /(<!--\[if\s+!mso\b[^\]]*\]>\s*(?:<!--\s*)?>?\s*-->\s*|<!--\[if\s+!mso\b[^\]]*\]><!-->\s*)([\s\S]*?)(<!--<!\[endif\]-->)/gi;
+        let fixed = 0;
+        this.html = this.html.replace(msoBlockRegex, (full, open, inner, close) => {
+            const openAs = (inner.match(/<a\b/gi) || []).length;
+            const closeAs = (inner.match(/<\/a>/gi) || []).length;
+            if (openAs > closeAs) {
+                fixed++;
+                return open + inner.trimEnd() + '\n                                </a>\n                                ' + close;
+            }
+            return full;
+        });
+        if (fixed > 0) {
+            console.log(`[PRE-FIX] Fehlende </a> in !mso-Blöcken ergänzt: ${fixed}x`);
+        }
+    }
+
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
-        this._vmlSyncOffset = 0; // Offset-Tracking für VML-Text/Farb-Sync
-        
-        // ── VOR-FIX: Fehlende </a> in <!--[if !mso]>-Blöcken ──────────────────
-        // Problem: Button-Template mit Muster:
-        //   <!--[if !mso]> -->
-        //   <a href="..." style="background-color:...">BUTTON TEXT
-        //   <!--<![endif]-->
-        // → </a> fehlt vor dem endif-Kommentar.
-        // Tag-Balancing erkennt das nicht (stripped Conditional Comments).
-        // Lösung: Gezielter Regex-Fix NUR für dieses Muster.
-        {
-            // Matcht: <!--[if !mso]> --> ODER <!--[if !mso]><!--> ODER <!--[if !mso]-->
-            const msoBlockRegex = /(<!--\[if\s+!mso\b[^\]]*\]>\s*(?:<!--\s*)?>?\s*-->\s*|<!--\[if\s+!mso\b[^\]]*\]><!-->\s*)([\s\S]*?)(<!--<!\[endif\]-->)/gi;
-            let msoMatch;
-            let missingClosingFixed = 0;
-            // Wir müssen replace statt exec+slice nutzen da Offset-Tracking komplex
-            this.html = this.html.replace(msoBlockRegex, (full, open, inner, close) => {
-                // Hat der Block einen <a> ohne schließendes </a>?
-                const openAs = (inner.match(/<a\b/gi) || []).length;
-                const closeAs = (inner.match(/<\/a>/gi) || []).length;
-                if (openAs > closeAs) {
-                    // </a> direkt vor <!--<![endif]--> einfügen
-                    missingClosingFixed++;
-                    return open + inner.trimEnd() + '\n                                </a>\n                                ' + close;
-                }
-                return full;
-            });
-            if (missingClosingFixed > 0) {
-                console.log(`[P14] Fehlende </a>-Tags in !mso-Blöcken ergänzt: ${missingClosingFixed}x`);
-            }
-        }
+        this._vmlSyncOffset = 0;
         
         // Sammle alle CTA-Buttons (beide Typen)
         const allCtaPositions = this._findAllCTAButtons();
