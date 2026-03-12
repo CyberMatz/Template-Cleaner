@@ -3379,10 +3379,30 @@ class TemplateProcessor {
                     }
                     
                     if (vmlChanged && syncedVml !== currentVmlForSync) {
-                        // Sicheres Replace: suche den exakten VML-String im HTML und ersetze ihn
-                        const vmlEscaped = currentVmlForSync.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        this.html = this.html.replace(new RegExp(vmlEscaped), syncedVml);
+                        // Sicheres Replace per Position (funktioniert auch bei identischen VML-Blöcken)
+                        this.html = this.html.substring(0, vmlBlock.index) +
+                                    syncedVml +
+                                    this.html.substring(vmlBlock.endIndex);
+                        // Alle nachfolgenden VML-Block-Positionen um Längenunterschied verschieben
+                        const lenDiff = syncedVml.length - currentVmlForSync.length;
+                        if (lenDiff !== 0) {
+                            for (const otherVml of vmlPositions) {
+                                if (otherVml.index > vmlBlock.index) {
+                                    otherVml.index += lenDiff;
+                                    otherVml.endIndex += lenDiff;
+                                }
+                            }
+                            // Auch CTA-Positionen verschieben
+                            for (const otherCta of allCtaPositions) {
+                                if (otherCta.index > vmlBlock.index) {
+                                    otherCta.index += lenDiff;
+                                    otherCta.endIndex += lenDiff;
+                                    if (otherCta.containerIndex) otherCta.containerIndex += lenDiff;
+                                }
+                            }
+                        }
                         vmlBlock.fullMatch = syncedVml;
+                        vmlBlock.endIndex = vmlBlock.index + syncedVml.length;
                         ctasMismatched++;
                     }
                 }
@@ -3589,7 +3609,8 @@ class TemplateProcessor {
         let match;
         
         // Typ A: <a> mit background-color im eigenen style
-        const typeA = /<a\b[^>]*style\s*=\s*"[^"]*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"]*"[^>]*>[\s\S]*?<\/a>/gi;
+        // [\s\S]{0,600} statt [\s\S]*? um "Giant-Matches" bei fehlendem </a> zu verhindern
+        const typeA = /<a\b[^>]*style\s*=\s*"[^"]*background(?:-color)?\s*:\s*#?[a-fA-F0-9]{3,6}[^"]*"[^>]*>[\s\S]{0,600}?<\/a>/gi;
         while ((match = typeA.exec(this.html)) !== null) {
             const style = this._extractStyleValue(match[0]);
             const styleLower = style.toLowerCase();
