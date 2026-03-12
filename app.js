@@ -5113,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.73-2026-03-12';
+const APP_VERSION = 'v3.9.74-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -8628,6 +8628,11 @@ td[width] { width: auto !important; }
 
         // ─── Sub-Tab Navigation ───
         const problemCount = links.filter(l => !l.href || l.href.trim() === '' || l.href.trim() === '#' || /^#[A-Z]/.test((l.href||'').trim())).length;
+
+        // Typ-Labels (früh definiert – werden in Bulk-Tabelle UND Link-Karten gebraucht)
+        const typeLabels = { cta: 'CTA Links', image: 'Bild-Links', social: 'Social Links', text: 'Text / Footer', other: 'Sonstige' };
+        const typeBadgeLabels = { cta: 'CTA', image: 'Bild', social: 'Social', text: 'Text', other: 'Link' };
+        const typeCssClasses = { cta: 'link-type-cta', image: 'link-type-image', social: 'link-type-social', text: 'link-type-text', other: 'link-type-other' };
         html += '<div class="subtab-nav">';
         html += '<button class="subtab-btn' + (trackingActiveSubTab === 'links' ? ' subtab-active' : '') + '" data-subtab="links">'
               + 'Links' + (problemCount > 0 ? ' <span class="subtab-badge subtab-badge-warn">' + problemCount + ' ⚠</span>' : ' <span class="subtab-badge">' + links.length + '</span>') + '</button>';
@@ -8726,10 +8731,6 @@ td[width] { width: auto !important; }
         html += '</div>';
         
         // ═══ Link-Karten nach Gruppen ═══
-        const typeLabels = { cta: 'CTA Links', image: 'Bild-Links', social: 'Social Links', text: 'Text / Footer', other: 'Sonstige' };
-        const typeBadgeLabels = { cta: 'CTA', image: 'Bild', social: 'Social', text: 'Text', other: 'Link' };
-        const typeCssClasses = { cta: 'link-type-cta', image: 'link-type-image', social: 'link-type-social', text: 'link-type-text', other: 'link-type-other' };
-        
         const groupOrder = ['cta', 'image', 'social', 'text', 'other'];
         
         if (links.length === 0) {
