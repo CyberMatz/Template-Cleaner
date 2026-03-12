@@ -3142,6 +3142,7 @@ class TemplateProcessor {
     // P14: CTA Button Fallback Check + Auto-Fix (VML Buttons für Outlook)
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
+        this._vmlSyncOffset = 0; // Offset-Tracking für VML-Text/Farb-Sync
         
         // ── VOR-FIX: Fehlende </a> in <!--[if !mso]>-Blöcken ──────────────────
         // Problem: Button-Template mit Muster:
@@ -3329,19 +3330,18 @@ class TemplateProcessor {
                 // Problem: Vorlage enthält oft noch "Call to Action" im VML, obwohl HTML-Button
                 // bereits den echten Text hat (z.B. "MEHR ERFAHREN", "ANGEBOT EINHOLEN")
                 {
-                    const currentVmlForSync = this.html.substring(vmlBlock.index, vmlBlock.endIndex);
+                    const currentVmlForSync = vmlBlock.fullMatch;
                     
                     // HTML-Button-Text extrahieren (aus dem <a>-Tag)
                     // Der Text kann auf einer eigenen Zeile mit führenden Leerzeichen stehen
                     const htmlTextRaw = cta.fullMatch
                         ? (cta.fullMatch.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i) || [])[1]
                         : null;
-                    // HTML-Tags entfernen, Whitespace normalisieren
                     const htmlTextClean = htmlTextRaw
                         ? htmlTextRaw.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
                         : null;
                     
-                    // VML-Text extrahieren (aus <center>...</center> oder <span>...</span>)
+                    // VML-Text extrahieren
                     const vmlTextMatch = currentVmlForSync.match(/<(?:center|span)[^>]*>([^<]+)<\/(?:center|span)>/i);
                     const vmlTextClean = vmlTextMatch ? vmlTextMatch[1].trim() : null;
                     
@@ -3358,7 +3358,7 @@ class TemplateProcessor {
                     let syncedVml = currentVmlForSync;
                     let vmlChanged = false;
                     
-                    // Text synchronisieren wenn abweichend und HTML-Text sinnvoll (≥2 Zeichen, kein Platzhalter)
+                    // Text synchronisieren wenn abweichend und HTML-Text sinnvoll (≥2 Zeichen)
                     if (htmlTextClean && vmlTextClean && 
                         htmlTextClean !== vmlTextClean &&
                         htmlTextClean.length >= 2) {
@@ -3378,11 +3378,10 @@ class TemplateProcessor {
                         vmlChanged = true;
                     }
                     
-                    if (vmlChanged) {
-                        this.html = this.html.substring(0, vmlBlock.index) +
-                                    syncedVml +
-                                    this.html.substring(vmlBlock.endIndex);
-                        // vmlBlock aktualisieren für nachfolgende Checks
+                    if (vmlChanged && syncedVml !== currentVmlForSync) {
+                        // Sicheres Replace: suche den exakten VML-String im HTML und ersetze ihn
+                        const vmlEscaped = currentVmlForSync.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        this.html = this.html.replace(new RegExp(vmlEscaped), syncedVml);
                         vmlBlock.fullMatch = syncedVml;
                         ctasMismatched++;
                     }
