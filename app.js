@@ -5113,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.76-2026-03-12';
+const APP_VERSION = 'v3.9.78-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -9777,234 +9777,63 @@ td[width] { width: auto !important; }
         const noAlt = images.filter(img => img.altEmpty && !img.isSpacerOrPixel && img.altSuggestionSource !== 'pixel').length;
         html += '<div class="subtab-nav">';
         html += '<button class="subtab-btn' + (imagesActiveSubTab === 'alttext' ? ' subtab-active' : '') + '" data-subtab="alttext">'
-              + 'Alt-Texte' + (noAlt > 0 ? ' <span class="subtab-badge">' + noAlt + '</span>' : '') + '</button>';
+              + 'Alt-Texte' + (noAlt > 0 ? ' <span class="subtab-badge subtab-badge-warn">' + noAlt + '</span>' : ' <span class="subtab-badge subtab-badge-ok">✓</span>') + '</button>';
         html += '<button class="subtab-btn' + (imagesActiveSubTab === 'bilder' ? ' subtab-active' : '') + '" data-subtab="bilder">'
-              + 'Bilder & Upload</button>';
+              + 'Bilder & URLs <span class="subtab-badge">' + images.length + '</span></button>';
         html += '</div>';
 
-        // ─── Sub-Tab: Alt-Texte ───
+        // ════════════════════════════════
+        // SUB-TAB 1: Alt-Texte
+        // ════════════════════════════════
         html += '<div class="subtab-panel" id="subtab-alttext" style="display:' + (imagesActiveSubTab === 'alttext' ? 'block' : 'none') + '">';
-        html += '<h3>⬆️ Bild hochladen</h3>';
-        html += '<div class="upload-status" id="imageUploadStatus">';
-        html += '<span class="upload-status-dot disconnected"></span>';
-        html += '<span>Upload-Server wird geprüft...</span>';
-        html += '</div>';
-        html += '<div class="upload-dropzone" id="imageDropZone">';
-        html += '<div class="upload-dropzone-content">';
-        html += '<span class="upload-dropzone-icon">📁</span>';
-        html += '<span>Upload Bilder – <label for="imageFileInput" class="upload-browse-link">Dateien auswählen</label></span>';
-        html += '<input type="file" id="imageFileInput" multiple accept="image/*" style="display:none">';
-        html += '</div>';
-        html += '</div>';
-        html += '<div class="upload-options">';
-        html += '<label>Ordner suchen: </label>';
-        html += '<input type="text" id="imageUploadFolder" class="upload-folder-input" placeholder="' + getTodayFolderName() + '" readonly>';
-        html += '<button class="btn-small" id="btnBrowseFolders" title="Vorhandene Ordner anzeigen">📂 Ordner suchen</button>';
-        html += '</div>';
-        html += '<div class="upload-folder-browser" id="folderBrowser" style="display:none;"></div>';
-        html += '<div class="upload-results" id="imageUploadResults"></div>';
-        html += '</div>';
-        
-        // Sektion 1: IMG src
-        html += '<div class="images-section">';
-        
-        // Section divider
-        html += '<div class="section-divider">';
-        html += '<div class="section-divider-line"></div>';
-        html += '<div class="section-divider-label">Content-Bilder (' + images.length + ')</div>';
-        html += '<div class="section-divider-line"></div>';
-        html += '</div>';
-        
-        if (images.length === 0) {
-            html += '<p class="images-empty">Keine Bilder gefunden.</p>';
+
+        if (noAlt === 0) {
+            html += '<p class="images-empty">✅ Alle Bilder haben Alt-Texte (oder sind Spacer).</p>';
         } else {
-            // Alt-Text Bulk-Panel: alle Bilder mit leerem Alt (keine Spacer/Pixel)
             const imagesNeedingAlt = images.filter(img =>
                 img.altEmpty && !img.isSpacerOrPixel && img.altSuggestionSource !== 'pixel'
             );
-            
-            if (imagesNeedingAlt.length > 0) {
-                const withSuggestion = imagesNeedingAlt.filter(img => img.altSuggestion).length;
-                html += '<div class="alt-bulk-panel">';
-                html += '<div class="alt-bulk-header">';
-                html += '<span class="alt-bulk-title">✏️ ' + imagesNeedingAlt.length + ' Bild' + (imagesNeedingAlt.length > 1 ? 'er' : '') + ' ohne Alt-Text'
-                      + (withSuggestion > 0 ? ' <span class="alt-bulk-hint">(' + withSuggestion + ' mit Vorschlag)</span>' : '') + '</span>';
-                html += '<button class="btn-alt-bulk-apply btn-small" id="btnAltBulkApply">✓ Alle markierten übernehmen</button>';
-                html += '</div>';
-                html += '<table class="alt-bulk-table">';
-                html += '<thead><tr>';
-                html += '<th class="alt-bulk-col-check"><input type="checkbox" id="altBulkCheckAll" title="Alle aus/abwählen"></th>';
-                html += '<th class="alt-bulk-col-id">Bild</th>';
-                html += '<th class="alt-bulk-col-src">URL</th>';
-                html += '<th class="alt-bulk-col-alt">Alt-Text <span class="alt-bulk-hint">(leer lassen = kein Alt-Text)</span></th>';
-                html += '</tr></thead>';
-                html += '<tbody>';
-                imagesNeedingAlt.forEach(img => {
-                    const hassuggestion = !!img.altSuggestion;
-                    const sourceLabel = img.altSuggestionSource === 'link' ? 'Vorschlag aus Link' : 
-                                       img.altSuggestionSource === 'title' ? 'Vorschlag aus Title' : 
-                                       img.altSuggestionSource === 'filename' ? 'Vorschlag aus Dateiname' : '';
-                    html += '<tr class="alt-bulk-row' + (hassuggestion ? ' alt-bulk-has-suggestion' : '') + '" data-img-id="' + img.id + '">';
-                    html += '<td class="alt-bulk-col-check"><input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '"' + (hassuggestion ? ' checked' : '') + '></td>';
-                    html += '<td class="alt-bulk-col-id"><span class="image-card-new-id">' + img.id + '</span></td>';
-                    html += '<td class="alt-bulk-col-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</td>';
-                    html += '<td class="alt-bulk-col-alt"><input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altSuggestion || '') + '" placeholder="Alt-Text eingeben..."' + (sourceLabel ? ' title="' + sourceLabel + '"' : '') + '></td>';
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-                html += '</div>';
-            }
+            const withSuggestion = imagesNeedingAlt.filter(img => img.altSuggestion).length;
 
-            if (imagesNeedingAlt.length === 0) {
-                html += '<p class="images-empty">✅ Alle Bilder haben Alt-Texte (oder sind Spacer).</p>';
-            }
+            html += '<div class="alt-bulk-panel">';
+            html += '<div class="alt-bulk-header">';
+            html += '<span class="alt-bulk-title">✏️ ' + imagesNeedingAlt.length + ' Bild' + (imagesNeedingAlt.length > 1 ? 'er' : '') + ' ohne Alt-Text'
+                  + (withSuggestion > 0 ? ' <span class="alt-bulk-hint">(' + withSuggestion + ' mit Vorschlag)</span>' : '') + '</span>';
+            html += '<button class="btn-alt-bulk-apply btn-small" id="btnAltBulkApply">✓ Alle markierten übernehmen</button>';
+            html += '</div>';
+            html += '<table class="alt-bulk-table">';
+            html += '<thead><tr>';
+            html += '<th class="alt-bulk-col-check"><input type="checkbox" id="altBulkCheckAll" title="Alle aus/abwählen"></th>';
+            html += '<th class="alt-bulk-col-id">Bild</th>';
+            html += '<th class="alt-bulk-col-src">URL</th>';
+            html += '<th class="alt-bulk-col-alt">Alt-Text <span class="alt-bulk-hint">(leer lassen = kein Alt-Text)</span></th>';
+            html += '</tr></thead><tbody>';
+            imagesNeedingAlt.forEach(img => {
+                const hasSuggestion = !!img.altSuggestion;
+                const sourceLabel = img.altSuggestionSource === 'link' ? 'Vorschlag aus Link' :
+                                   img.altSuggestionSource === 'title' ? 'Vorschlag aus Title' :
+                                   img.altSuggestionSource === 'filename' ? 'Vorschlag aus Dateiname' : '';
+                html += '<tr class="alt-bulk-row' + (hasSuggestion ? ' alt-bulk-has-suggestion' : '') + '" data-img-id="' + img.id + '">';
+                html += '<td class="alt-bulk-col-check"><input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '"' + (hasSuggestion ? ' checked' : '') + '></td>';
+                html += '<td class="alt-bulk-col-id"><span class="image-card-new-id">' + img.id + '</span></td>';
+                html += '<td class="alt-bulk-col-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</td>';
+                html += '<td class="alt-bulk-col-alt"><input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altSuggestion || '') + '" placeholder="Alt-Text eingeben..."' + (sourceLabel ? ' title="' + sourceLabel + '"' : '') + '></td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            html += '</div>'; // alt-bulk-panel
+        }
 
         html += '</div>'; // subtab-panel alttext
 
-        // ─── Sub-Tab: Bilder & Upload ───
+        // ════════════════════════════════
+        // SUB-TAB 2: Bilder & Upload
+        // ════════════════════════════════
         html += '<div class="subtab-panel" id="subtab-bilder" style="display:' + (imagesActiveSubTab === 'bilder' ? 'block' : 'none') + '">';
 
-            html += '<div class="images-list">';
-            images.forEach(img => {
-                html += '<div class="image-item-edit image-card-new" data-img-id="' + img.id + '">';
-                
-                // New Card Header: ID + Dimensions
-                html += '<div class="image-card-new-header">';
-                html += '<span class="image-card-new-id">' + img.id + '</span>';
-                if (img.width || img.height) {
-                    html += '<span class="image-card-new-dims">' + (img.width || '?') + ' × ' + (img.height || '?') + '</span>';
-                }
-                html += '</div>';
-                
-                // src URL
-                html += '<div class="image-card-new-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
-                
-                // Alt text – editable inline
-                var altNeedsAttention = img.altEmpty;
-                html += '<div class="image-alt-edit-row' + (altNeedsAttention ? ' alt-missing' : '') + '">';
-                html += '<span class="alt-label">Alt:</span>';
-                html += '<input type="text" class="image-alt-input' + (altNeedsAttention ? ' alt-input-warn' : '') + '" data-img-id="' + img.id + '" value="' + escapeHtml(img.altFull) + '" placeholder="' + (altNeedsAttention ? 'Alt-Text fehlt – bitte eintragen' : 'Alt-Text') + '">';
-                html += '<button class="btn-image-alt-apply btn-small" data-img-id="' + img.id + '" title="Alt-Text übernehmen">✓</button>';
-                html += '</div>';
-                
-                // Alt-Text Vorschlag (nur bei leerem Alt)
-                if (img.altEmpty && img.altSuggestion && img.altSuggestionSource !== 'pixel') {
-                    var sourceLabel = img.altSuggestionSource === 'link' ? 'aus Link-Text' : 
-                                     img.altSuggestionSource === 'title' ? 'aus title' : 'aus Dateiname';
-                    html += '<div class="alt-suggestion">';
-                    html += '<span class="alt-suggestion-text">💡 Vorschlag (' + sourceLabel + '): <strong>' + escapeHtml(img.altSuggestion) + '</strong></span>';
-                    html += '<button class="btn-alt-suggestion-apply" data-img-id="' + img.id + '" data-suggestion="' + escapeHtml(img.altSuggestion) + '">Übernehmen</button>';
-                    html += '</div>';
-                } else if (img.altEmpty && img.altSuggestionSource === 'pixel') {
-                    html += '<div class="alt-suggestion alt-suggestion-ok">';
-                    html += '<span class="alt-suggestion-text">✓ Tracking-Pixel – leerer Alt-Text ist korrekt</span>';
-                    html += '</div>';
-                }
-                
-                // Property Chips
-                html += '<div class="image-card-new-props">';
-                if (img.width) {
-                    html += '<span class="prop-chip prop-size">' + img.width + (img.width === '100%' ? '' : 'px') + ' breit</span>';
-                }
-                if (img.align) {
-                    var alignSymbol = img.align === 'left' ? '← ' : img.align === 'right' ? '→ ' : '↔ ';
-                    var alignLabel = img.align === 'left' ? 'Links' : img.align === 'right' ? 'Rechts' : 'Zentriert';
-                    html += '<span class="prop-chip prop-align">' + alignSymbol + alignLabel + '</span>';
-                }
-                if (img.containerPadding.found) {
-                    if (img.paddingAsymmetric) {
-                        html += '<span class="prop-chip prop-padding-warn">⚠ Padding asym.</span>';
-                    } else {
-                        html += '<span class="prop-chip prop-padding-ok">✓ Padding sym.</span>';
-                    }
-                }
-                html += '</div>';
-                
-                // Breite + Ausrichtung Controls
-                html += '<div class="image-layout-controls">';
-                
-                // Breite
-                html += '<div class="image-layout-group">';
-                html += '<label>Breite</label>';
-                html += '<div class="image-width-row">';
-                html += '<input type="number" class="image-width-input" data-img-id="' + img.id + '" value="' + (img.width || '') + '" placeholder="auto" min="10" max="1200" step="10">';
-                html += '<span class="image-width-unit">px</span>';
-                html += '<button class="btn-image-width-100 btn-small' + (img.width === '100%' ? ' active' : '') + '" data-img-id="' + img.id + '" title="Breite auf 100% setzen">100%</button>';
-                html += '</div>';
-                if (img.height) {
-                    html += '<div class="image-dimension-info">Höhe: ' + img.height + 'px</div>';
-                }
-                html += '</div>';
-                
-                // Ausrichtung
-                html += '<div class="image-layout-group">';
-                html += '<label>Ausrichtung</label>';
-                html += '<div class="image-align-row">';
-                html += '<button class="btn-image-align btn-small' + (img.align === 'left' ? ' active' : '') + '" data-img-id="' + img.id + '" data-align="left" title="Linksbündig">⬅</button>';
-                html += '<button class="btn-image-align btn-small' + (img.align === 'center' || !img.align ? ' active' : '') + '" data-img-id="' + img.id + '" data-align="center" title="Zentriert">⬛</button>';
-                html += '<button class="btn-image-align btn-small' + (img.align === 'right' ? ' active' : '') + '" data-img-id="' + img.id + '" data-align="right" title="Rechtsbündig">➡</button>';
-                if (img.alignSource) {
-                    html += '<span class="image-align-source">via ' + img.alignSource + '</span>';
-                }
-                html += '</div>';
-                html += '</div>';
-                
-                html += '</div>'; // image-layout-controls
-                
-                // Container-Padding Controls
-                if (img.containerPadding.found) {
-                    html += '<div class="image-padding-controls' + (img.paddingAsymmetric ? ' padding-asymmetric' : '') + '">';
-                    html += '<label>Container-Padding <span class="image-padding-source">(auf &lt;' + img.containerPadding.source + '&gt;)</span></label>';
-                    if (img.paddingAsymmetric) {
-                        html += '<div class="image-padding-warn">⚠️ Asymmetrisch (links ≠ rechts)</div>';
-                    }
-                    html += '<div class="image-padding-row">';
-                    html += '<div class="image-padding-field"><span>↑</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="top" value="' + img.containerPadding.top + '" min="0" max="100"></div>';
-                    html += '<div class="image-padding-field"><span>→</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="right" value="' + img.containerPadding.right + '" min="0" max="100"></div>';
-                    html += '<div class="image-padding-field"><span>↓</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="bottom" value="' + img.containerPadding.bottom + '" min="0" max="100"></div>';
-                    html += '<div class="image-padding-field"><span>←</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="left" value="' + img.containerPadding.left + '" min="0" max="100"></div>';
-                    html += '<button class="btn-image-padding-apply btn-small" data-img-id="' + img.id + '">✓</button>';
-                    html += '<button class="btn-image-padding-zero btn-small" data-img-id="' + img.id + '" title="Alle Paddings auf 0">0</button>';
-                    html += '<button class="btn-image-padding-equal btn-small" data-img-id="' + img.id + '" title="Links = Rechts angleichen">L=R</button>';
-                    html += '</div>';
-                    html += '</div>';
-                }
-                
-                html += '<div class="image-edit-controls">';
-                html += '<input type="text" class="image-src-input" placeholder="Neue src URL eingeben..." data-img-id="' + img.id + '">';
-                html += '<button class="btn-image-apply" data-img-id="' + img.id + '">✓ Anwenden</button>';
-                html += '<button class="btn-image-remove" data-img-id="' + img.id + '">🗑️ Entfernen</button>';
-                html += '<button class="btn-image-locate" data-img-id="' + img.id + '" data-src="' + escapeHtml(img.src) + '">👁️ Locate</button>';
-                html += '</div>';
-                html += '</div>';
-            });
-            html += '</div>';
-        }
-        html += '</div>';
-        
-        // Sektion 2: Background Images (optional, read-only)
-        if (bgImages.length > 0) {
-            html += '<div class="images-section">';
-            html += '<div class="section-divider">';
-            html += '<div class="section-divider-line"></div>';
-            html += '<div class="section-divider-label">Background Images (' + bgImages.length + ')</div>';
-            html += '<div class="section-divider-line"></div>';
-            html += '</div>';
-            html += '<div class="bg-images-list">';
-            bgImages.forEach(bg => {
-                html += '<div class="bg-image-item">';
-                html += '<div class="bg-image-url" title="' + escapeHtml(bg.url) + '">' + escapeHtml(bg.urlShort) + '</div>';
-                html += '<div class="bg-image-context">' + escapeHtml(bg.context) + '</div>';
-                html += '</div>';
-            });
-            html += '</div>';
-            html += '<p class="images-note">ℹ️ Background Images sind read-only.</p>';
-            html += '</div>';
-        }
-        
-        // Sektion 3: Bild-Upload
+        // Upload-Sektion
         html += '<div class="images-section images-upload-section">';
-        html += '<h3>📤 Bild hochladen</h3>';
+        html += '<h3>📤 Bild hochladen & URL erhalten</h3>';
         html += '<div id="imageUploadStatus" class="image-upload-status"></div>';
         html += '<div class="image-upload-folder-row">';
         html += '<label>Ordner:</label>';
@@ -10019,7 +9848,127 @@ td[width] { width: auto !important; }
         html += '</div>';
         html += '</div>';
         html += '<div id="imageUploadResults" class="image-upload-results"></div>';
-        html += '</div>';
+        html += '</div>'; // images-upload-section
+
+        // Bilderliste
+        html += '<div class="images-section">';
+        html += '<div class="section-divider"><div class="section-divider-line"></div>';
+        html += '<div class="section-divider-label">Content-Bilder (' + images.length + ')</div>';
+        html += '<div class="section-divider-line"></div></div>';
+
+        if (images.length === 0) {
+            html += '<p class="images-empty">Keine Bilder gefunden.</p>';
+        } else {
+            html += '<div class="images-list">';
+            images.forEach(img => {
+                html += '<div class="image-item-edit image-card-new" data-img-id="' + img.id + '">';
+
+                html += '<div class="image-card-new-header">';
+                html += '<span class="image-card-new-id">' + img.id + '</span>';
+                if (img.width || img.height) {
+                    html += '<span class="image-card-new-dims">' + (img.width || '?') + ' × ' + (img.height || '?') + '</span>';
+                }
+                html += '</div>';
+
+                html += '<div class="image-card-new-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
+
+                var altNeedsAttention = img.altEmpty;
+                html += '<div class="image-alt-edit-row' + (altNeedsAttention ? ' alt-missing' : '') + '">';
+                html += '<span class="alt-label">Alt:</span>';
+                html += '<input type="text" class="image-alt-input' + (altNeedsAttention ? ' alt-input-warn' : '') + '" data-img-id="' + img.id + '" value="' + escapeHtml(img.altFull) + '" placeholder="' + (altNeedsAttention ? 'Alt-Text fehlt – bitte eintragen' : 'Alt-Text') + '">';
+                html += '<button class="btn-image-alt-apply btn-small" data-img-id="' + img.id + '" title="Alt-Text übernehmen">✓</button>';
+                html += '</div>';
+
+                if (img.altEmpty && img.altSuggestion && img.altSuggestionSource !== 'pixel') {
+                    var sourceLabel = img.altSuggestionSource === 'link' ? 'aus Link-Text' :
+                                     img.altSuggestionSource === 'title' ? 'aus title' : 'aus Dateiname';
+                    html += '<div class="alt-suggestion">';
+                    html += '<span class="alt-suggestion-text">💡 Vorschlag (' + sourceLabel + '): <strong>' + escapeHtml(img.altSuggestion) + '</strong></span>';
+                    html += '<button class="btn-alt-suggestion-apply" data-img-id="' + img.id + '" data-suggestion="' + escapeHtml(img.altSuggestion) + '">Übernehmen</button>';
+                    html += '</div>';
+                } else if (img.altEmpty && img.altSuggestionSource === 'pixel') {
+                    html += '<div class="alt-suggestion alt-suggestion-ok">';
+                    html += '<span class="alt-suggestion-text">✓ Tracking-Pixel – leerer Alt-Text ist korrekt</span>';
+                    html += '</div>';
+                }
+
+                html += '<div class="image-card-new-props">';
+                if (img.width) html += '<span class="prop-chip prop-size">' + img.width + (img.width === '100%' ? '' : 'px') + ' breit</span>';
+                if (img.align) {
+                    var alignSymbol = img.align === 'left' ? '← ' : img.align === 'right' ? '→ ' : '↔ ';
+                    var alignLabel = img.align === 'left' ? 'Links' : img.align === 'right' ? 'Rechts' : 'Zentriert';
+                    html += '<span class="prop-chip prop-align">' + alignSymbol + alignLabel + '</span>';
+                }
+                if (img.containerPadding.found) {
+                    html += img.paddingAsymmetric
+                        ? '<span class="prop-chip prop-padding-warn">⚠ Padding asym.</span>'
+                        : '<span class="prop-chip prop-padding-ok">✓ Padding sym.</span>';
+                }
+                html += '</div>';
+
+                html += '<div class="image-layout-controls">';
+                html += '<div class="image-layout-group"><label>Breite</label>';
+                html += '<div class="image-width-row">';
+                html += '<input type="number" class="image-width-input" data-img-id="' + img.id + '" value="' + (img.width || '') + '" placeholder="auto" min="10" max="1200" step="10">';
+                html += '<span class="image-width-unit">px</span>';
+                html += '<button class="btn-image-width-100 btn-small' + (img.width === '100%' ? ' active' : '') + '" data-img-id="' + img.id + '" title="Breite auf 100% setzen">100%</button>';
+                html += '</div>';
+                if (img.height) html += '<div class="image-dimension-info">Höhe: ' + img.height + 'px</div>';
+                html += '</div>';
+
+                html += '<div class="image-layout-group"><label>Ausrichtung</label>';
+                html += '<div class="image-align-row">';
+                html += '<button class="btn-image-align btn-small' + (img.align === 'left' ? ' active' : '') + '" data-img-id="' + img.id + '" data-align="left" title="Linksbündig">⬅</button>';
+                html += '<button class="btn-image-align btn-small' + (img.align === 'center' || !img.align ? ' active' : '') + '" data-img-id="' + img.id + '" data-align="center" title="Zentriert">⬛</button>';
+                html += '<button class="btn-image-align btn-small' + (img.align === 'right' ? ' active' : '') + '" data-img-id="' + img.id + '" data-align="right" title="Rechtsbündig">➡</button>';
+                if (img.alignSource) html += '<span class="image-align-source">via ' + img.alignSource + '</span>';
+                html += '</div></div>';
+                html += '</div>'; // image-layout-controls
+
+                if (img.containerPadding.found) {
+                    html += '<div class="image-padding-controls' + (img.paddingAsymmetric ? ' padding-asymmetric' : '') + '">';
+                    html += '<label>Container-Padding <span class="image-padding-source">(auf &lt;' + img.containerPadding.source + '&gt;)</span></label>';
+                    if (img.paddingAsymmetric) html += '<div class="image-padding-warn">⚠️ Asymmetrisch (links ≠ rechts)</div>';
+                    html += '<div class="image-padding-row">';
+                    html += '<div class="image-padding-field"><span>↑</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="top" value="' + img.containerPadding.top + '" min="0" max="100"></div>';
+                    html += '<div class="image-padding-field"><span>→</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="right" value="' + img.containerPadding.right + '" min="0" max="100"></div>';
+                    html += '<div class="image-padding-field"><span>↓</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="bottom" value="' + img.containerPadding.bottom + '" min="0" max="100"></div>';
+                    html += '<div class="image-padding-field"><span>←</span><input type="number" class="image-padding-input" data-img-id="' + img.id + '" data-side="left" value="' + img.containerPadding.left + '" min="0" max="100"></div>';
+                    html += '<button class="btn-image-padding-apply btn-small" data-img-id="' + img.id + '">✓</button>';
+                    html += '<button class="btn-image-padding-zero btn-small" data-img-id="' + img.id + '" title="Alle Paddings auf 0">0</button>';
+                    html += '<button class="btn-image-padding-equal btn-small" data-img-id="' + img.id + '" title="Links = Rechts angleichen">L=R</button>';
+                    html += '</div></div>';
+                }
+
+                html += '<div class="image-edit-controls">';
+                html += '<input type="text" class="image-src-input" placeholder="Neue src URL eingeben..." data-img-id="' + img.id + '">';
+                html += '<button class="btn-image-apply" data-img-id="' + img.id + '">✓ Anwenden</button>';
+                html += '<button class="btn-image-remove" data-img-id="' + img.id + '">🗑️ Entfernen</button>';
+                html += '<button class="btn-image-locate" data-img-id="' + img.id + '" data-src="' + escapeHtml(img.src) + '">👁️ Locate</button>';
+                html += '</div>';
+                html += '</div>'; // image-card-new
+            });
+            html += '</div>'; // images-list
+        }
+        html += '</div>'; // images-section
+
+        // Background Images
+        if (bgImages.length > 0) {
+            html += '<div class="images-section">';
+            html += '<div class="section-divider"><div class="section-divider-line"></div>';
+            html += '<div class="section-divider-label">Background Images (' + bgImages.length + ')</div>';
+            html += '<div class="section-divider-line"></div></div>';
+            html += '<div class="bg-images-list">';
+            bgImages.forEach(bg => {
+                html += '<div class="bg-image-item">';
+                html += '<div class="bg-image-url" title="' + escapeHtml(bg.url) + '">' + escapeHtml(bg.urlShort) + '</div>';
+                html += '<div class="bg-image-context">' + escapeHtml(bg.context) + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '<p class="images-note">ℹ️ Background Images sind read-only.</p>';
+            html += '</div>';
+        }
 
         // Undo + Commit
         if (imagesHistory.length > 0) {
@@ -10035,8 +9984,8 @@ td[width] { width: auto !important; }
         }
 
         html += '</div>'; // subtab-panel bilder
-
         html += '</div>'; // images-tab-content
+
         imagesContent.innerHTML = html;
 
         // Sub-Tab Listener
