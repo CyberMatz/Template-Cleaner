@@ -64,9 +64,10 @@ body {
 /* Inspector Divider (kein CTA mehr – visueller Trenner) */
 .control-inspector {
     display: block;
-    margin: 0 -40px;
+    margin: 0 -40px -30px -40px;
     background: #f0ede9;
     padding: 0 40px;
+    border-radius: 0 0 8px 8px;
 }
 
 .control-item {
