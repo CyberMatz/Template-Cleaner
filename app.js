@@ -5113,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.71-2026-03-12';
+const APP_VERSION = 'v3.9.73-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5254,6 +5254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let trackingTabHtml = null;  // Separate HTML für Tracking Tab
     let trackingHistory = [];  // Undo History Stack
     let trackingPending = false;  // Pending Changes Flag
+    let trackingActiveSubTab = 'links';  // Aktiver Sub-Tab: 'links' | 'pixel'
     
     // Tracking Insert Mode State (Phase 8)
     let trackingInsertMode = false;  // Element-Auswahl aktiv
@@ -5263,6 +5264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let imagesTabHtml = null;  // Separate HTML für Images Tab
     let imagesHistory = [];  // Undo History Stack
     let imagesPending = false;  // Pending Changes Flag
+    let imagesActiveSubTab = 'alttext';  // Aktiver Sub-Tab: 'alttext' | 'bilder'
     let lastUploadResults = null;  // Upload-Ergebnisse über Re-Renders hinweg speichern
     let lastUploadFolder = '';  // Letzter verwendeter Ordnername
     let currentBrowsingFolder = '';  // Aktuell geöffneter Ordner im Browser
@@ -8623,6 +8625,75 @@ td[width] { width: auto !important; }
         html += '<div class="summary-stat stat-pixel"><div class="summary-stat-value">' + (trackingPixel ? '1' : '0') + '</div><div class="summary-stat-label">Tracking Pixel</div></div>';
         html += '<div class="summary-stat" style="background:#f0fdf4;border:1px solid #bbf7d0;"><div class="summary-stat-value" style="color:#059669;">' + linkGroups.cta.length + '</div><div class="summary-stat-label">CTA Links</div></div>';
         html += '</div>';
+
+        // ─── Sub-Tab Navigation ───
+        const problemCount = links.filter(l => !l.href || l.href.trim() === '' || l.href.trim() === '#' || /^#[A-Z]/.test((l.href||'').trim())).length;
+        html += '<div class="subtab-nav">';
+        html += '<button class="subtab-btn' + (trackingActiveSubTab === 'links' ? ' subtab-active' : '') + '" data-subtab="links">'
+              + 'Links' + (problemCount > 0 ? ' <span class="subtab-badge subtab-badge-warn">' + problemCount + ' ⚠</span>' : ' <span class="subtab-badge">' + links.length + '</span>') + '</button>';
+        html += '<button class="subtab-btn' + (trackingActiveSubTab === 'pixel' ? ' subtab-active' : '') + '" data-subtab="pixel">'
+              + 'Öffnerpixel' + (trackingPixel ? ' <span class="subtab-badge subtab-badge-ok">✓</span>' : ' <span class="subtab-badge subtab-badge-warn">⚠</span>') + '</button>';
+        html += '</div>';
+
+        // ─── Sub-Tab: Links ───
+        html += '<div class="subtab-panel" id="subtab-links" style="display:' + (trackingActiveSubTab === 'links' ? 'block' : 'none') + '">';
+
+        // ═══ Bulk URL Editor ═══
+        if (links.length > 0) {
+            const problemLinks = links.filter(l => !l.href || l.href.trim() === '' || l.href.trim() === '#' || /^#[A-Z]/.test((l.href||'').trim()));
+            const normalLinks  = links.filter(l => !problemLinks.includes(l));
+
+            html += '<div class="bulk-url-panel">';
+            html += '<div class="bulk-url-header">';
+            html += '<span class="bulk-url-title">🔗 URLs zentral bearbeiten'
+                  + (problemLinks.length > 0 ? ' <span class="bulk-url-warn-badge">⚠ ' + problemLinks.length + ' leer/Platzhalter</span>' : '') + '</span>';
+            html += '<div class="bulk-url-header-actions">';
+            html += '<button id="bulkUrlApplyAll" class="btn-bulk-url-apply">✓ Alle übernehmen</button>';
+            html += '<button id="bulkUrlToggle" class="btn-bulk-url-toggle">▲ Einklappen</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '<div id="bulkUrlBody">';
+
+            // Suchen & Ersetzen
+            html += '<div class="bulk-url-find-replace">';
+            html += '<span class="bulk-url-fr-label">Suchen & Ersetzen:</span>';
+            html += '<input type="text" id="bulkFindInput" class="bulk-url-fr-input" placeholder="Zu ersetzende URL oder Domain...">';
+            html += '<span class="bulk-url-fr-arrow">→</span>';
+            html += '<input type="text" id="bulkReplaceInput" class="bulk-url-fr-input" placeholder="Neue URL oder Domain...">';
+            html += '<button id="bulkFindReplaceBtn" class="btn-bulk-fr">Ersetzen</button>';
+            html += '</div>';
+
+            // Tabelle
+            html += '<table class="bulk-url-table">';
+            html += '<thead><tr>';
+            html += '<th class="bulk-url-col-id">ID</th>';
+            html += '<th class="bulk-url-col-type"></th>';
+            html += '<th class="bulk-url-col-text">Linktext</th>';
+            html += '<th class="bulk-url-col-url">Aktuelle URL → Neue URL</th>';
+            html += '</tr></thead><tbody>';
+
+            // Erst leere/Platzhalter, dann normale
+            [...problemLinks, ...normalLinks].forEach(link => {
+                const isProblem = problemLinks.includes(link);
+                const typeLabel = typeBadgeLabels[link._type] || 'Link';
+                const typeCss   = typeCssClasses[link._type] || '';
+                const currentUrl = link.href || '';
+                html += '<tr class="bulk-url-row' + (isProblem ? ' bulk-url-row-warn' : '') + '" data-link-id="' + link.id + '">';
+                html += '<td class="bulk-url-col-id"><span class="link-card-id">' + link.id + '</span></td>';
+                html += '<td class="bulk-url-col-type"><span class="link-card-type ' + typeCss + '">' + typeLabel + '</span></td>';
+                html += '<td class="bulk-url-col-text" title="' + escapeHtml(link.text) + '">' + escapeHtml((link.text||'[Bild]').substring(0,30)) + ((link.text||'').length > 30 ? '…' : '') + '</td>';
+                html += '<td class="bulk-url-col-url">';
+                html += '<div class="bulk-url-current" title="' + escapeHtml(currentUrl) + '">' + (isProblem ? '<span class="bulk-url-empty-hint">⚠ ' + (currentUrl || 'leer') + '</span>' : escapeHtml(currentUrl.substring(0,60)) + (currentUrl.length > 60 ? '…' : '')) + '</div>';
+                html += '<input type="text" class="bulk-url-input" data-link-id="' + link.id + '" data-original="' + escapeHtml(currentUrl) + '" placeholder="Neue URL eingeben..." value="">';
+                html += '</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            html += '</div>'; // bulkUrlBody
+            html += '</div>'; // bulk-url-panel
+        }
         
         // ═══ Sektion: Link Insert UI ═══
         html += '<div class="tracking-insert-section">';
@@ -8759,13 +8830,11 @@ td[width] { width: auto !important; }
             });
         }
         
-        // ═══ Sektion: Öffnerpixel ═══
-        html += '<div class="section-divider">';
-        html += '<div class="section-divider-line"></div>';
-        html += '<div class="section-divider-label">Öffnerpixel</div>';
-        html += '<div class="section-divider-line"></div>';
-        html += '</div>';
-        
+        html += '</div>'; // subtab-panel links
+
+        // ─── Sub-Tab: Pixel ───
+        html += '<div class="subtab-panel" id="subtab-pixel" style="display:' + (trackingActiveSubTab === 'pixel' ? 'block' : 'none') + '">';
+
         if (trackingPixel) {
             html += '<div class="tracking-pixel-info">';
             html += '<div class="tracking-pixel-status tracking-pixel-found">✓ Öffnerpixel gefunden</div>';
@@ -8788,25 +8857,36 @@ td[width] { width: auto !important; }
             html += '<p class="tracking-note">ℹ️ Pixel wird vor &lt;/body&gt; eingefügt (unsichtbarer 1x1 Block).</p>';
             html += '</div>';
         }
-        
-        // Undo Button
+
+        // Undo + Commit
         if (trackingHistory.length > 0) {
             html += '<div class="tracking-undo-section">';
             html += '<button id="trackingUndo" class="btn-tracking-undo">↶ Undo (' + trackingHistory.length + ')</button>';
             html += '</div>';
         }
-        
-        // Commit Button (nur wenn pending)
         if (trackingPending) {
             html += '<div class="tracking-commit-section">';
             html += '<button id="trackingCommit" class="btn-tracking-commit">✓ Änderungen in diesem Tab übernehmen</button>';
             html += '<p class="tracking-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
             html += '</div>';
         }
-        
-        html += '</div>';
+
+        html += '</div>'; // subtab-panel pixel
+        html += '</div>'; // tracking-tab-content
         
         trackingContent.innerHTML = html;
+
+        // Sub-Tab Listener
+        trackingContent.querySelectorAll('.subtab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                trackingActiveSubTab = this.getAttribute('data-subtab');
+                trackingContent.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('subtab-active'));
+                this.classList.add('subtab-active');
+                trackingContent.querySelectorAll('.subtab-panel').forEach(p => p.style.display = 'none');
+                const panel = trackingContent.querySelector('#subtab-' + trackingActiveSubTab);
+                if (panel) panel.style.display = 'block';
+            });
+        });
         
         // Event Listener
         attachTrackingEditListeners();
@@ -9077,9 +9157,79 @@ td[width] { width: auto !important; }
                 handleTrackingLinkInsert(correctedTargetUrl);
             });
         }
+        // ═══ Bulk URL Editor Listeners ═══
+
+        // Ein-/Ausklappen
+        const bulkToggleBtn = document.getElementById('bulkUrlToggle');
+        const bulkBody = document.getElementById('bulkUrlBody');
+        if (bulkToggleBtn && bulkBody) {
+            bulkToggleBtn.addEventListener('click', function() {
+                const collapsed = bulkBody.style.display === 'none';
+                bulkBody.style.display = collapsed ? '' : 'none';
+                bulkToggleBtn.textContent = collapsed ? '▲ Einklappen' : '▼ Ausklappen';
+            });
+        }
+
+        // Suchen & Ersetzen
+        const bulkFRBtn = document.getElementById('bulkFindReplaceBtn');
+        if (bulkFRBtn) {
+            bulkFRBtn.addEventListener('click', function() {
+                const findVal = (document.getElementById('bulkFindInput') || {}).value || '';
+                const replaceVal = (document.getElementById('bulkReplaceInput') || {}).value || '';
+                if (!findVal.trim()) { showInspectorToast('⚠️ Bitte Suchbegriff eingeben.'); return; }
+                let changed = 0;
+                document.querySelectorAll('.bulk-url-input').forEach(input => {
+                    const original = input.getAttribute('data-original') || '';
+                    if (original.includes(findVal)) {
+                        input.value = original.replace(new RegExp(findVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replaceVal);
+                        input.classList.add('bulk-url-input-changed');
+                        changed++;
+                    }
+                });
+                showInspectorToast(changed > 0 ? '✅ ' + changed + ' URL(s) angepasst – noch nicht gespeichert. Klicke „Alle übernehmen".' : '⚠️ Keine Übereinstimmungen gefunden.');
+            });
+        }
+
+        // Highlight changed inputs
+        document.querySelectorAll('.bulk-url-input').forEach(input => {
+            input.addEventListener('input', function() {
+                if (this.value.trim() && this.value !== this.getAttribute('data-original')) {
+                    this.classList.add('bulk-url-input-changed');
+                } else {
+                    this.classList.remove('bulk-url-input-changed');
+                }
+            });
+        });
+
+        // Alle übernehmen
+        const bulkApplyAll = document.getElementById('bulkUrlApplyAll');
+        if (bulkApplyAll) {
+            bulkApplyAll.addEventListener('click', function() {
+                const inputs = document.querySelectorAll('.bulk-url-input');
+                let applied = 0;
+                inputs.forEach(input => {
+                    const newUrl = input.value.trim();
+                    const original = input.getAttribute('data-original') || '';
+                    if (!newUrl || newUrl === original) return; // nichts geändert
+                    const linkId = input.getAttribute('data-link-id');
+                    // Auto-Korrektur: https:// voranstellen wenn nötig
+                    let corrected = newUrl;
+                    if (!/^https?:\/\//i.test(corrected) && !/^mailto:/i.test(corrected) && !/^tel:/i.test(corrected) && !/^\$\{/i.test(corrected) && !/^#/.test(corrected)) {
+                        corrected = 'https://' + corrected;
+                        input.value = corrected;
+                    }
+                    handleTrackingLinkReplace(linkId, corrected);
+                    applied++;
+                });
+                if (applied === 0) {
+                    showInspectorToast('⚠️ Keine Änderungen gefunden – bitte zuerst URLs eingeben.');
+                }
+                // Tab neu rendern damit Bulk-Tabelle aktuelle Werte zeigt
+                if (applied > 0) showTrackingTab(trackingContent);
+            });
+        }
     }
-    
-    // Highlight Link in Preview
+
     function highlightLinkInPreview(linkId, href) {
         if (!inspectorPreviewFrame) {
             console.error('[INSPECTOR] Preview iframe not found');
@@ -9612,9 +9762,18 @@ td[width] { width: auto !important; }
         
         // Render Bilder Tab
         let html = '<div class="images-tab-content">';
-        
-        // Sektion 0: Bild-Upload
-        html += '<div class="images-section images-upload-section">';
+
+        // ─── Sub-Tab Navigation ───
+        const noAlt = images.filter(img => img.altEmpty && !img.isSpacerOrPixel && img.altSuggestionSource !== 'pixel').length;
+        html += '<div class="subtab-nav">';
+        html += '<button class="subtab-btn' + (imagesActiveSubTab === 'alttext' ? ' subtab-active' : '') + '" data-subtab="alttext">'
+              + 'Alt-Texte' + (noAlt > 0 ? ' <span class="subtab-badge">' + noAlt + '</span>' : '') + '</button>';
+        html += '<button class="subtab-btn' + (imagesActiveSubTab === 'bilder' ? ' subtab-active' : '') + '" data-subtab="bilder">'
+              + 'Bilder & Upload</button>';
+        html += '</div>';
+
+        // ─── Sub-Tab: Alt-Texte ───
+        html += '<div class="subtab-panel" id="subtab-alttext" style="display:' + (imagesActiveSubTab === 'alttext' ? 'block' : 'none') + '">';
         html += '<h3>⬆️ Bild hochladen</h3>';
         html += '<div class="upload-status" id="imageUploadStatus">';
         html += '<span class="upload-status-dot disconnected"></span>';
@@ -9685,6 +9844,15 @@ td[width] { width: auto !important; }
                 html += '</tbody></table>';
                 html += '</div>';
             }
+
+            if (imagesNeedingAlt.length === 0) {
+                html += '<p class="images-empty">✅ Alle Bilder haben Alt-Texte (oder sind Spacer).</p>';
+            }
+
+        html += '</div>'; // subtab-panel alttext
+
+        // ─── Sub-Tab: Bilder & Upload ───
+        html += '<div class="subtab-panel" id="subtab-bilder" style="display:' + (imagesActiveSubTab === 'bilder' ? 'block' : 'none') + '">';
 
             html += '<div class="images-list">';
             images.forEach(img => {
@@ -9841,27 +10009,37 @@ td[width] { width: auto !important; }
         html += '</div>';
         html += '</div>';
         html += '<div id="imageUploadResults" class="image-upload-results"></div>';
-        
         html += '</div>';
-        
-        // Undo Button
+
+        // Undo + Commit
         if (imagesHistory.length > 0) {
             html += '<div class="images-undo-section">';
             html += '<button id="imagesUndo" class="btn-images-undo">↶ Undo (' + imagesHistory.length + ')</button>';
             html += '</div>';
         }
-        
-        // Commit Button (nur wenn pending)
         if (imagesPending) {
             html += '<div class="images-commit-section">';
             html += '<button id="imagesCommit" class="btn-images-commit">✓ Änderungen in diesem Tab übernehmen</button>';
             html += '<p class="images-commit-hint">⚠️ Änderungen werden erst nach Commit in Downloads übernommen.</p>';
             html += '</div>';
         }
-        
-        html += '</div>';
-        
+
+        html += '</div>'; // subtab-panel bilder
+
+        html += '</div>'; // images-tab-content
         imagesContent.innerHTML = html;
+
+        // Sub-Tab Listener
+        imagesContent.querySelectorAll('.subtab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                imagesActiveSubTab = this.getAttribute('data-subtab');
+                imagesContent.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('subtab-active'));
+                this.classList.add('subtab-active');
+                imagesContent.querySelectorAll('.subtab-panel').forEach(p => p.style.display = 'none');
+                const panel = imagesContent.querySelector('#subtab-' + imagesActiveSubTab);
+                if (panel) panel.style.display = 'block';
+            });
+        });
         
         // Event Listener
         attachImagesEditListeners();
