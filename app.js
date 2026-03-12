@@ -5113,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.80-2026-03-12';
+const APP_VERSION = 'v3.9.81-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -9849,6 +9849,13 @@ td[width] { width: auto !important; }
         html += '</div>';
         html += '<div id="imageUploadResults" class="image-upload-results"></div>';
         html += '</div>'; // images-upload-section
+
+        // Ordner suchen-Sektion
+        html += '<div class="images-section images-folder-browse-section">';
+        html += '<h3>📂 Ordner suchen</h3>';
+        html += '<button id="btnBrowseFolders" class="btn-small">📂 Vorhandene Ordner anzeigen</button>';
+        html += '<div id="folderBrowser" class="upload-folder-browser" style="display:none;"></div>';
+        html += '</div>'; // images-folder-browse-section
 
         // Bilderliste
         html += '<div class="images-section">';

@@ -3011,7 +3011,7 @@ body {
     border: 1px solid #b7e4c7;
     border-radius: 8px;
     padding: 12px 16px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     background: #f0faf4;
 }
 
@@ -3021,6 +3021,23 @@ body {
     font-weight: 700;
     color: #1e7e34;
     border-bottom: 1px solid #b7e4c7;
+    padding-bottom: 8px;
+}
+
+.images-folder-browse-section {
+    border: 1px solid #bdd7f5;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    background: #f0f6ff;
+}
+
+.images-folder-browse-section h3 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a56a0;
+    border-bottom: 1px solid #bdd7f5;
     padding-bottom: 8px;
 }
 
