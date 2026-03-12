@@ -219,10 +219,10 @@ body {
     background: transparent;
     color: #a8a29e;
     border: none;
-    padding: 7px 0;
-    font-size: 11px;
+    padding: 10px 0;
+    font-size: 13px;
     font-weight: 500;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     cursor: default;
     display: flex;
@@ -237,8 +237,8 @@ body {
 .btn-inspector::after {
     content: '';
     flex: 1;
-    height: 2px;
-    background: #f2a93b;
+    height: 1px;
+    background: rgba(242, 169, 59, 0.35);
 }
 
 .btn-inspector:disabled {
@@ -248,8 +248,8 @@ body {
 /* Suggest Button – dezent (Ghost-Style, gleiche Größe wie btn-upload) */
 .btn-suggest {
     background: transparent;
-    color: #9c85c8;
-    border: 1px solid #c4b5e8;
+    color: #a8a29e;
+    border: 1px solid #f2a93b;
     padding: 12px 24px;
     border-radius: 6px;
     font-size: 16px;
@@ -259,8 +259,7 @@ body {
     width: fit-content;
 }
 .btn-suggest:hover:not(:disabled) {
-    background: #f3f0fa;
-    border-color: #9c85c8;
+    background: #fff8ee;
     transform: translateY(-1px);
 }
 .btn-suggest:disabled {
@@ -274,7 +273,7 @@ body {
 .btn-restore {
     background: transparent;
     color: #a8a29e;
-    border: 1px solid #d6d3d1;
+    border: 1px solid #f2a93b;
     padding: 12px 24px;
     border-radius: 6px;
     font-size: 16px;
@@ -284,9 +283,7 @@ body {
     width: fit-content;
 }
 .btn-restore:hover {
-    color: #44403c;
-    border-color: #a8a29e;
-    background: #f5f3f0;
+    background: #fff8ee;
     transform: translateY(-1px);
 }
 

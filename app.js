@@ -5305,6 +5305,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (uploadBtn) uploadBtn.innerHTML = '📁 Upload Template';
         if (showDiffBtn) { showDiffBtn.disabled = true; }
         if (showInspectorBtn) { showInspectorBtn.disabled = true; }
+        const inspectorDividerContainerReset = document.getElementById('inspectorDividerContainer');
+        if (inspectorDividerContainerReset) inspectorDividerContainerReset.style.display = 'none';
         
         // Results & Inspector ausblenden
         resultsSection.style.display = 'none';
@@ -5551,6 +5553,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (inspectorSection) inspectorSection.style.display = 'none';
         const inspectorDividerRestore = document.getElementById('inspectorDivider');
         if (inspectorDividerRestore) inspectorDividerRestore.style.display = 'none';
+        const inspectorDividerContainerRestore = document.getElementById('inspectorDividerContainer');
+        if (inspectorDividerContainerRestore) inspectorDividerContainerRestore.style.display = 'none';
         if (showDiffBtn) showDiffBtn.disabled = true;
         if (showInspectorBtn) showInspectorBtn.disabled = true;
         // processBtn wieder zeigen, restoreBtn + Texte vorschlagen verstecken
@@ -5709,10 +5713,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Asset-Review Button aktivieren
             
-            // Inspector Button aktivieren
+            // Inspector Button aktivieren + Trenner einblenden
             if (showInspectorBtn) {
                 showInspectorBtn.disabled = false;
                 showInspectorBtn.title = 'Inspector öffnen';
+                const dividerContainer = document.getElementById('inspectorDividerContainer');
+                if (dividerContainer) dividerContainer.style.display = 'block';
             }
 
             // Texte-vorschlagen Button aktivieren
