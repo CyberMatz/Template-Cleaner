@@ -1094,6 +1094,19 @@ body {
     border-color: #f2a93b;
 }
 
+/* Zeile mit Vorschlag: leicht hervorgehoben */
+.alt-bulk-has-suggestion .alt-bulk-input {
+    border-color: #f2a93b;
+    background: #fffbf2;
+}
+
+/* Kleiner Hinweis-Text in der Überschrift */
+.alt-bulk-hint {
+    font-weight: 400;
+    color: #a8a29e;
+    font-size: 12px;
+}
+
 /* 2-Column Layout */
 .inspector-layout {
     display: grid;

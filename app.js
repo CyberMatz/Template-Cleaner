@@ -5109,7 +5109,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.69-2026-03-12';
+const APP_VERSION = 'v3.9.70-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -9643,33 +9643,37 @@ td[width] { width: auto !important; }
         if (images.length === 0) {
             html += '<p class="images-empty">Keine Bilder gefunden.</p>';
         } else {
-            // Vorschlag-Tabelle: alle Bilder mit Vorschlag (keine Platzhalter/Pixel)
-            const imagesWithSuggestions = images.filter(img => 
-                img.altEmpty && img.altSuggestion && img.altSuggestionSource !== 'pixel' && !img.isSpacerOrPixel
+            // Alt-Text Bulk-Panel: alle Bilder mit leerem Alt (keine Spacer/Pixel)
+            const imagesNeedingAlt = images.filter(img =>
+                img.altEmpty && !img.isSpacerOrPixel && img.altSuggestionSource !== 'pixel'
             );
             
-            if (imagesWithSuggestions.length > 0) {
+            if (imagesNeedingAlt.length > 0) {
+                const withSuggestion = imagesNeedingAlt.filter(img => img.altSuggestion).length;
                 html += '<div class="alt-bulk-panel">';
                 html += '<div class="alt-bulk-header">';
-                html += '<span class="alt-bulk-title">💡 ' + imagesWithSuggestions.length + ' Alt-Text-Vorschlag' + (imagesWithSuggestions.length > 1 ? 'e' : '') + '</span>';
+                html += '<span class="alt-bulk-title">✏️ ' + imagesNeedingAlt.length + ' Bild' + (imagesNeedingAlt.length > 1 ? 'er' : '') + ' ohne Alt-Text'
+                      + (withSuggestion > 0 ? ' <span class="alt-bulk-hint">(' + withSuggestion + ' mit Vorschlag)</span>' : '') + '</span>';
                 html += '<button class="btn-alt-bulk-apply btn-small" id="btnAltBulkApply">✓ Alle markierten übernehmen</button>';
                 html += '</div>';
                 html += '<table class="alt-bulk-table">';
                 html += '<thead><tr>';
-                html += '<th class="alt-bulk-col-check"><input type="checkbox" id="altBulkCheckAll" checked title="Alle aus/abwählen"></th>';
+                html += '<th class="alt-bulk-col-check"><input type="checkbox" id="altBulkCheckAll" title="Alle aus/abwählen"></th>';
                 html += '<th class="alt-bulk-col-id">Bild</th>';
                 html += '<th class="alt-bulk-col-src">URL</th>';
-                html += '<th class="alt-bulk-col-alt">Vorgeschlagener Alt-Text</th>';
+                html += '<th class="alt-bulk-col-alt">Alt-Text <span class="alt-bulk-hint">(leer lassen = kein Alt-Text)</span></th>';
                 html += '</tr></thead>';
                 html += '<tbody>';
-                imagesWithSuggestions.forEach(img => {
-                    const sourceLabel = img.altSuggestionSource === 'link' ? 'Link' : 
-                                       img.altSuggestionSource === 'title' ? 'Title' : 'Dateiname';
-                    html += '<tr class="alt-bulk-row" data-img-id="' + img.id + '">';
-                    html += '<td class="alt-bulk-col-check"><input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '" checked></td>';
+                imagesNeedingAlt.forEach(img => {
+                    const hassuggestion = !!img.altSuggestion;
+                    const sourceLabel = img.altSuggestionSource === 'link' ? 'Vorschlag aus Link' : 
+                                       img.altSuggestionSource === 'title' ? 'Vorschlag aus Title' : 
+                                       img.altSuggestionSource === 'filename' ? 'Vorschlag aus Dateiname' : '';
+                    html += '<tr class="alt-bulk-row' + (hassuggestion ? ' alt-bulk-has-suggestion' : '') + '" data-img-id="' + img.id + '">';
+                    html += '<td class="alt-bulk-col-check"><input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '"' + (hassuggestion ? ' checked' : '') + '></td>';
                     html += '<td class="alt-bulk-col-id"><span class="image-card-new-id">' + img.id + '</span></td>';
                     html += '<td class="alt-bulk-col-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</td>';
-                    html += '<td class="alt-bulk-col-alt"><input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altSuggestion) + '" title="Aus ' + sourceLabel + '"></td>';
+                    html += '<td class="alt-bulk-col-alt"><input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altSuggestion || '') + '" placeholder="Alt-Text eingeben..."' + (sourceLabel ? ' title="' + sourceLabel + '"' : '') + '></td>';
                     html += '</tr>';
                 });
                 html += '</tbody></table>';
