@@ -3143,6 +3143,36 @@ class TemplateProcessor {
     checkCTAButtonFallback() {
         const id = 'P14_CTA_FALLBACK';
         
+        // ── VOR-FIX: Fehlende </a> in <!--[if !mso]>-Blöcken ──────────────────
+        // Problem: Button-Template mit Muster:
+        //   <!--[if !mso]> -->
+        //   <a href="..." style="background-color:...">BUTTON TEXT
+        //   <!--<![endif]-->
+        // → </a> fehlt vor dem endif-Kommentar.
+        // Tag-Balancing erkennt das nicht (stripped Conditional Comments).
+        // Lösung: Gezielter Regex-Fix NUR für dieses Muster.
+        {
+            // Matcht: <!--[if !mso]> --> ODER <!--[if !mso]><!--> ODER <!--[if !mso]-->
+            const msoBlockRegex = /(<!--\[if\s+!mso\b[^\]]*\]>\s*(?:<!--\s*)?>?\s*-->\s*|<!--\[if\s+!mso\b[^\]]*\]><!-->\s*)([\s\S]*?)(<!--<!\[endif\]-->)/gi;
+            let msoMatch;
+            let missingClosingFixed = 0;
+            // Wir müssen replace statt exec+slice nutzen da Offset-Tracking komplex
+            this.html = this.html.replace(msoBlockRegex, (full, open, inner, close) => {
+                // Hat der Block einen <a> ohne schließendes </a>?
+                const openAs = (inner.match(/<a\b/gi) || []).length;
+                const closeAs = (inner.match(/<\/a>/gi) || []).length;
+                if (openAs > closeAs) {
+                    // </a> direkt vor <!--<![endif]--> einfügen
+                    missingClosingFixed++;
+                    return open + inner.trimEnd() + '\n                                </a>\n                                ' + close;
+                }
+                return full;
+            });
+            if (missingClosingFixed > 0) {
+                console.log(`[P14] Fehlende </a>-Tags in !mso-Blöcken ergänzt: ${missingClosingFixed}x`);
+            }
+        }
+        
         // Sammle alle CTA-Buttons (beide Typen)
         const allCtaPositions = this._findAllCTAButtons();
         
@@ -3295,6 +3325,65 @@ class TemplateProcessor {
                     ctasMismatched++;
                 }
                 
+                // VML-TEXT-SYNC: Prüfe ob VML-Text mit HTML-Button-Text übereinstimmt
+                // Problem: Vorlage enthält oft noch "Call to Action" im VML, obwohl HTML-Button
+                // bereits den echten Text hat (z.B. "MEHR ERFAHREN", "ANGEBOT EINHOLEN")
+                {
+                    const currentVmlForSync = this.html.substring(vmlBlock.index, vmlBlock.endIndex);
+                    
+                    // HTML-Button-Text extrahieren (aus dem <a>-Tag)
+                    const htmlText = cta.fullMatch
+                        ? (cta.fullMatch.match(/>([^<\n]{2,}?)(?=\s*(?:<|<!--|\n))/i) || [])[1]
+                        : null;
+                    const htmlTextClean = htmlText ? htmlText.trim() : null;
+                    
+                    // VML-Text extrahieren (aus <center>...</center> oder <span>...</span>)
+                    const vmlTextMatch = currentVmlForSync.match(/<(?:center|span)[^>]*>([^<]+)<\/(?:center|span)>/i);
+                    const vmlTextClean = vmlTextMatch ? vmlTextMatch[1].trim() : null;
+                    
+                    // HTML-Button-Farbe extrahieren
+                    const aTagMatch = cta.fullMatch ? (cta.fullMatch.match(/<a\b[^>]*>/is) || [''])[0] : '';
+                    const htmlStyle = this._extractStyleValue(aTagMatch);
+                    const htmlBgMatch = htmlStyle.match(/background(?:-color)?\s*:\s*(#[a-fA-F0-9]{3,6})/i);
+                    const htmlBgColor = htmlBgMatch ? htmlBgMatch[1].toLowerCase() : null;
+                    
+                    // VML-Farbe extrahieren
+                    const vmlColorMatch = currentVmlForSync.match(/fillcolor\s*=\s*["'](#[a-fA-F0-9]{3,6})["']/i);
+                    const vmlBgColor = vmlColorMatch ? vmlColorMatch[1].toLowerCase() : null;
+                    
+                    let syncedVml = currentVmlForSync;
+                    let vmlChanged = false;
+                    
+                    // Text synchronisieren wenn abweichend und HTML-Text sinnvoll (≥2 Zeichen, kein Platzhalter)
+                    if (htmlTextClean && vmlTextClean && 
+                        htmlTextClean !== vmlTextClean &&
+                        htmlTextClean.length >= 2) {
+                        syncedVml = syncedVml.replace(
+                            /(<(?:center|span)[^>]*>)[^<]+(<\/(?:center|span)>)/i,
+                            '$1' + htmlTextClean + '$2'
+                        );
+                        vmlChanged = true;
+                    }
+                    
+                    // Farbe synchronisieren wenn abweichend
+                    if (htmlBgColor && vmlBgColor && htmlBgColor !== vmlBgColor) {
+                        syncedVml = syncedVml.replace(
+                            /fillcolor\s*=\s*["']#[a-fA-F0-9]{3,6}["']/i,
+                            'fillcolor="' + htmlBgColor + '"'
+                        );
+                        vmlChanged = true;
+                    }
+                    
+                    if (vmlChanged) {
+                        this.html = this.html.substring(0, vmlBlock.index) +
+                                    syncedVml +
+                                    this.html.substring(vmlBlock.endIndex);
+                        // vmlBlock aktualisieren für nachfolgende Checks
+                        vmlBlock.fullMatch = syncedVml;
+                        ctasMismatched++;
+                    }
+                }
+
                 // VML-BREITEN-FIX: Prüfe ob VML-Button die volle Template-Breite (≥500px) hat
                 // aber der <a>-Button kein explizites width hat (= eigentlich schmaler Button).
                 // Typisch wenn Template-Ersteller width:600px im VML setzen statt Button-Breite.
@@ -10192,6 +10281,7 @@ td[width] { width: auto !important; }
         }
 
         // Alt-Text: einzelner ✓ Button
+        document.querySelectorAll('.btn-image-alt-apply').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const imgId = this.getAttribute('data-img-id');
