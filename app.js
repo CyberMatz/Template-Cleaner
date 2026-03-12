@@ -5113,7 +5113,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.78-2026-03-12';
+const APP_VERSION = 'v3.9.79-2026-03-12';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5264,7 +5264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let imagesTabHtml = null;  // Separate HTML für Images Tab
     let imagesHistory = [];  // Undo History Stack
     let imagesPending = false;  // Pending Changes Flag
-    let imagesActiveSubTab = 'alttext';  // Aktiver Sub-Tab: 'alttext' | 'bilder'
+    let imagesActiveSubTab = 'bilder';  // Aktiver Sub-Tab: 'alttext' | 'bilder'
     let lastUploadResults = null;  // Upload-Ergebnisse über Re-Renders hinweg speichern
     let lastUploadFolder = '';  // Letzter verwendeter Ordnername
     let currentBrowsingFolder = '';  // Aktuell geöffneter Ordner im Browser
@@ -9776,10 +9776,10 @@ td[width] { width: auto !important; }
         // ─── Sub-Tab Navigation ───
         const noAlt = images.filter(img => img.altEmpty && !img.isSpacerOrPixel && img.altSuggestionSource !== 'pixel').length;
         html += '<div class="subtab-nav">';
-        html += '<button class="subtab-btn' + (imagesActiveSubTab === 'alttext' ? ' subtab-active' : '') + '" data-subtab="alttext">'
-              + 'Alt-Texte' + (noAlt > 0 ? ' <span class="subtab-badge subtab-badge-warn">' + noAlt + '</span>' : ' <span class="subtab-badge subtab-badge-ok">✓</span>') + '</button>';
         html += '<button class="subtab-btn' + (imagesActiveSubTab === 'bilder' ? ' subtab-active' : '') + '" data-subtab="bilder">'
               + 'Bilder & URLs <span class="subtab-badge">' + images.length + '</span></button>';
+        html += '<button class="subtab-btn' + (imagesActiveSubTab === 'alttext' ? ' subtab-active' : '') + '" data-subtab="alttext">'
+              + 'Alt-Texte' + (noAlt > 0 ? ' <span class="subtab-badge subtab-badge-warn">' + noAlt + '</span>' : ' <span class="subtab-badge subtab-badge-ok">✓</span>') + '</button>';
         html += '</div>';
 
         // ════════════════════════════════
@@ -9833,7 +9833,7 @@ td[width] { width: auto !important; }
 
         // Upload-Sektion
         html += '<div class="images-section images-upload-section">';
-        html += '<h3>📤 Bild hochladen & URL erhalten</h3>';
+        html += '<h3>📤 Bild hochladen</h3>';
         html += '<div id="imageUploadStatus" class="image-upload-status"></div>';
         html += '<div class="image-upload-folder-row">';
         html += '<label>Ordner:</label>';
