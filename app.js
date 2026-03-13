@@ -4779,22 +4779,7 @@ class TemplateProcessor {
             const afterSecond = html.slice(secondTable.end, secondTable.end + 300);
             const closingTdOffset = afterSecond.search(/<\/td>/i);
             if (closingTdOffset === -1) continue;
-            let replaceEnd = secondTable.end + closingTdOffset + 5; // inkl. </td>
-
-            // Umschliessenden <tr> suchen damit dir="rtl" korrekt gesetzt werden kann
-            // Rückwärts von tdStart nach <tr> suchen
-            let trStart = tdStart;
-            const beforeTd = html.slice(Math.max(0, tdStart - 200), tdStart);
-            const trMatch = beforeTd.match(/.*(<tr\b[^>]*>)/si); // letztes <tr> vor diesem <td>
-            if (trMatch) {
-                trStart = tdStart - beforeTd.length + beforeTd.lastIndexOf(trMatch[1]);
-            }
-            // </tr> nach dem </td> finden
-            const afterTd = html.slice(replaceEnd, replaceEnd + 200);
-            const closingTrOffset = afterTd.search(/<\/tr>/i);
-            if (closingTrOffset !== -1) {
-                replaceEnd = replaceEnd + closingTrOffset + 5; // inkl. </tr>
-            }
+            const tdEnd = secondTable.end + closingTdOffset + 5; // inkl. </td>
 
             const w1 = firstTable.width || 310;
             const w2 = secondTable.width || 310;
@@ -4876,23 +4861,33 @@ class TemplateProcessor {
             // HTML-Reihenfolge bleibt: Bild zuerst → Mobile stapelt korrekt Bild → Text.
             // dir="ltr" auf den <td>s verhindert dass der Text selbst gespiegelt wird.
             const textTableAlign = (secondContent.match(/<table\b[^>]*\balign\s*=\s*["'](\w+)["']/i) || [])[1] || 'right';
-            const needsRtl = textTableAlign.toLowerCase() === 'left';
-            const trDir    = needsRtl ? ' dir="rtl"' : '';
-            const tdDir    = needsRtl ? ' dir="ltr"' : '';
+            const swap = textTableAlign.toLowerCase() === 'left';
+            // Klassen für Mobile-Stacking bestimmen
+            // swap=true: Block hat Text links/Bild rechts im HTML (für Outlook)
+            //   → b2-img/b2-text Trick: Bild springt auf Mobile nach oben
+            const imgClass  = swap ? 'col-img b2-img' : 'col-img';
+            const textClass = swap ? 'col-text b2-text' : 'col-text';
+
+            // Bei swap: Text kommt im HTML zuerst (für Outlook Desktop korrekt),
+            // b2-img/b2-text CSS-Trick sorgt auf Mobile für richtige Reihenfolge (Bild oben)
+            const leftHtml  = swap ? col2Html : col1Html;
+            const rightHtml = swap ? col1Html : col2Html;
+            const leftW     = swap ? w2 : w1;
+            const rightW    = swap ? w1 : w2;
+            const leftClass  = swap ? textClass : imgClass;
+            const rightClass = swap ? imgClass  : textClass;
 
             const replacement =
-                `<tr${trDir}>\n` +
-                `<td width="${w1}" valign="top" class="col-split"${tdDir} style="padding:0;margin:0;">\n` +
-                col1Html + '\n' +
+                `<td width="${leftW}" valign="top" class="${leftClass}" style="padding:0;margin:0;">\n` +
+                leftHtml + '\n' +
                 `</td>\n` +
-                `<td width="${w2}" valign="top" class="col-split"${tdDir} style="padding:0;margin:0;">\n` +
-                col2Html + '\n' +
-                `</td>\n` +
-                `</tr>`;
+                `<td width="${rightW}" valign="top" class="${rightClass}" style="padding:0;margin:0;">\n` +
+                rightHtml + '\n' +
+                `</td>`;
 
-            replacements.push({ start: trStart, end: replaceEnd, replacement });
+            replacements.push({ start: tdStart, end: tdEnd, replacement });
             fixed++;
-            tdRegex.lastIndex = replaceEnd;
+            tdRegex.lastIndex = tdEnd;
         }
 
         if (replacements.length === 0) return 0;
@@ -4907,17 +4902,29 @@ class TemplateProcessor {
         // Ohne display:block stapeln <td>-Elemente nicht auf Mobile,
         // auch wenn width:100% gesetzt ist (table-cell bleibt inline)
         if (fixed > 0) {
-            const mobileRule = '\n.col-split { display:block !important; width:100% !important; box-sizing:border-box !important; }';
-            // In bestehende @media-Regel einfügen wenn vorhanden
+            // CSS-Regeln für Mobile-Stacking injizieren (Lösung nach Kollegen-Template)
+            // col-img / col-text: stapeln auf Mobile
+            // b2-img / b2-text: table-header/footer-group trick für Block mit Text links –
+            //   Bild springt auf Mobile nach oben, Text bleibt unten
+            const mobileRules = [
+                '/* Outlook-Fix: Spalten auf Mobile stapeln */',
+                '.col-img, .col-text { display: block !important; width: 100% !important; }',
+                '.col-img img { width: 100% !important; height: auto !important; display: block !important; }',
+                '/* Blöcke mit Text-links/Bild-rechts: auf Mobile Bild nach oben */',
+                '.b2-img  { display: table-header-group !important; }',
+                '.b2-text { display: table-footer-group !important; }',
+            ].join('\n');
+
             if (/@media\s+only\s+screen[^{]*\{[^}]*\.dynamicwidth/i.test(result)) {
+                // In bestehende @media-Regel einfügen (nach .dynamicwidth-Block)
                 result = result.replace(
-                    /(@media\s+only\s+screen[^{]*\{)([^}]*\.dynamicwidth[^}]*\})/i,
-                    (m, mediaOpen, rules) => mediaOpen + rules + mobileRule
+                    /(\.dynamicwidth\s*\{[^}]*\})/i,
+                    (m) => m + '\n' + mobileRules
                 );
             } else {
                 // Neue @media-Regel vor </style> einfügen
                 result = result.replace(/<\/style>/i,
-                    `@media only screen and (max-width: 620px) {${mobileRule}\n}\n</style>`);
+                    `@media only screen and (max-width: 620px) {\n${mobileRules}\n}\n</style>`);
             }
         }
 
@@ -5350,7 +5357,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.92-2026-03-13';
+const APP_VERSION = 'v3.9.94-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
