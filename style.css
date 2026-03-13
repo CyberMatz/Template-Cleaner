@@ -833,6 +833,7 @@ body {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    table-layout: fixed;
 }
 .bulk-url-table thead tr {
     background: #f0eeec;
@@ -868,7 +869,7 @@ body {
 .btn-bulk-locate:hover { opacity: 1; background: #f0eeec; }
 .bulk-url-col-type { width: 52px; padding: 7px 6px; }
 .bulk-url-col-text { width: 18%; padding: 7px 10px; color: #78716c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
-.bulk-url-col-url { padding: 7px 10px; }
+.bulk-url-col-url { padding: 7px 10px; overflow: hidden; word-break: break-all; }
 .bulk-url-col-actions { width: 62px; padding: 7px 6px; text-align: center; white-space: nowrap; }
 .btn-bulk-icon {
     background: none;
@@ -899,9 +900,7 @@ body {
     font-size: 11px;
     color: #57534e;
     margin-bottom: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    word-break: break-all;
     cursor: text;
 }
 .bulk-url-empty-hint {

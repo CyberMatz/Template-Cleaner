@@ -5390,7 +5390,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.96-2026-03-13';
+const APP_VERSION = 'v3.9.97-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -9081,7 +9081,6 @@ td[width] { width: auto !important; }
                   + (problemLinks.length > 0 ? ' <span class="bulk-url-warn-badge">⚠ ' + problemLinks.length + ' leer/Platzhalter</span>' : '') + '</span>';
             html += '<div class="bulk-url-header-actions">';
             html += '<button id="bulkUrlApplyAll" class="btn-bulk-url-apply">✓ Alle übernehmen</button>';
-            html += '<button id="bulkUrlToggle" class="btn-bulk-url-toggle">▲ Einklappen</button>';
             html += '</div>';
             html += '</div>';
 
@@ -9093,7 +9092,7 @@ td[width] { width: auto !important; }
             html += '<input type="text" id="bulkFindInput" class="bulk-url-fr-input" placeholder="Zu ersetzende URL oder Domain...">';
             html += '<span class="bulk-url-fr-arrow">→</span>';
             html += '<input type="text" id="bulkReplaceInput" class="bulk-url-fr-input" placeholder="Neue URL oder Domain...">';
-            html += '<button id="bulkFindReplaceBtn" class="btn-bulk-fr">Ersetzen</button>';
+            html += '<button id="bulkFindReplaceBtn" class="btn-bulk-fr">Ersetzen & Speichern</button>';
             html += '</div>';
 
             // Tabelle
@@ -9559,12 +9558,22 @@ td[width] { width: auto !important; }
                 document.querySelectorAll('.bulk-url-input').forEach(input => {
                     const original = input.getAttribute('data-original') || '';
                     if (original.includes(findVal)) {
-                        input.value = original.replace(new RegExp(findVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replaceVal);
-                        input.classList.add('bulk-url-input-changed');
+                        let newUrl = original.replace(new RegExp(findVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replaceVal);
+                        // Auto-Korrektur: https:// voranstellen wenn Protokoll fehlt
+                        if (newUrl && !/^https?:\/\//i.test(newUrl) && !/^mailto:/i.test(newUrl) && !/^tel:/i.test(newUrl) && !/^\$\{/i.test(newUrl) && !/^#/.test(newUrl)) {
+                            newUrl = 'https://' + newUrl;
+                        }
+                        const linkId = input.getAttribute('data-link-id');
+                        handleTrackingLinkReplace(linkId, newUrl);
                         changed++;
                     }
                 });
-                showInspectorToast(changed > 0 ? '✅ ' + changed + ' URL(s) angepasst – noch nicht gespeichert. Klicke „Alle übernehmen".' : '⚠️ Keine Übereinstimmungen gefunden.');
+                if (changed > 0) {
+                    showInspectorToast('✅ ' + changed + ' URL(s) ersetzt und gespeichert.');
+                    showTrackingTab(trackingContent);
+                } else {
+                    showInspectorToast('⚠️ Keine Übereinstimmungen gefunden.');
+                }
             });
         }
 
