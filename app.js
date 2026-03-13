@@ -5390,7 +5390,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.95-2026-03-13';
+const APP_VERSION = 'v3.9.96-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5666,6 +5666,27 @@ document.addEventListener('DOMContentLoaded', () => {
         trackingCommitStats = { linksReplaced: 0, pixelReplaced: 0, pixelInserted: 0, linkInserts: 0 };
         imagesCommitStats = { srcReplaced: 0, imagesRemoved: 0 };
         editorCommitStats = { blocksDeleted: 0, blocksReplaced: 0 };
+        
+        // EOA-Ergebnisse zurücksetzen
+        eoaCompletedClients = {};
+        if (eoaTabCount) eoaTabCount.textContent = '';
+        if (eoaContent) eoaContent.innerHTML = '';
+        
+        // Reparaturen-Tab Badge zurücksetzen
+        if (optionalFixesTab) {
+            optionalFixesTab.classList.remove('has-fixes');
+            const optBadge = document.getElementById('optionalFixesTabCount');
+            if (optBadge) optBadge.textContent = '';
+        }
+        if (optionalFixesContent) optionalFixesContent.innerHTML = '';
+        
+        // Sub-Tab-State zurücksetzen
+        trackingActiveSubTab = 'links';
+        imagesActiveSubTab = 'bilder';
+        
+        // Ordner-Merker zurücksetzen
+        folderSetByBrowse = false;
+        currentBrowsingFolder = '';
         
         previewReady = false;
         pendingPreviewMessages = [];
@@ -9082,11 +9103,14 @@ td[width] { width: auto !important; }
             html += '<th class="bulk-url-col-type"></th>';
             html += '<th class="bulk-url-col-text">Linktext</th>';
             html += '<th class="bulk-url-col-url">Aktuelle URL → Neue URL</th>';
+            html += '<th class="bulk-url-col-actions"></th>';
             html += '</tr></thead><tbody>';
 
             // Erst leere/Platzhalter, dann normale
             [...problemLinks, ...normalLinks].forEach(link => {
                 const isProblem = problemLinks.includes(link);
+                const isCloudflare = /\/cdn-cgi\/l\/email-protection/i.test(link.href || '');
+                const isPlaceholder = /^#[A-Z]/.test((link.href || '').trim());
                 const typeLabel = typeBadgeLabels[link._type] || 'Link';
                 const typeCss   = typeCssClasses[link._type] || '';
                 const currentUrl = link.href || '';
@@ -9095,8 +9119,23 @@ td[width] { width: auto !important; }
                 html += '<td class="bulk-url-col-type"><span class="link-card-type ' + typeCss + '">' + typeLabel + '</span></td>';
                 html += '<td class="bulk-url-col-text" title="' + escapeHtml(link.text) + '">' + escapeHtml((link.text||'[Bild]').substring(0,30)) + ((link.text||'').length > 30 ? '…' : '') + '</td>';
                 html += '<td class="bulk-url-col-url">';
-                html += '<div class="bulk-url-current" title="' + escapeHtml(currentUrl) + '">' + (isProblem ? '<span class="bulk-url-empty-hint">⚠ ' + (currentUrl || 'leer') + '</span>' : escapeHtml(currentUrl.substring(0,60)) + (currentUrl.length > 60 ? '…' : '')) + '</div>';
+                // URL-Anzeige: volle URL, per CSS abgeschnitten, auswählbar/kopierbar
+                if (!currentUrl || isProblem) {
+                    let warnText = '⚠ leer';
+                    if (isCloudflare) warnText = '⚠ Cloudflare-Link';
+                    else if (isPlaceholder) warnText = '⚠ Platzhalter: ' + escapeHtml(currentUrl);
+                    html += '<div class="bulk-url-current" style="color:#c0392b;font-style:italic;">' + warnText + '</div>';
+                } else {
+                    html += '<div class="bulk-url-current" title="' + escapeHtml(currentUrl) + '" style="user-select:all;word-break:break-all;cursor:text;" onclick="this.style.outline=\'2px solid #4CAF50\'">' + escapeHtml(currentUrl) + '</div>';
+                }
+                html += '<div style="display:flex;gap:4px;margin-top:4px;">';
                 html += '<input type="text" class="bulk-url-input" data-link-id="' + link.id + '" data-original="' + escapeHtml(currentUrl) + '" placeholder="Neue URL eingeben..." value="">';
+                html += '<button class="btn-bulk-apply-row" data-link-id="' + link.id + '" title="Übernehmen">✓</button>';
+                html += '</div>';
+                html += '</td>';
+                html += '<td class="bulk-url-col-actions">';
+                html += '<button class="btn-tracking-copy btn-bulk-icon" data-href="' + escapeHtml(currentUrl) + '" title="URL kopieren">📋</button>';
+                html += '<button class="btn-tracking-unlink btn-bulk-icon" data-link-id="' + link.id + '" title="Link-Tag entfernen, Inhalt behalten">🔗✕</button>';
                 html += '</td>';
                 html += '</tr>';
             });
@@ -9136,105 +9175,9 @@ td[width] { width: auto !important; }
         }
         html += '</div>';
         
-        // ═══ Link-Karten nach Gruppen ═══
-        const groupOrder = ['cta', 'image', 'social', 'text', 'other'];
-        
+        // Leer-Zustand (kein Link-Panel wenn keine Links)
         if (links.length === 0) {
             html += '<p class="tracking-empty">Keine Links gefunden.</p>';
-        } else {
-            // ⚠️ Leere hrefs immer zuerst anzeigen – unabhängig von Gruppe
-            const emptyHrefLinks = links.filter(l => !l.href || l.href.trim() === '' || l.href.trim() === '#');
-            if (emptyHrefLinks.length > 0) {
-                html += '<div class="section-divider">';
-                html += '<div class="section-divider-line"></div>';
-                html += '<div class="section-divider-label" style="color:#e65100;border-color:#e65100;">⚠️ Leere / fehlende URLs (' + emptyHrefLinks.length + ')</div>';
-                html += '<div class="section-divider-line"></div>';
-                html += '</div>';
-                emptyHrefLinks.forEach(link => {
-                    html += '<div class="link-card link-card-warning" data-link-id="' + link.id + '">';
-                    html += '<div class="link-card-header">';
-                    html += '<span class="link-card-id">' + link.id + '</span>';
-                    html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
-                    html += '<span class="link-card-warning-badge">⚠ Leerer Link</span>';
-                    html += '</div>';
-                    html += '<div class="link-card-text">' + escapeHtml(link.text) + '</div>';
-                    html += '<div class="link-card-url link-card-url-empty">⚠ href ist leer – Versandsystem belegt diesen Link ggf. automatisch mit Redirect!</div>';
-                    html += '<div class="link-card-actions">';
-                    html += '<button class="btn-card-action btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">📍 Finden</button>';
-                    html += '<button class="btn-card-action btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
-                    html += '<button class="btn-card-action btn-tracking-unlink" data-link-id="' + link.id + '" title="Link-Tag entfernen, Inhalt behalten">🔗✕ Ent-linken</button>';
-                    html += '</div>';
-                    html += '<div class="link-card-edit-row">';
-                    html += '<input type="text" class="link-edit-input" data-link-id="' + link.id + '" placeholder="Neue URL eingeben..." value="">';
-                    html += '<button class="btn-link-apply" data-link-id="' + link.id + '">✓</button>';
-                    html += '</div>';
-                    html += '</div>';
-                });
-            }
-
-            groupOrder.forEach(groupKey => {
-                const groupLinks = linkGroups[groupKey];
-                if (groupLinks.length === 0) return;
-                
-                // Section Divider
-                html += '<div class="section-divider">';
-                html += '<div class="section-divider-line"></div>';
-                html += '<div class="section-divider-label">' + typeLabels[groupKey] + '</div>';
-                html += '<div class="section-divider-line"></div>';
-                html += '</div>';
-                
-                groupLinks.forEach(link => {
-                    // Prüfe ob der Link problematisch ist (leer, nur Whitespace, nur #)
-                    const isEmptyHref = !link.href || link.href.trim() === '' || link.href.trim() === '#';
-                    const isPlaceholderHref = /^#[A-Z]/.test((link.href || '').trim()); // z.B. #AMEX, #PLACEHOLDER
-                    const isCloudflareHref = /\/cdn-cgi\/l\/email-protection/i.test(link.href || '');
-                    const cardClass = (isEmptyHref || isPlaceholderHref || isCloudflareHref) ? 'link-card link-card-warning' : 'link-card';
-                    
-                    html += '<div class="' + cardClass + '" data-link-id="' + link.id + '">';
-                    
-                    // Header: ID + Typ Badge + ggf. Warn-Badge
-                    html += '<div class="link-card-header">';
-                    html += '<span class="link-card-id">' + link.id + '</span>';
-                    html += '<span class="link-card-type ' + typeCssClasses[link._type] + '">' + typeBadgeLabels[link._type] + '</span>';
-                    if (isEmptyHref) {
-                        html += '<span class="link-card-warning-badge">⚠ Leerer Link</span>';
-                    } else if (isCloudflareHref) {
-                        html += '<span class="link-card-warning-badge">⚠ Cloudflare-Link</span>';
-                    } else if (isPlaceholderHref) {
-                        html += '<span class="link-card-warning-badge">⚠ Platzhalter</span>';
-                    }
-                    html += '</div>';
-                    
-                    // Text
-                    html += '<div class="link-card-text">' + escapeHtml(link.text) + '</div>';
-                    
-                    // URL (bei leerem href deutliche Anzeige)
-                    if (isEmptyHref) {
-                        html += '<div class="link-card-url link-card-url-empty">⚠ href ist leer – Versandsystem belegt diesen Link ggf. automatisch mit Redirect!</div>';
-                    } else if (isCloudflareHref) {
-                        html += '<div class="link-card-url link-card-url-empty">⚠ Cloudflare hat eine E-Mail-Adresse verschlüsselt – dieser Link funktioniert in E-Mails NICHT. Echte E-Mail-Adresse vom Kunden anfordern.</div>';
-                    } else if (isPlaceholderHref) {
-                        html += '<div class="link-card-url link-card-url-empty">⚠ Platzhalter-Link (' + escapeHtml(link.href) + ') – muss durch echte URL ersetzt werden!</div>';
-                    } else {
-                        html += '<div class="link-card-url" title="' + escapeHtml(link.href) + '">' + escapeHtml(link.href.substring(0, 80)) + (link.href.length > 80 ? '...' : '') + '</div>';
-                    }
-                    
-                    // Actions + Edit Row
-                    html += '<div class="link-card-actions">';
-                    html += '<button class="btn-card-action btn-tracking-locate" data-link-id="' + link.id + '" data-href="' + escapeHtml(link.href) + '">📍 Finden</button>';
-                    html += '<button class="btn-card-action btn-tracking-copy" data-href="' + escapeHtml(link.href) + '">📋 Kopieren</button>';
-                    html += '<button class="btn-card-action btn-tracking-unlink" data-link-id="' + link.id + '" title="Link-Tag entfernen, Inhalt behalten">🔗✕ Ent-linken</button>';
-                    html += '</div>';
-                    
-                    // Edit Input Row
-                    html += '<div class="link-card-edit-row">';
-                    html += '<input type="text" class="tracking-link-input" placeholder="Neue URL eingeben..." data-link-id="' + link.id + '">';
-                    html += '<button class="btn-card-action action-primary btn-tracking-apply" data-link-id="' + link.id + '">✓</button>';
-                    html += '</div>';
-                    
-                    html += '</div>'; // link-card
-                });
-            });
         }
         
         html += '</div>'; // subtab-panel links
@@ -9565,6 +9508,25 @@ td[width] { width: auto !important; }
             });
         }
         // ═══ Bulk URL Editor Listeners ═══
+
+        // Per-Zeile Übernehmen-Button
+        document.querySelectorAll('.btn-bulk-apply-row').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const linkId = this.getAttribute('data-link-id');
+                const input = document.querySelector('.bulk-url-input[data-link-id="' + linkId + '"]');
+                const newUrl = input ? input.value.trim() : '';
+                const original = input ? (input.getAttribute('data-original') || '') : '';
+                if (!newUrl || newUrl === original) {
+                    showInspectorToast('⚠️ Bitte neue URL eingeben.');
+                    return;
+                }
+                let corrected = newUrl;
+                if (!/^https?:\/\//i.test(corrected) && !/^mailto:/i.test(corrected) && !/^tel:/i.test(corrected) && !/^\$\{/i.test(corrected) && !/^#/.test(corrected)) {
+                    corrected = 'https://' + corrected;
+                }
+                handleTrackingLinkReplace(linkId, corrected);
+            });
+        });
 
         // Locate-Buttons in Bulk-Tabelle
         document.querySelectorAll('.btn-bulk-locate').forEach(btn => {
