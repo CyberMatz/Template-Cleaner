@@ -4744,15 +4744,15 @@ class TemplateProcessor {
         return { start: tableStart, end: tableEnd, width, tag: openTag };
     }
 
-    // Fix anwenden: einzelne <td> mit zwei inline-block Tables → zwei echte <td> Spalten
-    // Zuverlässiger für alle Outlook-Versionen als MSO-Conditional-Comments
+    // Fix anwenden: inline-block Table-Paare → zwei echte <td> Spalten
+    // Orientiert sich an bewährter Struktur (z.B. Kärcher alt):
+    // <td width="310"><img width="310" style="display:block;max-width:310px;"></td>
+    // <td width="310"><table>...text...</table></td>
     _applyInlineBlockFix() {
         const html = this.html;
-        const lc = html.toLowerCase();
         let fixed = 0;
-        const replacements = []; // { start, end, replacement }
+        const replacements = [];
 
-        // Pattern: <td [valign|...]> ... <table ... display:inline-block ...> ... </table> ... <table ... display:inline-block ...> ... </table> ... </td>
         const tdRegex = /<td\b([^>]*)>/gi;
         let tdMatch;
         while ((tdMatch = tdRegex.exec(html)) !== null) {
@@ -4764,12 +4764,12 @@ class TemplateProcessor {
             if (!firstTable) continue;
             if (!/display\s*:\s*inline-block/i.test(firstTable.tag)) continue;
 
-            // Zwischen erstem table-Ende und zweitem table-Start: nur Whitespace/Kommentare erlaubt
+            // Zwischen erstem und zweitem table: kein <td>, <tr>, <div> erlaubt
             const between = html.slice(firstTable.end, firstTable.end + 800);
             const secondTableOffset = between.search(/<table\b/i);
             if (secondTableOffset === -1) continue;
             const gapContent = between.slice(0, secondTableOffset);
-            if (/<td|<tr|<div/i.test(gapContent)) continue; // nicht direkt benachbart
+            if (/<td|<tr|<div/i.test(gapContent)) continue;
 
             const secondTable = this._findTableBlock(html, firstTable.end);
             if (!secondTable) continue;
@@ -4779,34 +4779,98 @@ class TemplateProcessor {
             const afterSecond = html.slice(secondTable.end, secondTable.end + 300);
             const closingTdOffset = afterSecond.search(/<\/td>/i);
             if (closingTdOffset === -1) continue;
-            const tdEnd = secondTable.end + closingTdOffset + 5; // inklusive </td>
+            const tdEnd = secondTable.end + closingTdOffset + 5;
 
-            // Breiten bestimmen
             const w1 = firstTable.width || 310;
             const w2 = secondTable.width || 310;
 
-            // Inhalte der beiden Tables extrahieren
-            const firstTableHtml  = html.slice(firstTable.start, firstTable.end);
-            const secondTableHtml = html.slice(secondTable.start, secondTable.end);
+            // Inhalt beider Tables extrahieren
+            let firstContent  = html.slice(firstTable.start, firstTable.end);
+            let secondContent = html.slice(secondTable.start, secondTable.end);
 
-            // Replacement: zwei echte <td>-Spalten
+            // display:inline-block + height=100% + leere style="" entfernen (beide)
+            [firstContent, secondContent] = [firstContent, secondContent].map(c =>
+                c.replace(/(\bstyle\s*=\s*["'])([^"']*)display\s*:\s*inline-block\s*;?\s*/gi,
+                    (m, pre, before) => {
+                        const cleaned = before.replace(/;\s*$/, '').trim();
+                        return cleaned ? pre + cleaned + ';' : pre;
+                    })
+                 .replace(/\s*height\s*=\s*["']100%["']/gi, '')
+                 .replace(/\s*style\s*=\s*["']\s*["']/gi, '')
+            );
+
+            // Prüfen ob ein Table nur ein Bild enthält → Wrapper-Tabelle auflösen
+            // Muster: <table...><tr><td...><a...><img.../></a></td></tr></table>
+            //     oder: <table...><tr><td...><img.../></td></tr></table>
+            const isImageOnlyTable = (tableHtml) => {
+                const inner = tableHtml.replace(/<table\b[^>]*>/i, '').replace(/<\/table>\s*$/i, '').trim();
+                const stripped = inner
+                    .replace(/<tbody>/gi, '').replace(/<\/tbody>/gi, '')
+                    .replace(/<tr\b[^>]*>/gi, '').replace(/<\/tr>/gi, '')
+                    .replace(/<td\b[^>]*>/gi, '').replace(/<\/td>/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                // Nur <a> + <img> oder nur <img> übrig? (mit Leerzeichen tolerant)
+                return /^(<a\b[^>]*>\s*<img\b[^>]*\/?>\s*<\/a>|<img\b[^>]*\/?>)$/i.test(stripped);
+            };
+
+            const extractImageContent = (tableHtml) => {
+                // <a href...><img .../></a> oder nur <img .../> extrahieren
+                const imgWithLink = tableHtml.match(/<a\b[^>]*>\s*<img\b[^>]*\/?>\s*<\/a>/i);
+                if (imgWithLink) return imgWithLink[0];
+                const imgOnly = tableHtml.match(/<img\b[^>]*\/?>/i);
+                return imgOnly ? imgOnly[0] : null;
+            };
+
+            const setImgWidth = (imgHtml, width) => {
+                // width="..." → explizite Pixelbreite setzen
+                let result = imgHtml.replace(/\bwidth\s*=\s*["'][^"']*["']/i, `width="${width}"`);
+                if (!/\bwidth\s*=/i.test(result)) {
+                    result = result.replace(/<img\b/i, `<img width="${width}"`);
+                }
+                // max-width in style aktualisieren oder hinzufügen
+                if (/style\s*=/i.test(result)) {
+                    result = result.replace(/(style\s*=\s*["'])([^"']*)(["'])/i, (m, pre, styles, post) => {
+                        let s = styles.replace(/max-width\s*:[^;]+;?/i, '').replace(/display\s*:[^;]+;?/i, '').trim();
+                        if (s && !s.endsWith(';')) s += ';';
+                        return pre + `display:block;max-width:${width}px;` + s + post;
+                    });
+                } else {
+                    result = result.replace(/<img\b/i, `<img style="display:block;max-width:${width}px;"`);
+                }
+                return result;
+            };
+
+            // Bild-Spalte: Wrapper-Tabelle auflösen wenn nur ein Bild drin
+            const buildColumn = (content, width) => {
+                if (isImageOnlyTable(content)) {
+                    const imgContent = extractImageContent(content);
+                    if (imgContent) {
+                        return setImgWidth(imgContent, width);
+                    }
+                }
+                // Sonst: Table-Inhalt behalten, nur Breite anpassen
+                return content.replace(/(<table\b[^>]*)\bwidth\s*=\s*["']\d+["']/i, `$1width="${width}"`);
+            };
+
+            const col1Html = buildColumn(firstContent, w1);
+            const col2Html = buildColumn(secondContent, w2);
+
             const replacement =
-                `<td width="${w1}" valign="top" style="width:${w1}px;">\n` +
-                firstTableHtml + '\n' +
+                `<td width="${w1}" valign="top" style="padding:0;margin:0;">\n` +
+                col1Html + '\n' +
                 `</td>\n` +
-                `<td width="${w2}" valign="top" style="width:${w2}px;">\n` +
-                secondTableHtml + '\n' +
+                `<td width="${w2}" valign="top" style="padding:0;margin:0;">\n` +
+                col2Html + '\n' +
                 `</td>`;
 
             replacements.push({ start: tdStart, end: tdEnd, replacement });
             fixed++;
-            // tdRegex.lastIndex hinter das zweite table setzen um Überlappungen zu vermeiden
             tdRegex.lastIndex = tdEnd;
         }
 
         if (replacements.length === 0) return 0;
 
-        // Von hinten nach vorne ersetzen (Positionen bleiben korrekt)
         let result = html;
         for (let i = replacements.length - 1; i >= 0; i--) {
             const { start, end, replacement } = replacements[i];
@@ -5241,7 +5305,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.84-2026-03-13';
+const APP_VERSION = 'v3.9.87-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
