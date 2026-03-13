@@ -16,6 +16,7 @@ class TemplateProcessor {
         this.removeFonts = removeFonts;
         this.titleText = titleText;
         this.checks = [];
+        this.optionalFixes = [];
     }
 
     // Haupt-Verarbeitungsmethode
@@ -250,6 +251,9 @@ class TemplateProcessor {
 
         // W10: Textfarben nur in CSS-Klassen (unsichtbar in T-Online/GMX/Web.de)
         this.checkCssOnlyTextColors();
+
+        // OF: Optionale Reparaturen erkennen
+        this.checkInlineBlockLayout();
     }
 
     // P01: DOCTYPE Check
@@ -4689,6 +4693,127 @@ class TemplateProcessor {
         this.checks.push({ id, status, message });
     }
 
+    // =====================================================================
+    // OF: OPTIONALE REPARATUREN (Reparaturen-Tab)
+    // Erkennt riskante Strukturprobleme und bietet Fixes zum manuellen Anwenden
+    // =====================================================================
+
+    // OF01: display:inline-block auf <table>-Elementen erkennen
+    // → In Windows-Outlook (2013/2016/2019/365) werden Spalten übereinander gestapelt
+    checkInlineBlockLayout() {
+        const inlineBlockRegex = /<table\b[^>]+style\s*=\s*["'][^"']*display\s*:\s*inline-block[^"']*["'][^>]*>/gi;
+        const matches = [...this.html.matchAll(inlineBlockRegex)];
+        if (matches.length === 0) return;
+
+        const pairCount = Math.floor(matches.length / 2);
+        this.optionalFixes.push({
+            id: 'OF01_INLINE_BLOCK_LAYOUT',
+            icon: '📐',
+            title: 'Zweispalten-Layout Outlook-Fix',
+            shortLabel: pairCount + ' Zweispalten-' + (pairCount === 1 ? 'Bereich' : 'Bereiche') + ' mit Outlook-Problem',
+            description: matches.length + ' Tabellen mit "display: inline-block" gefunden. In Windows-Outlook (2013–365) werden diese Spalten übereinander gestapelt statt nebeneinander. Das Ergebnis siehst du im Screenshot: Bild + Text fallen untereinander.',
+            detail: 'Der Fix fügt unsichtbare Outlook-Anweisungen ein (sog. Conditional Comments), sodass Outlook die Spalten korrekt nebeneinander darstellt. Andere E-Mail-Clients (Gmail, Apple Mail etc.) bleiben komplett unberührt.',
+            risk: '⚠ Mittel – danach testen',
+            count: matches.length,
+            applied: false,
+            applyFn: '_applyInlineBlockFix'
+        });
+    }
+
+    // Hilfsfunktion: Grenzen aller inline-block <table>-Elemente finden (depth-aware)
+    _findInlineBlockTableBoundaries() {
+        const boundaries = [];
+        let pos = 0;
+        const html = this.html;
+
+        while (pos < html.length) {
+            const lc = html.toLowerCase();
+            const tableStart = lc.indexOf('<table', pos);
+            if (tableStart === -1) break;
+
+            const tagEnd = html.indexOf('>', tableStart);
+            if (tagEnd === -1) break;
+
+            const openTag = html.slice(tableStart, tagEnd + 1);
+
+            if (/display\s*:\s*inline-block/i.test(openTag)) {
+                const widthMatch = openTag.match(/width\s*=\s*["']?(\d+)/i);
+                const width = widthMatch ? parseInt(widthMatch[1]) : 310;
+
+                // Matching </table> mit Tiefenzählung finden
+                let depth = 1;
+                let scanPos = tagEnd + 1;
+                let tableEnd = -1;
+
+                while (depth > 0 && scanPos < html.length) {
+                    const nextOpen = lc.indexOf('<table', scanPos);
+                    const nextClose = lc.indexOf('</table>', scanPos);
+                    if (nextClose === -1) break;
+                    if (nextOpen !== -1 && nextOpen < nextClose) {
+                        depth++;
+                        scanPos = nextOpen + 6;
+                    } else {
+                        depth--;
+                        if (depth === 0) tableEnd = nextClose + 8;
+                        scanPos = nextClose + 8;
+                    }
+                }
+
+                if (tableEnd !== -1) {
+                    boundaries.push({ start: tableStart, end: tableEnd, width });
+                    pos = tableEnd;
+                } else {
+                    pos = tagEnd + 1;
+                }
+            } else {
+                pos = tagEnd + 1;
+            }
+        }
+        return boundaries;
+    }
+
+    // Fix anwenden: Outlook MSO Conditional Comments um Inline-Block-Paare
+    _applyInlineBlockFix() {
+        const boundaries = this._findInlineBlockTableBoundaries();
+        if (boundaries.length < 2) return 0;
+
+        // Paare bilden (konsekutive inline-block Tables ohne andere Tables dazwischen)
+        const pairs = [];
+        for (let i = 0; i < boundaries.length - 1; i++) {
+            const curr = boundaries[i];
+            const next = boundaries[i + 1];
+            const between = this.html.slice(curr.end, next.start);
+            if (between.length < 600 && !/<table/i.test(between)) {
+                pairs.push({ first: curr, second: next });
+                i++; // next ist verarbeitet
+            }
+        }
+
+        if (pairs.length === 0) return 0;
+
+        // Von hinten nach vorne anwenden (damit Positionen stimmen)
+        let html = this.html;
+        for (let i = pairs.length - 1; i >= 0; i--) {
+            const { first, second } = pairs[i];
+            const totalWidth = first.width + second.width;
+            const msoOpen  = `<!--[if mso]><table border="0" cellpadding="0" cellspacing="0" width="${totalWidth}"><tr><td width="${first.width}" valign="top"><![endif]-->`;
+            const msoMid   = `<!--[if mso]></td><td width="${second.width}" valign="top"><![endif]-->`;
+            const msoClose = `<!--[if mso]></td></tr></table><![endif]-->`;
+            const between  = html.slice(first.end, second.start);
+            html = html.slice(0, first.start)
+                + msoOpen
+                + html.slice(first.start, first.end)
+                + msoMid
+                + between
+                + html.slice(second.start, second.end)
+                + msoClose
+                + html.slice(second.end);
+        }
+
+        this.html = html;
+        return pairs.length;
+    }
+
     // Ergebnisse generieren
     generateResult() {
         const failCount = this.checks.filter(c => c.status === 'FAIL' || c.status === 'STILL_FAIL').length;
@@ -4857,7 +4982,8 @@ class TemplateProcessor {
             confidenceLevel: confidenceLevel,
             attentionItems: attentionItems,
             autoFixes: this.autoFixes || [],
-            tagProblems: this.tagProblems || []
+            tagProblems: this.tagProblems || [],
+            optionalFixes: this.optionalFixes || []
         };
     }
 
@@ -5113,7 +5239,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.82-2026-03-12';
+const APP_VERSION = 'v3.9.83-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -5213,6 +5339,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const eoaContent = document.getElementById('eoaContent');
     const eoaTabSpinner = document.getElementById('eoaTabSpinner');
     const eoaTabCount = document.getElementById('eoaTabCount');
+
+    // Optionale Reparaturen Tab
+    const optionalFixesTab = document.getElementById('optionalFixesTab');
+    const optionalFixesPanel = document.getElementById('optionalFixesPanel');
+    const optionalFixesContent = document.getElementById('optionalFixesContent');
     
     const globalFinalizeBtn = document.getElementById('globalFinalizeBtn');
     const commitChangesBtn = document.getElementById('commitChangesBtn');
@@ -5785,6 +5916,37 @@ document.addEventListener('DOMContentLoaded', () => {
             
             confHtml += '</div>';
             confidenceEl.innerHTML = confHtml;
+
+            // === OPTIONALE REPARATUREN: Attention-Item + Tab aufleuchten ===
+            const optFixes = processingResult.optionalFixes || [];
+            if (optFixes.length > 0) {
+                const optFixesAttentionDiv = document.createElement('div');
+                optFixesAttentionDiv.className = 'confidence-attention-item confidence-attention-item-link optional-fixes-attention';
+                optFixesAttentionDiv.style.cssText = 'cursor:pointer; background:#fffbeb; border-left:3px solid #f59e0b; padding:6px 10px; margin-top:6px; border-radius:3px;';
+                optFixesAttentionDiv.innerHTML = '🔧 ' + optFixes.map(f => f.shortLabel).join(' · ') + ' <span style="font-size:11px;opacity:0.7;">→ Reparaturen-Tab öffnen</span>';
+                optFixesAttentionDiv.addEventListener('click', function() {
+                    const inspSec = document.getElementById('inspectorSection');
+                    const isOpen = inspSec && inspSec.style.display !== 'none';
+                    if (!isOpen && showInspectorBtn && !showInspectorBtn.disabled) {
+                        showInspectorBtn.click();
+                        setTimeout(() => switchInspectorTab('optionalfixes'), 300);
+                    } else {
+                        switchInspectorTab('optionalfixes');
+                    }
+                });
+                confidenceEl.appendChild(optFixesAttentionDiv);
+                if (optionalFixesTab) {
+                    optionalFixesTab.classList.add('has-fixes');
+                    const badge = document.getElementById('optionalFixesTabCount');
+                    if (badge) badge.textContent = optFixes.length;
+                }
+            } else {
+                if (optionalFixesTab) {
+                    optionalFixesTab.classList.remove('has-fixes');
+                    const badge = document.getElementById('optionalFixesTabCount');
+                    if (badge) badge.textContent = '';
+                }
+            }
 
             // Click-Handler für klickbare Attention Items (Tab-Sprung)
             confidenceEl.querySelectorAll('.confidence-attention-item-link').forEach(function(el) {
@@ -7319,12 +7481,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Update Tab Buttons
-        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab, placementTab, eoaTab].forEach(tab => {
+        [trackingTab, imagesTab, tagReviewTab, editorTab, buttonsTab, placementTab, eoaTab, optionalFixesTab].forEach(tab => {
             if (tab) tab.classList.remove('active');
         });
         
         // Update Panels
-        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel, placementPanel, eoaPanel].forEach(panel => {
+        [trackingPanel, imagesPanel, tagreviewPanel, editorPanel, buttonsPanel, placementPanel, eoaPanel, optionalFixesPanel].forEach(panel => {
             if (panel) panel.style.display = 'none';
         });
         
@@ -7352,6 +7514,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (tabName === 'eoa' && eoaTab && eoaPanel) {
             eoaTab.classList.add('active');
             eoaPanel.style.display = 'block';
+        } else if (tabName === 'optionalfixes' && optionalFixesTab && optionalFixesPanel) {
+            optionalFixesTab.classList.add('active');
+            optionalFixesPanel.style.display = 'block';
         }
         
         // Lade Tab Content
@@ -7369,6 +7534,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (buttonsTab) buttonsTab.addEventListener('click', () => switchInspectorTab('buttons'));
     if (placementTab) placementTab.addEventListener('click', () => switchInspectorTab('placement'));
     if (eoaTab) eoaTab.addEventListener('click', () => switchInspectorTab('eoa'));
+    if (optionalFixesTab) optionalFixesTab.addEventListener('click', () => switchInspectorTab('optionalfixes'));
     
     // Load Tab Content (Placeholder für Phase 3-7)
     function loadInspectorTabContent(tabName) {
@@ -7401,6 +7567,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 renderEoaTabContent();
             }
+        } else if (tabName === 'optionalfixes' && optionalFixesContent) {
+            showOptionalFixesTab(optionalFixesContent);
         }
     }
     
@@ -8567,6 +8735,93 @@ td[width] { width: auto !important; }
     }
     
     // ============================================
+    // ============================================
+    // OPTIONALE REPARATUREN TAB
+    // ============================================
+
+    function showOptionalFixesTab(container) {
+        if (!container) return;
+        const fixes = (processingResult && processingResult.optionalFixes) ? processingResult.optionalFixes : [];
+
+        if (fixes.length === 0) {
+            container.innerHTML = '<div class="optional-fixes-empty"><span class="empty-icon">✅</span>Keine optionalen Reparaturen gefunden.<br>Das Template ist in diesem Bereich bereits optimal.</div>';
+            return;
+        }
+
+        let html = '<div class="optional-fixes-intro">'
+            + '<strong>Optionale Reparaturen</strong> – Diese Eingriffe sind nicht automatisch, weil sie das Layout in bestimmten Fällen verändern können. '
+            + 'Prüfe das Ergebnis nach dem Anwenden kurz in der Vorschau.'
+            + '</div>';
+
+        fixes.forEach(function(fix) {
+            html += '<div class="optional-fix-card' + (fix.applied ? ' fix-applied' : '') + '" data-fix-id="' + fix.id + '">'
+                + '<div class="optional-fix-card-header">'
+                + '<span class="optional-fix-card-icon">' + fix.icon + '</span>'
+                + '<span class="optional-fix-card-title">' + fix.title + '</span>'
+                + '<span class="optional-fix-card-risk">' + (fix.applied ? '✅ Angewendet' : fix.risk) + '</span>'
+                + '</div>'
+                + '<div class="optional-fix-card-body">'
+                + '<div class="optional-fix-card-desc">' + fix.description + '</div>'
+                + '<div class="optional-fix-card-detail">' + fix.detail + '</div>'
+                + '<div class="optional-fix-card-actions">';
+
+            if (fix.applied) {
+                html += '<button class="optional-fix-apply-btn" disabled>✅ Bereits angewendet</button>'
+                    + '<span class="optional-fix-applied-label">Wird beim nächsten Download übernommen.</span>';
+            } else {
+                html += '<button class="optional-fix-apply-btn" data-fix-id="' + fix.id + '">Reparatur anwenden</button>';
+            }
+
+            html += '</div></div></div>';
+        });
+
+        container.innerHTML = html;
+
+        // Click-Handler für Apply-Buttons
+        container.querySelectorAll('.optional-fix-apply-btn[data-fix-id]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const fixId = btn.dataset.fixId;
+                const fix = fixes.find(f => f.id === fixId);
+                if (!fix || fix.applied) return;
+
+                // Fix auf currentWorkingHtml anwenden
+                const fixHtml = currentWorkingHtml || processingResult.optimizedHtml;
+                const processor = new TemplateProcessor(fixHtml, 'standard', '', true, '');
+                processor.html = fixHtml;
+
+                let pairsFixed = 0;
+                if (fix.applyFn === '_applyInlineBlockFix') {
+                    pairsFixed = processor._applyInlineBlockFix();
+                }
+
+                if (pairsFixed > 0) {
+                    currentWorkingHtml = processor.html;
+                    if (processingResult) processingResult.optimizedHtml = currentWorkingHtml;
+                    fix.applied = true;
+
+                    // Tab-Badge aktualisieren
+                    const remaining = fixes.filter(f => !f.applied).length;
+                    if (optionalFixesTab) {
+                        const badge = document.getElementById('optionalFixesTabCount');
+                        if (remaining === 0) {
+                            optionalFixesTab.classList.remove('has-fixes');
+                            if (badge) badge.textContent = '';
+                        } else {
+                            if (badge) badge.textContent = remaining;
+                        }
+                    }
+
+                    // Tab neu rendern
+                    showOptionalFixesTab(container);
+                    updateInspectorPreview();
+                    showInspectorToast('✅ Reparatur angewendet – ' + pairsFixed + ' Bereich(e) korrigiert');
+                } else {
+                    showInspectorToast('⚠️ Fix konnte nicht angewendet werden – Struktur wurde nicht erkannt');
+                }
+            });
+        });
+    }
+
     // PHASE 3: TRACKING TAB IMPLEMENTATION
     // ============================================
     

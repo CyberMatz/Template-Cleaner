@@ -172,6 +172,11 @@
                 <span class="tab-count" id="eoaTabCount"></span>
                 <span class="eoa-tab-spinner" id="eoaTabSpinner" style="display:none;">⏳</span>
             </button>
+            <button id="optionalFixesTab" class="inspector-tab" data-tab="optionalfixes">
+                <span class="tab-icon">🔧</span>
+                Reparaturen
+                <span class="tab-count" id="optionalFixesTabCount"></span>
+            </button>
         </div>
 
         <!-- 2-Spalten-Layout -->
@@ -225,6 +230,13 @@
                 <!-- EOA Client-Vorschau Panel -->
                 <div id="eoaPanel" class="inspector-panel" style="display: none;">
                     <div id="eoaContent" class="panel-content">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <!-- Optionale Reparaturen Panel -->
+                <div id="optionalFixesPanel" class="inspector-panel" style="display: none;">
+                    <div id="optionalFixesContent" class="panel-content">
                         <!-- Wird dynamisch gefüllt -->
                     </div>
                 </div>

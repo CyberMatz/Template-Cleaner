@@ -482,6 +482,148 @@ body {
 }
 .inspector-tab.active[data-tab="eoa"] .tab-icon { opacity: 1; }
 
+/* ── Reparaturen Tab ── */
+.inspector-tab[data-tab="optionalfixes"] {
+    color: #555;
+}
+.inspector-tab.active[data-tab="optionalfixes"] {
+    color: #b45309;
+    border-bottom-color: #b45309;
+}
+.inspector-tab.active[data-tab="optionalfixes"] .tab-icon { opacity: 1; }
+.inspector-tab.active[data-tab="optionalfixes"] .tab-count { background: #b45309; color: white; }
+
+/* Tab leuchtet wenn Fixes vorhanden */
+.inspector-tab[data-tab="optionalfixes"].has-fixes {
+    color: #b45309;
+}
+.inspector-tab[data-tab="optionalfixes"].has-fixes .tab-count {
+    background: #f59e0b;
+    color: white;
+    animation: fixes-pulse 1.8s ease-in-out 3;
+}
+.inspector-tab[data-tab="optionalfixes"].has-fixes .tab-icon {
+    opacity: 1;
+    animation: fixes-pulse 1.8s ease-in-out 3;
+}
+@keyframes fixes-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* ── Fix Cards im Reparaturen-Tab ── */
+.optional-fixes-intro {
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    border-radius: 4px;
+    line-height: 1.5;
+}
+.optional-fix-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+.optional-fix-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.optional-fix-card.fix-applied {
+    border-color: #6ee7b7;
+    background: #f0fdf4;
+}
+.optional-fix-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #fafafa;
+    border-bottom: 1px solid #f0f0f0;
+}
+.optional-fix-card.fix-applied .optional-fix-card-header {
+    background: #dcfce7;
+    border-bottom-color: #bbf7d0;
+}
+.optional-fix-card-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+.optional-fix-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    flex: 1;
+}
+.optional-fix-card-risk {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #fef3c7;
+    color: #92400e;
+    font-weight: 500;
+}
+.optional-fix-card.fix-applied .optional-fix-card-risk {
+    background: #d1fae5;
+    color: #065f46;
+}
+.optional-fix-card-body {
+    padding: 12px 14px;
+}
+.optional-fix-card-desc {
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.55;
+    margin-bottom: 8px;
+}
+.optional-fix-card-detail {
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+.optional-fix-card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.optional-fix-apply-btn {
+    padding: 7px 16px;
+    background: #f59e0b;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.optional-fix-apply-btn:hover { background: #d97706; }
+.optional-fix-apply-btn:disabled {
+    background: #6ee7b7;
+    color: #065f46;
+    cursor: default;
+}
+.optional-fix-applied-label {
+    font-size: 12px;
+    color: #059669;
+    font-weight: 500;
+}
+.optional-fixes-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #9ca3af;
+    font-size: 13px;
+}
+.optional-fixes-empty .empty-icon {
+    font-size: 32px;
+    display: block;
+    margin-bottom: 10px;
+}
+
 /* ── Count Badge on Tabs ── */
 .tab-count {
     font-size: 11px;
