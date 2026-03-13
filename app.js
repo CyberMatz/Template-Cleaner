@@ -4721,97 +4721,99 @@ class TemplateProcessor {
     }
 
     // Hilfsfunktion: Grenzen aller inline-block <table>-Elemente finden (depth-aware)
-    _findInlineBlockTableBoundaries() {
-        const boundaries = [];
-        let pos = 0;
-        const html = this.html;
+    // Hilfsfunktion: vollständigen <table>...</table> Block ab position finden (tiefengerecht)
+    _findTableBlock(html, fromPos) {
+        const lc = html.toLowerCase();
+        const tableStart = lc.indexOf('<table', fromPos);
+        if (tableStart === -1) return null;
+        const tagEnd = html.indexOf('>', tableStart);
+        if (tagEnd === -1) return null;
+        const openTag = html.slice(tableStart, tagEnd + 1);
+        const widthMatch = openTag.match(/width\s*=\s*["']?(\d+)/i);
+        const width = widthMatch ? parseInt(widthMatch[1]) : 310;
 
-        while (pos < html.length) {
-            const lc = html.toLowerCase();
-            const tableStart = lc.indexOf('<table', pos);
-            if (tableStart === -1) break;
-
-            const tagEnd = html.indexOf('>', tableStart);
-            if (tagEnd === -1) break;
-
-            const openTag = html.slice(tableStart, tagEnd + 1);
-
-            if (/display\s*:\s*inline-block/i.test(openTag)) {
-                const widthMatch = openTag.match(/width\s*=\s*["']?(\d+)/i);
-                const width = widthMatch ? parseInt(widthMatch[1]) : 310;
-
-                // Matching </table> mit Tiefenzählung finden
-                let depth = 1;
-                let scanPos = tagEnd + 1;
-                let tableEnd = -1;
-
-                while (depth > 0 && scanPos < html.length) {
-                    const nextOpen = lc.indexOf('<table', scanPos);
-                    const nextClose = lc.indexOf('</table>', scanPos);
-                    if (nextClose === -1) break;
-                    if (nextOpen !== -1 && nextOpen < nextClose) {
-                        depth++;
-                        scanPos = nextOpen + 6;
-                    } else {
-                        depth--;
-                        if (depth === 0) tableEnd = nextClose + 8;
-                        scanPos = nextClose + 8;
-                    }
-                }
-
-                if (tableEnd !== -1) {
-                    boundaries.push({ start: tableStart, end: tableEnd, width });
-                    pos = tableEnd;
-                } else {
-                    pos = tagEnd + 1;
-                }
-            } else {
-                pos = tagEnd + 1;
-            }
+        let depth = 1, scanPos = tagEnd + 1, tableEnd = -1;
+        while (depth > 0 && scanPos < html.length) {
+            const nextOpen  = lc.indexOf('<table', scanPos);
+            const nextClose = lc.indexOf('</table>', scanPos);
+            if (nextClose === -1) break;
+            if (nextOpen !== -1 && nextOpen < nextClose) { depth++; scanPos = nextOpen + 6; }
+            else { depth--; if (depth === 0) tableEnd = nextClose + 8; scanPos = nextClose + 8; }
         }
-        return boundaries;
+        if (tableEnd === -1) return null;
+        return { start: tableStart, end: tableEnd, width, tag: openTag };
     }
 
-    // Fix anwenden: Outlook MSO Conditional Comments um Inline-Block-Paare
+    // Fix anwenden: einzelne <td> mit zwei inline-block Tables → zwei echte <td> Spalten
+    // Zuverlässiger für alle Outlook-Versionen als MSO-Conditional-Comments
     _applyInlineBlockFix() {
-        const boundaries = this._findInlineBlockTableBoundaries();
-        if (boundaries.length < 2) return 0;
+        const html = this.html;
+        const lc = html.toLowerCase();
+        let fixed = 0;
+        const replacements = []; // { start, end, replacement }
 
-        // Paare bilden (konsekutive inline-block Tables ohne andere Tables dazwischen)
-        const pairs = [];
-        for (let i = 0; i < boundaries.length - 1; i++) {
-            const curr = boundaries[i];
-            const next = boundaries[i + 1];
-            const between = this.html.slice(curr.end, next.start);
-            if (between.length < 600 && !/<table/i.test(between)) {
-                pairs.push({ first: curr, second: next });
-                i++; // next ist verarbeitet
-            }
+        // Pattern: <td [valign|...]> ... <table ... display:inline-block ...> ... </table> ... <table ... display:inline-block ...> ... </table> ... </td>
+        const tdRegex = /<td\b([^>]*)>/gi;
+        let tdMatch;
+        while ((tdMatch = tdRegex.exec(html)) !== null) {
+            const tdStart = tdMatch.index;
+            const tdInnerStart = tdStart + tdMatch[0].length;
+
+            // Erstes inline-block table nach diesem <td> suchen
+            const firstTable = this._findTableBlock(html, tdInnerStart);
+            if (!firstTable) continue;
+            if (!/display\s*:\s*inline-block/i.test(firstTable.tag)) continue;
+
+            // Zwischen erstem table-Ende und zweitem table-Start: nur Whitespace/Kommentare erlaubt
+            const between = html.slice(firstTable.end, firstTable.end + 800);
+            const secondTableOffset = between.search(/<table\b/i);
+            if (secondTableOffset === -1) continue;
+            const gapContent = between.slice(0, secondTableOffset);
+            if (/<td|<tr|<div/i.test(gapContent)) continue; // nicht direkt benachbart
+
+            const secondTable = this._findTableBlock(html, firstTable.end);
+            if (!secondTable) continue;
+            if (!/display\s*:\s*inline-block/i.test(secondTable.tag)) continue;
+
+            // </td> nach zweitem table finden
+            const afterSecond = html.slice(secondTable.end, secondTable.end + 300);
+            const closingTdOffset = afterSecond.search(/<\/td>/i);
+            if (closingTdOffset === -1) continue;
+            const tdEnd = secondTable.end + closingTdOffset + 5; // inklusive </td>
+
+            // Breiten bestimmen
+            const w1 = firstTable.width || 310;
+            const w2 = secondTable.width || 310;
+
+            // Inhalte der beiden Tables extrahieren
+            const firstTableHtml  = html.slice(firstTable.start, firstTable.end);
+            const secondTableHtml = html.slice(secondTable.start, secondTable.end);
+
+            // Replacement: zwei echte <td>-Spalten
+            const replacement =
+                `<td width="${w1}" valign="top" style="width:${w1}px;">\n` +
+                firstTableHtml + '\n' +
+                `</td>\n` +
+                `<td width="${w2}" valign="top" style="width:${w2}px;">\n` +
+                secondTableHtml + '\n' +
+                `</td>`;
+
+            replacements.push({ start: tdStart, end: tdEnd, replacement });
+            fixed++;
+            // tdRegex.lastIndex hinter das zweite table setzen um Überlappungen zu vermeiden
+            tdRegex.lastIndex = tdEnd;
         }
 
-        if (pairs.length === 0) return 0;
+        if (replacements.length === 0) return 0;
 
-        // Von hinten nach vorne anwenden (damit Positionen stimmen)
-        let html = this.html;
-        for (let i = pairs.length - 1; i >= 0; i--) {
-            const { first, second } = pairs[i];
-            const totalWidth = first.width + second.width;
-            const msoOpen  = `<!--[if mso]><table border="0" cellpadding="0" cellspacing="0" width="${totalWidth}"><tr><td width="${first.width}" valign="top"><![endif]-->`;
-            const msoMid   = `<!--[if mso]></td><td width="${second.width}" valign="top"><![endif]-->`;
-            const msoClose = `<!--[if mso]></td></tr></table><![endif]-->`;
-            const between  = html.slice(first.end, second.start);
-            html = html.slice(0, first.start)
-                + msoOpen
-                + html.slice(first.start, first.end)
-                + msoMid
-                + between
-                + html.slice(second.start, second.end)
-                + msoClose
-                + html.slice(second.end);
+        // Von hinten nach vorne ersetzen (Positionen bleiben korrekt)
+        let result = html;
+        for (let i = replacements.length - 1; i >= 0; i--) {
+            const { start, end, replacement } = replacements[i];
+            result = result.slice(0, start) + replacement + result.slice(end);
         }
-
-        this.html = html;
-        return pairs.length;
+        this.html = result;
+        return fixed;
     }
 
     // Ergebnisse generieren
@@ -5239,7 +5241,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.83-2026-03-13';
+const APP_VERSION = 'v3.9.84-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
