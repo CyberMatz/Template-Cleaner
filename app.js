@@ -4779,7 +4779,22 @@ class TemplateProcessor {
             const afterSecond = html.slice(secondTable.end, secondTable.end + 300);
             const closingTdOffset = afterSecond.search(/<\/td>/i);
             if (closingTdOffset === -1) continue;
-            const tdEnd = secondTable.end + closingTdOffset + 5;
+            let replaceEnd = secondTable.end + closingTdOffset + 5; // inkl. </td>
+
+            // Umschliessenden <tr> suchen damit dir="rtl" korrekt gesetzt werden kann
+            // Rückwärts von tdStart nach <tr> suchen
+            let trStart = tdStart;
+            const beforeTd = html.slice(Math.max(0, tdStart - 200), tdStart);
+            const trMatch = beforeTd.match(/.*(<tr\b[^>]*>)/si); // letztes <tr> vor diesem <td>
+            if (trMatch) {
+                trStart = tdStart - beforeTd.length + beforeTd.lastIndexOf(trMatch[1]);
+            }
+            // </tr> nach dem </td> finden
+            const afterTd = html.slice(replaceEnd, replaceEnd + 200);
+            const closingTrOffset = afterTd.search(/<\/tr>/i);
+            if (closingTrOffset !== -1) {
+                replaceEnd = replaceEnd + closingTrOffset + 5; // inkl. </tr>
+            }
 
             const w1 = firstTable.width || 310;
             const w2 = secondTable.width || 310;
@@ -4856,28 +4871,28 @@ class TemplateProcessor {
             const col1Html = buildColumn(firstContent, w1);
             const col2Html = buildColumn(secondContent, w2);
 
-            // Reihenfolge prüfen: Das Original nutzt align="right"/"left" auf der Text-Tabelle
-            // um das Wechseln zu steuern. align="left" → Text schwimmt nach links → Text links, Bild rechts.
-            // Im Fix müssen wir die Spalten entsprechend tauschen.
+            // Wechselndes Layout: align="left" auf der Text-Tabelle = Text soll links erscheinen.
+            // Lösung: dir="rtl" auf dem <tr> dreht die Spalten visuell um (Outlook + alle modernen Clients).
+            // HTML-Reihenfolge bleibt: Bild zuerst → Mobile stapelt korrekt Bild → Text.
+            // dir="ltr" auf den <td>s verhindert dass der Text selbst gespiegelt wird.
             const textTableAlign = (secondContent.match(/<table\b[^>]*\balign\s*=\s*["'](\w+)["']/i) || [])[1] || 'right';
-            const swapColumns = textTableAlign.toLowerCase() === 'left';
-
-            const leftCol  = swapColumns ? col2Html : col1Html;
-            const rightCol = swapColumns ? col1Html : col2Html;
-            const leftW    = swapColumns ? w2 : w1;
-            const rightW   = swapColumns ? w1 : w2;
+            const needsRtl = textTableAlign.toLowerCase() === 'left';
+            const trDir    = needsRtl ? ' dir="rtl"' : '';
+            const tdDir    = needsRtl ? ' dir="ltr"' : '';
 
             const replacement =
-                `<td width="${leftW}" valign="top" class="col-split" style="padding:0;margin:0;">\n` +
-                leftCol + '\n' +
+                `<tr${trDir}>\n` +
+                `<td width="${w1}" valign="top" class="col-split"${tdDir} style="padding:0;margin:0;">\n` +
+                col1Html + '\n' +
                 `</td>\n` +
-                `<td width="${rightW}" valign="top" class="col-split" style="padding:0;margin:0;">\n` +
-                rightCol + '\n' +
-                `</td>`;
+                `<td width="${w2}" valign="top" class="col-split"${tdDir} style="padding:0;margin:0;">\n` +
+                col2Html + '\n' +
+                `</td>\n` +
+                `</tr>`;
 
-            replacements.push({ start: tdStart, end: tdEnd, replacement });
+            replacements.push({ start: trStart, end: replaceEnd, replacement });
             fixed++;
-            tdRegex.lastIndex = tdEnd;
+            tdRegex.lastIndex = replaceEnd;
         }
 
         if (replacements.length === 0) return 0;
@@ -5335,7 +5350,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.90-2026-03-13';
+const APP_VERSION = 'v3.9.92-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
