@@ -4833,10 +4833,10 @@ class TemplateProcessor {
                     result = result.replace(/(style\s*=\s*["'])([^"']*)(["'])/i, (m, pre, styles, post) => {
                         let s = styles.replace(/max-width\s*:[^;]+;?/i, '').replace(/display\s*:[^;]+;?/i, '').trim();
                         if (s && !s.endsWith(';')) s += ';';
-                        return pre + `display:block;max-width:${width}px;` + s + post;
+                        return pre + `display:block;width:100%;max-width:${width}px;` + s + post;
                     });
                 } else {
-                    result = result.replace(/<img\b/i, `<img style="display:block;max-width:${width}px;"`);
+                    result = result.replace(/<img\b/i, `<img style="display:block;width:100%;max-width:${width}px;"`);
                 }
                 return result;
             };
@@ -4856,12 +4856,23 @@ class TemplateProcessor {
             const col1Html = buildColumn(firstContent, w1);
             const col2Html = buildColumn(secondContent, w2);
 
+            // Reihenfolge prüfen: Das Original nutzt align="right"/"left" auf der Text-Tabelle
+            // um das Wechseln zu steuern. align="left" → Text schwimmt nach links → Text links, Bild rechts.
+            // Im Fix müssen wir die Spalten entsprechend tauschen.
+            const textTableAlign = (secondContent.match(/<table\b[^>]*\balign\s*=\s*["'](\w+)["']/i) || [])[1] || 'right';
+            const swapColumns = textTableAlign.toLowerCase() === 'left';
+
+            const leftCol  = swapColumns ? col2Html : col1Html;
+            const rightCol = swapColumns ? col1Html : col2Html;
+            const leftW    = swapColumns ? w2 : w1;
+            const rightW   = swapColumns ? w1 : w2;
+
             const replacement =
-                `<td width="${w1}" valign="top" style="padding:0;margin:0;">\n` +
-                col1Html + '\n' +
+                `<td width="${leftW}" valign="top" class="dynamicwidth" style="padding:0;margin:0;">\n` +
+                leftCol + '\n' +
                 `</td>\n` +
-                `<td width="${w2}" valign="top" style="padding:0;margin:0;">\n` +
-                col2Html + '\n' +
+                `<td width="${rightW}" valign="top" class="dynamicwidth" style="padding:0;margin:0;">\n` +
+                rightCol + '\n' +
                 `</td>`;
 
             replacements.push({ start: tdStart, end: tdEnd, replacement });
@@ -5305,7 +5316,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.87-2026-03-13';
+const APP_VERSION = 'v3.9.89-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
