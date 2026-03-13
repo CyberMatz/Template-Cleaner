@@ -4868,10 +4868,10 @@ class TemplateProcessor {
             const rightW   = swapColumns ? w1 : w2;
 
             const replacement =
-                `<td width="${leftW}" valign="top" class="dynamicwidth" style="padding:0;margin:0;">\n` +
+                `<td width="${leftW}" valign="top" class="col-split" style="padding:0;margin:0;">\n` +
                 leftCol + '\n' +
                 `</td>\n` +
-                `<td width="${rightW}" valign="top" class="dynamicwidth" style="padding:0;margin:0;">\n` +
+                `<td width="${rightW}" valign="top" class="col-split" style="padding:0;margin:0;">\n` +
                 rightCol + '\n' +
                 `</td>`;
 
@@ -4887,6 +4887,25 @@ class TemplateProcessor {
             const { start, end, replacement } = replacements[i];
             result = result.slice(0, start) + replacement + result.slice(end);
         }
+
+        // Mobile-Stacking: CSS-Regel in den <style>-Block injizieren
+        // Ohne display:block stapeln <td>-Elemente nicht auf Mobile,
+        // auch wenn width:100% gesetzt ist (table-cell bleibt inline)
+        if (fixed > 0) {
+            const mobileRule = '\n.col-split { display:block !important; width:100% !important; box-sizing:border-box !important; }';
+            // In bestehende @media-Regel einfügen wenn vorhanden
+            if (/@media\s+only\s+screen[^{]*\{[^}]*\.dynamicwidth/i.test(result)) {
+                result = result.replace(
+                    /(@media\s+only\s+screen[^{]*\{)([^}]*\.dynamicwidth[^}]*\})/i,
+                    (m, mediaOpen, rules) => mediaOpen + rules + mobileRule
+                );
+            } else {
+                // Neue @media-Regel vor </style> einfügen
+                result = result.replace(/<\/style>/i,
+                    `@media only screen and (max-width: 620px) {${mobileRule}\n}\n</style>`);
+            }
+        }
+
         this.html = result;
         return fixed;
     }
@@ -5316,7 +5335,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.89-2026-03-13';
+const APP_VERSION = 'v3.9.90-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
