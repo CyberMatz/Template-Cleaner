@@ -5390,7 +5390,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.99-2026-03-13';
+const APP_VERSION = 'v3.10.0-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -10164,8 +10164,8 @@ td[width] { width: auto !important; }
         // ════════════════════════════════
         html += '<div class="subtab-panel" id="subtab-alttext" style="display:' + (imagesActiveSubTab === 'alttext' ? 'block' : 'none') + '">';
 
-        if (noAlt === 0) {
-            html += '<p class="images-empty">✅ Alle Bilder haben Alt-Texte (oder sind Spacer).</p>';
+        if (images.length === 0) {
+            html += '<p class="images-empty">Keine Bilder gefunden.</p>';
         } else {
             const imagesNeedingAlt = images.filter(img =>
                 img.altEmpty && !img.isSpacerOrPixel && img.altSuggestionSource !== 'pixel'
@@ -10174,27 +10174,56 @@ td[width] { width: auto !important; }
 
             html += '<div class="alt-bulk-panel">';
             html += '<div class="alt-bulk-header">';
-            html += '<span class="alt-bulk-title">✏️ ' + imagesNeedingAlt.length + ' Bild' + (imagesNeedingAlt.length > 1 ? 'er' : '') + ' ohne Alt-Text'
-                  + (withSuggestion > 0 ? ' <span class="alt-bulk-hint">(' + withSuggestion + ' mit Vorschlag)</span>' : '') + '</span>';
+            html += '<span class="alt-bulk-title">✏️ Alt-Texte bearbeiten'
+                  + (imagesNeedingAlt.length > 0 ? ' <span class="alt-bulk-hint">(' + imagesNeedingAlt.length + ' fehlen noch)</span>' : ' <span class="alt-bulk-hint" style="color:#2a7d2e;">✓ Alle vorhanden</span>') + '</span>';
             html += '<button class="btn-alt-bulk-apply btn-small" id="btnAltBulkApply">✓ Alle markierten übernehmen</button>';
             html += '</div>';
             html += '<table class="alt-bulk-table">';
             html += '<thead><tr>';
             html += '<th class="alt-bulk-col-check"><input type="checkbox" id="altBulkCheckAll" title="Alle aus/abwählen"></th>';
-            html += '<th class="alt-bulk-col-id">Bild</th>';
+            html += '<th class="alt-bulk-col-locate">📍</th>';
             html += '<th class="alt-bulk-col-src">URL</th>';
-            html += '<th class="alt-bulk-col-alt">Alt-Text <span class="alt-bulk-hint">(leer lassen = kein Alt-Text)</span></th>';
+            html += '<th class="alt-bulk-col-alt">Alt-Text</th>';
+            html += '<th class="alt-bulk-col-status">Status</th>';
             html += '</tr></thead><tbody>';
-            imagesNeedingAlt.forEach(img => {
-                const hasSuggestion = !!img.altSuggestion;
+            images.forEach(img => {
+                const isSpacerOrPixel = img.isSpacerOrPixel || img.altSuggestionSource === 'pixel';
+                const needsAlt = img.altEmpty && !isSpacerOrPixel;
+                const hasSuggestion = needsAlt && !!img.altSuggestion;
                 const sourceLabel = img.altSuggestionSource === 'link' ? 'Vorschlag aus Link' :
                                    img.altSuggestionSource === 'title' ? 'Vorschlag aus Title' :
                                    img.altSuggestionSource === 'filename' ? 'Vorschlag aus Dateiname' : '';
                 html += '<tr class="alt-bulk-row' + (hasSuggestion ? ' alt-bulk-has-suggestion' : '') + '" data-img-id="' + img.id + '">';
-                html += '<td class="alt-bulk-col-check"><input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '"' + (hasSuggestion ? ' checked' : '') + '></td>';
-                html += '<td class="alt-bulk-col-id"><span class="image-card-new-id">' + img.id + '</span></td>';
+                // Checkbox – nur bei Bildern die Alt-Text brauchen
+                html += '<td class="alt-bulk-col-check">';
+                if (needsAlt) {
+                    html += '<input type="checkbox" class="alt-bulk-check" data-img-id="' + img.id + '"' + (hasSuggestion ? ' checked' : '') + '>';
+                }
+                html += '</td>';
+                // Locate
+                html += '<td class="alt-bulk-col-locate"><button class="btn-image-locate btn-bulk-icon" data-img-id="' + img.id + '" data-src="' + escapeHtml(img.src) + '" title="Im Preview anzeigen">📍</button></td>';
+                // URL
                 html += '<td class="alt-bulk-col-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</td>';
-                html += '<td class="alt-bulk-col-alt"><input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altSuggestion || '') + '" placeholder="Alt-Text eingeben..."' + (sourceLabel ? ' title="' + sourceLabel + '"' : '') + '></td>';
+                // Alt-Text Eingabe
+                html += '<td class="alt-bulk-col-alt">';
+                if (isSpacerOrPixel) {
+                    html += '<span style="color:#a8a29e;font-size:11px;font-style:italic;">Spacer / Pixel</span>';
+                } else {
+                    html += '<input type="text" class="alt-bulk-input" data-img-id="' + img.id + '" value="' + escapeHtml(img.altFull || img.altSuggestion || '') + '" placeholder="Alt-Text eingeben..."' + (sourceLabel ? ' title="' + sourceLabel + '"' : '') + '>';
+                }
+                html += '</td>';
+                // Status
+                html += '<td class="alt-bulk-col-status">';
+                if (isSpacerOrPixel) {
+                    html += '<span class="alt-status-ok">✓ OK</span>';
+                } else if (!needsAlt) {
+                    html += '<span class="alt-status-ok">✓ vorhanden</span>';
+                } else if (hasSuggestion) {
+                    html += '<span class="alt-status-warn">⚠ Vorschlag</span>';
+                } else {
+                    html += '<span class="alt-status-missing">✕ fehlt</span>';
+                }
+                html += '</td>';
                 html += '</tr>';
             });
             html += '</tbody></table>';
@@ -10255,26 +10284,6 @@ td[width] { width: auto !important; }
                 html += '</div>';
 
                 html += '<div class="image-card-new-src" title="' + escapeHtml(img.src) + '">' + escapeHtml(img.srcShort) + '</div>';
-
-                var altNeedsAttention = img.altEmpty;
-                html += '<div class="image-alt-edit-row' + (altNeedsAttention ? ' alt-missing' : '') + '">';
-                html += '<span class="alt-label">Alt:</span>';
-                html += '<input type="text" class="image-alt-input' + (altNeedsAttention ? ' alt-input-warn' : '') + '" data-img-id="' + img.id + '" value="' + escapeHtml(img.altFull) + '" placeholder="' + (altNeedsAttention ? 'Alt-Text fehlt – bitte eintragen' : 'Alt-Text') + '">';
-                html += '<button class="btn-image-alt-apply btn-small" data-img-id="' + img.id + '" title="Alt-Text übernehmen">✓</button>';
-                html += '</div>';
-
-                if (img.altEmpty && img.altSuggestion && img.altSuggestionSource !== 'pixel') {
-                    var sourceLabel = img.altSuggestionSource === 'link' ? 'aus Link-Text' :
-                                     img.altSuggestionSource === 'title' ? 'aus title' : 'aus Dateiname';
-                    html += '<div class="alt-suggestion">';
-                    html += '<span class="alt-suggestion-text">💡 Vorschlag (' + sourceLabel + '): <strong>' + escapeHtml(img.altSuggestion) + '</strong></span>';
-                    html += '<button class="btn-alt-suggestion-apply" data-img-id="' + img.id + '" data-suggestion="' + escapeHtml(img.altSuggestion) + '">Übernehmen</button>';
-                    html += '</div>';
-                } else if (img.altEmpty && img.altSuggestionSource === 'pixel') {
-                    html += '<div class="alt-suggestion alt-suggestion-ok">';
-                    html += '<span class="alt-suggestion-text">✓ Tracking-Pixel – leerer Alt-Text ist korrekt</span>';
-                    html += '</div>';
-                }
 
                 html += '<div class="image-card-new-props">';
                 if (img.width) html += '<span class="prop-chip prop-size">' + img.width + (img.width === '100%' ? '' : 'px') + ' breit</span>';
