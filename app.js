@@ -251,6 +251,7 @@ class TemplateProcessor {
 
         // W10: Textfarben nur in CSS-Klassen (unsichtbar in T-Online/GMX/Web.de)
         this.checkCssOnlyTextColors();
+        this.checkSvgImages();
 
         // OF: Optionale Reparaturen erkennen
         this.checkInlineBlockLayout();
@@ -4693,6 +4694,32 @@ class TemplateProcessor {
         this.checks.push({ id, status, message });
     }
 
+    // W11: SVG-Bilder in src-Attributen erkennen
+    // Outlook (alle Versionen) und Gmail zeigen SVGs NICHT an → immer PNG/JPG verwenden
+    checkSvgImages() {
+        const id = 'W11_SVG_IMAGES';
+        const imgRegex = /<img\b[^>]+src\s*=\s*["']([^"']+\.svg(?:[?#][^"']*)?)["'][^>]*>/gi;
+        const found = [];
+        let m;
+        while ((m = imgRegex.exec(this.html)) !== null) {
+            // Dateiname extrahieren
+            const url = m[1];
+            const filename = url.split('/').pop().split('?')[0];
+            found.push(filename);
+        }
+        if (found.length === 0) {
+            this.addCheck(id, 'PASS', 'Keine SVG-Bilder gefunden');
+            return;
+        }
+        const examples = found.slice(0, 3).join(', ');
+        const more = found.length > 3 ? ` (+${found.length - 3} weitere)` : '';
+        this.addCheck(id, 'WARN',
+            `🚫 ${found.length} SVG-Bild(er) gefunden: ${examples}${more} – ` +
+            `SVGs werden in Outlook (alle Versionen) und Gmail NICHT angezeigt. ` +
+            `→ AKTION: Als PNG oder JPG exportieren und ersetzen.`
+        );
+    }
+
     // =====================================================================
     // OF: OPTIONALE REPARATUREN (Reparaturen-Tab)
     // Erkennt riskante Strukturprobleme und bietet Fixes zum manuellen Anwenden
@@ -4968,7 +4995,7 @@ class TemplateProcessor {
             // Deliverability-Checks werden separat behandelt
             const deliverabilityIds = ['P16_BROKEN_LINKS', 'P17_TEMPLATE_SIZE', 'P18_TEXT_IMAGE_RATIO', 'P19_LINK_COUNT', 'P20_TITLE_TAG'];
             // W07-W09 werden separat bewertet (eigene Confidence-Abzüge + Attention Items)
-            const separatelyHandledIds = ['W07_BROKEN_CHARACTERS', 'W08_BASE64_IMAGES', 'W09_MISSING_HASH_COLORS', 'W10_CSS_ONLY_TEXT_COLORS'];
+            const separatelyHandledIds = ['W07_BROKEN_CHARACTERS', 'W08_BASE64_IMAGES', 'W09_MISSING_HASH_COLORS', 'W10_CSS_ONLY_TEXT_COLORS', 'W11_SVG_IMAGES'];
             warnChecks.forEach(c => {
                 if (deliverabilityIds.includes(c.id)) return; // separat behandelt
                 if (separatelyHandledIds.includes(c.id)) return; // separat behandelt
@@ -5075,6 +5102,12 @@ class TemplateProcessor {
             confidence -= 8; // Kritisch für T-Online/GMX-Empfänger: Text kann komplett unsichtbar sein
             const cleanMsg = cssOnlyColorsCheck.message.replace(/^⚠️\s*/, '');
             attentionItems.push('🎨 ' + cleanMsg);
+        }
+
+        const svgImagesCheck = this.checks.find(c => c.id === 'W11_SVG_IMAGES' && c.status === 'WARN');
+        if (svgImagesCheck) {
+            confidence -= 15; // Sehr kritisch: Bilder fehlen komplett in Outlook + Gmail
+            attentionItems.push(svgImagesCheck.message);
         }
         
         // Normalisieren: 0-100
@@ -5357,7 +5390,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.94-2026-03-13';
+const APP_VERSION = 'v3.9.95-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
