@@ -5390,7 +5390,7 @@ function copyAllSuggestions(btn, sectionIdx) {
 }
 
 // UI-Logik
-const APP_VERSION = 'v3.9.97-2026-03-13';
+const APP_VERSION = 'v3.9.99-2026-03-13';
 document.addEventListener('DOMContentLoaded', () => {
     console.log('%c[APP] Template Checker ' + APP_VERSION + ' geladen!', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px 8px;');
     
@@ -10210,7 +10210,8 @@ td[width] { width: auto !important; }
 
         // Upload-Sektion
         html += '<div class="images-section images-upload-section">';
-        html += '<h3>📤 Bild hochladen</h3>';
+        html += '<h3>📤 Bilder für dieses Template hochladen</h3>';
+        html += '<p class="images-upload-hint">Lade hier die Bilder hoch, die im Template verwendet werden sollen. Sie werden auf dem Server gehostet – die Zuweisung zu den einzelnen Bildplatzhaltern im Template erfolgt danach manuell.</p>';
         html += '<div id="imageUploadStatus" class="image-upload-status"></div>';
         html += '<div class="image-upload-folder-row">';
         html += '<label>Ordner:</label>';
@@ -10219,8 +10220,8 @@ td[width] { width: auto !important; }
         html += '</div>';
         html += '<div id="imageDropZone" class="image-drop-zone">';
         html += '<div class="image-drop-zone-inner">';
-        html += '<span class="image-drop-icon">📁</span>';
-        html += '<p>Bilder hierher ziehen<br><small>oder klicken zum Auswählen</small></p>';
+        html += '<span class="image-drop-icon">🖼️</span>';
+        html += '<p class="image-drop-main">Bilder hier ablegen<br><span class="image-drop-sub">oder klicken zum Auswählen</span></p>';
         html += '<input type="file" id="imageFileInput" multiple accept="image/*" style="display:none;">';
         html += '</div>';
         html += '</div>';
